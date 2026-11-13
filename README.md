@@ -92,6 +92,16 @@ Make one token per device, so you can revoke one without the others.
 
 That's it: pick the repo at the top of the file list and start writing.
 
+## One per project, or one for the whole organization
+
+The app opens as many repos as you add, and you switch between them at the top of the file list. Set it up the way your team works:
+
+- **A vault per project:** keep each project's notes next to its code, in a folder of the project's own repo (say `Wiki/`, on the branch you work on). Add each repo in Settings with its **Folder** and **Branch**; each one gets its own invite link. The notes then move with the code, and a commit can change both.
+- **One vault for the organization:** one notes repo for everything: the company wiki, every project's pages and tasks, with a folder per project if you like.
+- **Both:** an organization vault beside the projects' own vaults. Each repo keeps its own settings (start page, inboxes, template, vault rules).
+
+A device holds one token, so the repos it opens should share an owner. Make the token with the organization as **Resource owner** and *All repositories*, and every repo of the organization works, new ones too. A fine-grained token has one owner, so repos of your own account and of an organization can't share one.
+
 ## Settings reference
 
 Each repo in **Settings › Notes repos** has these fields. Paths are inside the repo's **Folder** (or the whole repo when it's empty). The second column is the same setting's name in an invite link.
