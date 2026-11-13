@@ -16,7 +16,7 @@ The rules for any AI agent (and any person) working in these notes. Your person 
 4. **Local or global?** For every rule they keep or add, suggest where it belongs, and move it where they say:
    - **Local**, in this file: rules about these notes (the paths, the Task Board, the areas, the inboxes).
    - **Global**, in your own user-level rules, for all their vaults and projects: how they like to work, their language and tone, when to ask first, commit habits. For Claude Code that's `~/.claude/CLAUDE.md`, for Codex `~/.codex/AGENTS.md`, for others their user-level instructions. Ask before you write anything outside this repo.
-5. **Then the skills** (see Skills below): for each one, say in a line what it does and ask: keep, change or drop? Change or drop it in `.agents/skills/` and its pointer in `.claude/skills/`.
+5. **Then the skills** (see Skills below), one at a time the same way: show what it does, when it runs and its steps, and ask: **approve, change or drop?** Rewrite a changed one in `.agents/skills/` as they say; delete a dropped one and its pointer in `.claude/skills/` and its line in the Skills table. Ask if they want skills of their own, and add them the same way.
 6. **Finish**: delete this whole section, commit as `Rules set up with <your person's name>`, and push.
 
 If your person says the rules are already set up, just delete this section.

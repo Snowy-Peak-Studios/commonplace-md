@@ -70,7 +70,8 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 6. Give me this link with <owner> and <repo> filled in, to open and paste the token into:
    https://snowy-peak-studios.github.io/commonplace-md/#/join?owner=<owner>&repo=<repo>&branch=main&label=My+notes&vault=1&inbox=Notes%2FInbox.md&inboxes=Notes%2FInboxes&home=Home.md&notes=Notes&template=Templates%2FNote.md
 7. From now on, when you work in that repo, follow its AGENTS.md, with git user.name set to my name.
-   Start with its "First run" section: go through the rules with me one by one.
+   Start with its "First run" section: go through the rules with me one by one, then the skills in
+   .agents/skills/ one by one (what each does and its steps), so I can approve, change or drop each.
 ```
 
 </details>
@@ -334,7 +335,8 @@ Not using the example vault? Copy the `.agents` and `.claude` folders and [`AGEN
 2. Give each person an inbox in `Notes/Inboxes/` (or use the shared `Notes/Inbox.md`), with `owner` their name and `github` their GitHub login.
 3. Set the agent's git `user.name` (`git config user.name`) to the inbox's `owner`, so the agent finds its person's inbox.
 4. Optional: fill in the **Areas** table on the Task Board, so each person's agents pick only their own tasks.
-5. **The first time** an agent works in the vault, it goes through the rules with you one by one: keep, change or drop each, add your own, and decide which stay **local** (this vault) and which go **global** (your agent's own user-level rules, for all your projects). Then the skills, the same way. Then it removes that first-run section from `AGENTS.md`.
+5. **The first time** an agent works in the vault, it goes through the rules with you one by one: keep, change or drop each, add your own, and decide which stay **local** (this vault) and which go **global** (your agent's own user-level rules, for all your projects).
+6. **Then the skills**, one at a time: the agent shows you what each [skill](#the-skills) does, when it runs and its steps, and you **approve, change or drop** it. A changed skill is rewritten the way you say, a dropped one is deleted (with its pointer in `.claude/skills/`), and you can ask for new ones. Then it removes the first-run section from `AGENTS.md`.
 
 ### Every day
 
