@@ -50,6 +50,7 @@ If your person says the rules are already set up, just delete this section.
   2. **Free tasks**: no `assignee`, not *Waiting* (your person put it off: leave it until they bring it back), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
 - If `Task Board.md` has an **Areas** table, pick only free tasks whose `area` belongs to your person.
 - A task with an agent in its `assignee` (e.g. `Ann Example (Claude)`) is taken, whatever its status: another session is on it. So is a task with someone else's name.
+- **Is it ready?** Don't build a task that needs a decision first: an open criterion about deciding ("Decided with ..."), "TBD", or `ready: decision`. Ask the decision under **Needs attention** in your person's inbox, with the options, and pick another task meanwhile. Skip a placeholder (a title starting with "Placeholder" or ending in "- placeholder", the `placeholder` tag, `ready: placeholder`, or criteria still "..."): it isn't written out yet. The app's inbox shows each task's state the same way.
 - Before you build an old task, check that it still fits the notes and the goals. If it doesn't, rewrite or narrow it, or ask (see Questions). Never build a stale task as written.
 
 ### Claim before any other change

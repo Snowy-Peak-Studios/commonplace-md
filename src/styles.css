@@ -653,6 +653,10 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 .suggest-waiting > summary .icon { width: 14px; height: 14px; transition: transform 0.15s; }
 .suggest-waiting[open] > summary .icon { transform: rotate(90deg); }
 .preview .suggest-waiting .suggest-list { margin-top: 2px; }
+button.chip.state { font: inherit; font-size: 12.5px; height: 24px; cursor: help; }
+.chip.state-ready { color: var(--ok); }
+.chip.state-decision { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.chip.state-placeholder { color: var(--muted); border-style: dashed; }
 select.chip.pick {
   font: inherit;
   font-size: 12.5px;

@@ -182,6 +182,16 @@ check(free0.length >= 1 && free0.length <= 3, "the inbox suggests one to three f
 check(free0[0]?.name === "T-4 Invite a friend", "the High one comes first: " + free0[0]?.name);
 check(!free0.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested as free: " + JSON.stringify(free0.map((s) => s.name)));
 check(free0.every((s) => s.claim), "each free one has a Claim button");
+// Whether each task can be started now: a chip, its reason in the tooltip and on a tap.
+const stateChips = await page.$$eval(".suggest > .suggest-list > li", (li) => li.map((x) => {
+  const chip = x.querySelector(".chip.state");
+  return chip ? { text: chip.textContent, title: chip.title } : null;
+}));
+check(stateChips.length === rows0.length && stateChips.every((c) => c?.text === "Ready" && c.title.startsWith("Ready to start")),
+  "every task shows whether it's ready, with the reason as a tooltip: " + JSON.stringify(stateChips));
+await page.click(".suggest > .suggest-list > li .chip.state");
+await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("Ready to start"), { timeout: 5000 }).catch(() => {});
+check(await page.$eval("#toast", (t) => t.classList.contains("show") && t.textContent.includes("Ready to start")), "tapping it says why (for phones, which have no tooltips)");
 const putsBefore = puts.length;
 await page.evaluate(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes("Invite a friend"))
   ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }));
@@ -228,7 +238,9 @@ check(waitingRows.length === 1 && waitingRows[0] === "T-5 Add a reading list", "
 await shot("2c-waiting-list");
 const putsBeforeBack = puts.length;
 await page.evaluate(() => [...document.querySelectorAll(".suggest-waiting button")].find((b) => b.textContent === "Bring back")?.click());
-await page.waitForFunction(() => !document.querySelector(".suggest-waiting"), { timeout: 15000 }).catch(() => {});
+await page.waitForFunction(() => !document.querySelector(".suggest-waiting")
+  && [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")),
+{ timeout: 15000 }).catch(() => {});
 const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
 // Saves here are faked, so the real note still says To Do: Bring back reads it fresh, finds nothing to change and
 // commits nothing. Any commit it does make must say To Do.

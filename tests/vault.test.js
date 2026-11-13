@@ -201,3 +201,26 @@ test("Not now: waiting tasks leave the suggestions and the claimed ones, and mak
   assert.deepEqual(waitingTasks(notes).map((n) => n.path), ["Tasks/Put off, other area.md", "Tasks/Put off.md", "Tasks/Mine, put off.md"]);
   assert.deepEqual(waitingTasks(notes, { areas: ["Docs"], owner: "Ann Example" }).map((n) => n.path), ["Tasks/Put off.md", "Tasks/Mine, put off.md"]);
 });
+
+test("a task's state: ready, needs a decision, or a placeholder", async () => {
+  const { taskState } = await import("../src/vault.js");
+  const note = (body, fm = "id: T-1") => `---\n${fm}\n---\n\n# A task\n\n${body}`;
+  const story = "**As** a reader, **I want** a thing, **so that** it helps.\n\n## Acceptance criteria\n\n";
+  assert.equal(taskState(note(story + "- [ ] It works\n- [x] Done bit\n")).state, "ready");
+  const d = taskState(note(story + "- [ ] Decided with **Ann** which kinds matter first\n- [ ] Built\n"));
+  assert.equal(d.state, "decision");
+  assert.equal(d.reason, "Needs a decision first: Decided with Ann which kinds matter first");
+  assert.equal(taskState(note(story + "- [x] Decided with Ann: yes\n- [ ] Built\n")).state, "ready");
+  assert.equal(taskState(note(story + "- [ ] Built\n\nThe size is TBD.\n")).state, "decision");
+  assert.equal(taskState(note(story + "- [ ] Built\n\nPlaceholder: to be written.\n")).state, "placeholder");
+  assert.equal(taskState(note(story + "- [ ] Built\n", "id: T-1\ntags: [task, placeholder]")).state, "placeholder");
+  assert.equal(taskState(`---\nid: T-1\n---\n\n# T-1 Placeholder for the shop\n\n${story}- [ ] Built\n`).state, "placeholder");
+  assert.equal(taskState(`---\nid: T-1\n---\n\n# A shop - placeholder\n\n${story}- [ ] Built\n`).state, "placeholder");
+  assert.equal(taskState(`---\nid: T-1\n---\n\n# Ready, needs a decision or placeholder - its state\n\n${story}- [ ] Built\n`).state, "ready");
+  // Talk about the words isn't a marker: quoted, in code, or in the middle of a line.
+  assert.equal(taskState(note(story + "- [ ] Built\n\n- From the inbox: \"(TBD, placeholder, or other)\" and `TBD`\n- Uses the placeholder logo\n")).state, "ready");
+  assert.equal(taskState(note("**As** someone who ..., **I want** ...\n\n- [ ] ...\n")).state, "placeholder");
+  assert.equal(taskState(note("Just an idea.")).state, "placeholder");
+  assert.equal(taskState(note("Just an idea.", "id: T-1\nready: yes")).state, "ready");
+  assert.equal(taskState(note(story + "- [ ] Built\n", "id: T-1\nready: decision")).state, "decision");
+});

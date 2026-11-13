@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, waitingTasks, WAITING, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -752,10 +752,16 @@ function loadSuggestions(repo, areas, who) {
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
-      .then((notes) => ({
-        mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }),
-        waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
-      }));
+      .then(async (notes) => {
+        const shown = {
+          mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }),
+          waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
+        };
+        // Only the tasks shown are read whole, to tell whether each can be started now.
+        const paths = [...shown.mine, ...shown.free, ...shown.waiting].map((n) => n.path);
+        shown.states = await taskStates(repo, tree, paths).catch(() => new Map());
+        return shown;
+      });
     suggestLoads.set(key, load);
     load.catch(() => suggestLoads.delete(key));
   }
@@ -793,9 +799,18 @@ function suggestBox(f) {
     pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick));
     return pick;
   };
+  let states = new Map();
+  const STATE_LABEL = { ready: "Ready", decision: "Needs a decision", placeholder: "Placeholder" };
+  /** Whether the task can be started now: a chip whose tooltip (or a tap, on a phone) says why. */
+  const stateChip = (path) => {
+    const s = states.get(path);
+    if (!s) return null;
+    return h("button", { type: "button", class: `chip state state-${s.state}`, title: s.reason,
+      onclick: () => toast(`${shownName(path)}: ${s.reason}`, "info", 6000) }, STATE_LABEL[s.state]);
+  };
   const row = ({ path, props: t }, extra) => h("li", {},
     h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
-    h("span", { class: "suggest-tags" },
+    h("span", { class: "suggest-tags" }, stateChip(path),
       tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : ""),
       tag(path, t, "area", allAreas)),
     extra);
@@ -805,8 +820,9 @@ function suggestBox(f) {
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
-  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found }) => {
+  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found, states: told }) => {
     allAreas = found;
+    states = told;
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
@@ -1126,6 +1142,18 @@ async function baseNotes(repo, tree, paths) {
     keepBaseCache("baseProps", repo, (sha) => live.has(sha));
   }
   return paths.map((p) => ({ path: p, props: reviveDates(cache[tree.files.get(p)] ?? {}) }));
+}
+
+/** Whether each task can be started now (`taskState`), from its whole text: cached by blob sha, like the bases' properties. */
+async function taskStates(repo, tree, paths) {
+  const cache = baseCache("taskState", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskState(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("taskState", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
 }
 
 /** "Last modified" is the date of the last commit that changed the note: a Map path -> Date. Failures leave gaps. */

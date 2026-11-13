@@ -256,6 +256,43 @@ export function waitingTasks(notes, { areas = [], owner = "" } = {}) {
     .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
+/**
+ * Whether a task can be started now, from its note's text: { state, reason }, `state` being "ready",
+ * "decision" (it needs a decision first) or "placeholder" (not written out yet). A `ready` property
+ * (`yes`, `decision` or `placeholder`) wins; else the text tells:
+ * - placeholder: a title starting with "Placeholder" or ending in "- placeholder", the tag, or a line starting with it; the template's "..." still in its
+ *   story or criteria; or no criteria;
+ * - decision: an open criterion (`- [ ]`) about deciding ("Decided with ...", "decide which ..."), or "TBD".
+ * Words in quotes or code don't count: they're talk about the word, not a marker.
+ */
+export function taskState(text) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  const ready = String((fm && /^ready:[ \t]*["']?([\w ]+?)["']?[ \t]*$/m.exec(fm.raw)?.[1]) ?? "").trim().toLowerCase();
+  if (ready === "yes" || ready === "ready") return { state: "ready", reason: "Marked ready (ready: yes)" };
+  if (ready === "decision") return { state: "decision", reason: "Marked as needing a decision (ready: decision)" };
+  if (ready === "placeholder") return { state: "placeholder", reason: "Marked as a placeholder (ready: placeholder)" };
+  const body = fm ? src.slice(fm.length) : src;
+  const clip = (s) => (s.length > 110 ? s.slice(0, 107).trimEnd() + "..." : s);
+  const plain = body.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
+  const title = /^#\s+(.*)$/m.exec(body)?.[1] ?? "";
+  const tagged = !!fm && /^tags:.*\bplaceholder\b/im.test(fm.raw);
+  const titled = /^(?:[A-Z]+-\d+\s+)?placeholder\b|(?:-\s*|\()placeholder\)?\s*$/i.test(title.trim());
+  if (tagged || titled || /^\s*(?:[-*+]\s+)?(?:\*\*|_)?placeholder\b/im.test(plain)) {
+    return { state: "placeholder", reason: "A placeholder: its title, tags or a line starting with Placeholder say so" };
+  }
+  const criteria = body.split("\n").filter((l) => /^\s*[-*+]\s+\[[ xX]\]/.test(l));
+  if (/\*\*As\*\* someone who \.\.\./.test(body) || criteria.some((l) => /\]\s*\.\.\.\s*$/.test(l))) {
+    return { state: "placeholder", reason: "A placeholder: its story or criteria are still the template's \"...\"" };
+  }
+  if (!criteria.length) return { state: "placeholder", reason: "A placeholder: no acceptance criteria yet" };
+  const open = criteria.filter((l) => /\[ \]/.test(l)).map((l) => l.replace(/^\s*[-*+]\s+\[ \]\s*/, ""));
+  const ask = open.find((l) => /\b(decid\w*|TBD)\b/i.test(l));
+  if (ask) return { state: "decision", reason: `Needs a decision first: ${clip(ask.replace(/\*\*/g, ""))}` };
+  if (/\bTBD\b/.test(plain)) return { state: "decision", reason: "Needs a decision first: it says TBD" };
+  return { state: "ready", reason: "Ready to start: no open decisions" };
+}
+
 /** A YAML scalar: plain when that's safe, else double-quoted. */
 const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
 
