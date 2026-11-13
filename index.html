@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1b1b1f" media="(prefers-color-scheme: dark)">
+  <title>Commonplace.md</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="src/styles.css">
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <aside id="side" aria-label="Files">
+    <div class="side-head">
+      <label class="repo-pick" data-icon="home">
+        <select id="repo-select" aria-label="Notes repo"></select>
+      </label>
+      <button id="side-close" class="icon-btn phone-only" data-icon="x" aria-label="Close the files"></button>
+    </div>
+    <div class="side-tools">
+      <label class="search" data-icon="search">
+        <input id="filter" type="search" placeholder="Search files" autocomplete="off" spellcheck="false" aria-label="Search files">
+      </label>
+      <button id="side-new" class="icon-btn" data-icon="newNote" title="New note" aria-label="New note"></button>
+    </div>
+    <div class="side-scroll">
+      <div id="shortcuts"></div>
+      <div class="side-label">Files</div>
+      <nav id="tree"></nav>
+    </div>
+    <div class="side-foot">
+      <a id="who" href="#/settings"></a>
+      <button id="side-settings" class="icon-btn" data-icon="settings" title="Settings" aria-label="Settings"></button>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+  <div class="work">
+    <header class="bar">
+      <button id="menu-btn" class="icon-btn" data-icon="panel" aria-label="Show or hide the files"></button>
+      <div id="title" class="title"></div>
+      <div class="bar-actions">
+        <button id="inbox-btn" class="btn ghost" data-icon="inbox" hidden title="Inbox"><span class="label">Inbox</span></button>
+        <div id="mode" class="seg" hidden role="group" aria-label="Mode">
+          <button data-icon="read"><span class="label">Read</span></button>
+          <button data-icon="edit"><span class="label">Edit</span></button>
+        </div>
+        <button id="save-btn" class="btn primary save" hidden disabled><span class="label">Save</span></button>
+        <details id="more" class="more">
+          <summary class="icon-btn" data-icon="more" aria-label="More"></summary>
+          <div class="menu">
+            <button id="new-btn" data-icon="newNote">New note</button>
+            <button id="reload-btn" data-icon="reload">Reload from GitHub</button>
+            <button id="settings-btn" data-icon="settings">Settings</button>
+          </div>
+        </details>
+      </div>
+    </header>
+    <main id="main"></main>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+filters:
+  and:
+    - file.inFolder("Tasks")
+formulas:
+  priority_rank: 'if(priority == "High", 1, if(priority == "Medium", 2, 3))'
+properties:
+  file.name:
+    displayName: Task
+  status:
+    displayName: Status
+  priority:
+    displayName: Priority
+  area:
+    displayName: Area
+  assignee:
+    displayName: Assignee
+  file.mtime:
+    displayName: Last modified
+views:
+  - type: table
+    name: By status
+    groupBy:
+      property: status
+      direction: DESC
+    order:
+      - file.name
+      - priority
+      - area
+      - assignee
+      - file.mtime
+    sort:
+      - property: formula.priority_rank
+        direction: ASC
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Open
+    filters:
+      and:
+        - status != "Done"
+    order:
+      - file.name
+      - status
+      - priority
+      - area
+      - assignee
+    sort:
+      - property: status
+        direction: ASC
+      - property: formula.priority_rank
+        direction: ASC
+  - type: table
+    name: Done
+    filters:
+      and:
+        - status == "Done"
+    order:
+      - file.name
+      - area
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC

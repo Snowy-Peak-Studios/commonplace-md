@@ -1,0 +1,90 @@
+filters:
+  and:
+    - file.inFolder("Library/Books")
+formulas:
+  length: 'if(pages > 400, "Long", "Short")'
+properties:
+  file.name:
+    displayName: Title
+  genre:
+    displayName: Genre
+  author:
+    displayName: Author
+  tags:
+    displayName: Tags
+  pages:
+    displayName: Pages
+  year:
+    displayName: Year
+  rating:
+    displayName: Rating
+  format:
+    displayName: Format
+  summary:
+    displayName: Summary
+  formula.length:
+    displayName: Length
+views:
+  - type: table
+    name: All Books
+    groupBy:
+      property: genre
+      direction: ASC
+    order:
+      - file.name
+      - author
+      - tags
+      - pages
+      - year
+      - rating
+      - format
+      - summary
+    sort:
+      - property: file.name
+        direction: DESC
+    columnSize:
+      note.tags: 160
+  - type: table
+    name: Fiction
+    filters:
+      and:
+        - genre == "Fiction"
+    order:
+      - file.name
+      - author
+      - tags
+      - pages
+      - year
+      - rating
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: History
+    filters:
+      and:
+        - genre == "History"
+    order:
+      - file.name
+      - author
+      - pages
+      - formula.length
+      - year
+    sort:
+      - property: pages
+        direction: ASC
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Essays
+    filters:
+      and:
+        - genre == "Essays"
+    order:
+      - file.name
+      - author
+      - tags
+      - pages
+    sort:
+      - property: file.name
+        direction: ASC

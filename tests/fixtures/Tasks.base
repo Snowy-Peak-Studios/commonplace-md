@@ -1,0 +1,112 @@
+filters:
+  and:
+    - file.inFolder("Tasks")
+formulas:
+  priority_rank: 'if(priority == "High", 1, if(priority == "Medium", 2, 3))'
+properties:
+  id:
+    displayName: ID
+  file.name:
+    displayName: Task
+  status:
+    displayName: Status
+  assignee:
+    displayName: Assignee
+  requested_by:
+    displayName: Requested by
+  area:
+    displayName: Area
+  priority:
+    displayName: Priority
+  file.mtime:
+    displayName: Last modified
+views:
+  - type: table
+    name: By status
+    groupBy:
+      property: status
+      direction: DESC
+    order:
+      - id
+      - file.name
+      - area
+      - priority
+      - assignee
+      - requested_by
+      - file.mtime
+      - status
+    sort:
+      - property: formula.priority_rank
+        direction: ASC
+      - property: area
+        direction: ASC
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: To Do
+    filters:
+      and:
+        - status == "To Do"
+    order:
+      - id
+      - file.name
+      - area
+      - priority
+      - assignee
+      - requested_by
+      - file.mtime
+    sort:
+      - property: formula.priority_rank
+        direction: ASC
+      - property: area
+        direction: ASC
+  - type: table
+    name: In Progress
+    filters:
+      and:
+        - status == "In Progress"
+    order:
+      - id
+      - file.name
+      - area
+      - priority
+      - assignee
+      - requested_by
+      - file.mtime
+  - type: table
+    name: Open
+    filters:
+      and:
+        - status != "Done"
+    order:
+      - id
+      - file.name
+      - status
+      - area
+      - priority
+      - assignee
+      - requested_by
+      - file.mtime
+    sort:
+      - property: status
+        direction: ASC
+      - property: formula.priority_rank
+        direction: ASC
+      - property: area
+        direction: ASC
+  - type: table
+    name: Done
+    filters:
+      and:
+        - status == "Done"
+    order:
+      - id
+      - file.name
+      - area
+      - priority
+      - assignee
+      - requested_by
+      - file.mtime
+    sort:
+      - property: file.mtime
+        direction: DESC
