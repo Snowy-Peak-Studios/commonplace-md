@@ -8,7 +8,7 @@ github: your-github-login
 
 The shared inbox: write here first, sort it later. The Inbox button opens it, unless you have an inbox of your own in `Notes/Inboxes/` (see [[Your name]]).
 
-Put your GitHub login in `github` above to make this one yours.
+Put your GitHub login in `github` above to make this one yours. Above this text are the top three free tasks you could start; **Claim** makes one yours.
 
 ## New tasks
 

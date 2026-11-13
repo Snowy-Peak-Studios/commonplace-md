@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimTask, listProp,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -640,7 +640,90 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
-  fill(f.dom.preview, frontMatter ? propertiesBox(frontMatter, env) : "", body);
+  fill(f.dom.preview, frontMatter ? propertiesBox(frontMatter, env) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+}
+
+// ---- an inbox's top tasks to start ----
+
+/** The repo's Inbox page and the notes in its inboxes folder. */
+const isInbox = (repo, path) => inboxCandidates([path], repo.inbox, repo.inboxes || "").length > 0;
+
+/** One look-up per tree version and areas, so typing in the inbox doesn't redo it. */
+const suggestLoads = new Map();
+function loadSuggestions(repo, areas) {
+  const tree = app.trees.get(repo.id);
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}`;
+  if (!suggestLoads.has(key)) {
+    for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
+    const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then((notes) => suggestTasks(notes, { areas }));
+    suggestLoads.set(key, load);
+    load.catch(() => suggestLoads.delete(key));
+  }
+  return suggestLoads.get(key);
+}
+
+/**
+ * The top three free tasks, over the inbox's text: the notes in a `Tasks` folder with no assignee, highest
+ * priority first. The inbox's `areas` property limits them to those areas; `owner` is who a click claims them for.
+ */
+function suggestBox(f) {
+  const { repo } = f;
+  const tree = app.trees.get(repo.id);
+  if (![...tree.files.keys()].some(isTaskPath)) return null;
+  const props = noteProps(f.text);
+  const areas = listProp(props.areas);
+  const who = String(props.owner ?? "").trim() || store.get("user")?.login || "";
+  const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
+  const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
+    h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
+      h("small", { class: "muted" }, areas.length ? `Areas: ${Array.isArray(props.areas) ? props.areas.join(", ") : props.areas}` : "All areas")),
+    list);
+  loadSuggestions(repo, areas).then((tasks) => {
+    if (!tasks.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."));
+    fill(list, tasks.map(({ path, props: t }) => h("li", {},
+      h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
+      h("span", { class: "suggest-tags" },
+        t.priority ? h("span", { class: `chip prio-${String(t.priority).toLowerCase()}` }, String(t.priority)) : null,
+        t.area ? h("span", { class: "chip" }, String(t.area)) : null),
+      canWrite(repo) && who && app.token
+        ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
+          onclick: (e) => claimSuggested(repo, path, who, e.currentTarget) }, icon("check"), "Claim")
+        : null)));
+  }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
+  return box;
+}
+
+/** Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first. */
+async function claimSuggested(repo, path, who, button) {
+  if (!await confirmDialog(`Claim ${shownName(path)}?`,
+    `Its status becomes In Progress and its assignee ${who}. This saves the task to GitHub.`, "Claim")) return;
+  button.disabled = true;
+  try {
+    const { text, sha } = await gh.readText(repo, fullPath(repo, path));
+    const now = noteProps(text);
+    const taken = String(now.assignee ?? "").trim();
+    const next = taken ? null : claimTask(text, who);
+    // What was just read or written is known, so the list needn't read the task again.
+    const known = baseCache("baseProps", repo);
+    if (!next) {
+      known[sha] = now;
+      treeChanged(repo, path, sha);
+      toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} has no properties to change.`, "error");
+    } else {
+      const id = String(now.id ?? "").trim();
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who} from ${APP_NAME}`);
+      known[res.sha] = noteProps(next);
+      treeChanged(repo, path, res.sha);
+      toast(`Claimed ${shownName(path)}`, "ok");
+    }
+  } catch (e) {
+    toast(`Not claimed: ${e.message}`, "error");
+  }
+  if (app.file?.repo === repo && isInbox(repo, app.file.path) && app.file.dom?.preview.isConnected) {
+    const scroll = $("#main").scrollTop;
+    renderPreview();
+    $("#main").scrollTop = scroll;
+  } else button.disabled = false;
 }
 
 /** Icons, external links and images: what the sanitized HTML still needs. */

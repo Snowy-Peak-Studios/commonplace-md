@@ -157,7 +157,29 @@ const inbox = await page.evaluate(() => ({
 }));
 check(inbox.props?.includes("owner") && inbox.props.includes("github"), "Inbox shows its properties");
 check(inbox.missing === 0, "no missing links on the Inbox: " + inbox.missing);
+await page.waitForSelector(".suggest-list a.suggest-name", { timeout: 15000 }).catch(() => {});
 await shot("2-inbox-desktop");
+
+// 2b. The inbox's top tasks to start: free tasks only, highest priority first, and Claim saves the task.
+const suggested = await page.$$eval(".suggest-list li", (li) => li.map((x) => ({
+  name: x.querySelector(".suggest-name")?.textContent, claim: !!x.querySelector("button"),
+})));
+check(suggested.length >= 1 && suggested.length <= 3, "the inbox suggests one to three tasks: " + suggested.length);
+check(suggested[0]?.name === "T-4 Invite a friend", "the High one comes first: " + suggested[0]?.name);
+check(!suggested.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested: " + JSON.stringify(suggested.map((s) => s.name)));
+check(suggested.every((s) => s.claim), "each has a Claim button");
+const putsBefore = puts.length;
+await page.click(".suggest-list li button");
+await page.waitForSelector("dialog.modal[open] .btn.primary");
+await page.click("dialog.modal .btn.primary");
+await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
+const claim = puts.length > putsBefore ? puts.at(-1) : null;
+check(claim?.url === contentsUrl("Tasks/Invite a friend.md"), "Claim saves the task: " + claim?.url);
+check(/^status: In Progress$/m.test(claim?.text ?? "") && /^assignee: Your name$/m.test(claim?.text ?? ""), "its status is In Progress and its assignee the inbox's owner");
+check(claim?.body.message?.startsWith("T-4: claimed by Your name"), "the commit says who claimed it: " + claim?.body.message);
+check(!(await page.$$eval(".suggest-list .suggest-name", (a) => a.map((x) => x.textContent))).some((n) => n.includes("Invite a friend")), "the claimed task leaves the list");
+// The claim was never saved, so read the real tree again for the checks below.
+await page.reload({ waitUntil: "networkidle0" });
 
 // 3. Following a wikilink.
 await page.evaluate(() => [...document.querySelectorAll(".preview a.wikilink")].find((a) => a.dataset.path && !a.dataset.path.endsWith("Inbox.md"))?.click());

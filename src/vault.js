@@ -162,3 +162,57 @@ export function ownInboxPath(notes, login, fallback = "") {
   const mine = notes.find((n) => String(n.props?.github ?? "").trim().toLowerCase() === who);
   return mine ? mine.path : fallback;
 }
+
+// ================================================================
+// Suggested tasks: the top free tasks an inbox shows
+// ================================================================
+
+/** A task note: a `.md` file in a folder named `Tasks` (any case, at any depth). */
+export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
+
+const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+/** Statuses that aren't free to start. */
+const NOT_FREE = /^(done|in progress|cancell?ed|won'?t do)$/i;
+
+/** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
+export function listProp(v) {
+  if (blank(v)) return [];
+  return (Array.isArray(v) ? v : String(v).split(",")).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * The top free tasks, from [{ path, props }]: no assignee, not started or done, in one of `areas`
+ * (any area when empty). Highest priority first; within a priority, the newest (highest ID number) first.
+ */
+export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
+  const want = listProp(areas);
+  const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerCase()] ?? 3;
+  const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
+  return notes
+    .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim())
+      && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
+    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
+    .slice(0, count);
+}
+
+/** A YAML scalar: plain when that's safe, else double-quoted. */
+const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
+
+/**
+ * A task note claimed by `who`: its front matter's `status` becomes "In Progress" and its `assignee` `who`,
+ * each line changed in place (or added at the end of the front matter). Null when the note has no front matter.
+ */
+export function claimTask(text, who) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  if (!fm) return null;
+  let raw = fm.raw;
+  for (const [key, value] of [["status", "In Progress"], ["assignee", who]]) {
+    const line = `${key}: ${yamlValue(value)}`;
+    const re = new RegExp(`^${key}:.*$`, "m");
+    raw = re.test(raw) ? raw.replace(re, () => line) : raw.trim() ? `${raw}\n${line}` : line;
+  }
+  // The front matter starts right after the opening `---` line.
+  return `---\n${raw}${src.slice(4 + fm.raw.length)}`;
+}

@@ -34,7 +34,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
-- **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login.
+- **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; read-only mode for people who can't push.
 
@@ -298,6 +298,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
+- **Top tasks to start:** every inbox shows, above its text, the three free tasks you could start now: notes in a `Tasks` folder with no `assignee` and not *In Progress* or *Done*, highest `priority` first (*High*, *Medium*, *Low*), then the newest (highest `id`). An `areas` property on the inbox keeps only those areas (e.g. `areas: [Features, Docs]`); without it, every area counts. **Claim** sets the task's `status` to *In Progress* and its `assignee` to the inbox's `owner`, in one commit.
 
 </details>
 

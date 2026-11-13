@@ -616,6 +616,20 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 .prop-val a { text-decoration: none; }
 .props-raw { background: var(--code-bg); padding: 10px 12px; border-radius: 8px; font: 13px/1.5 var(--mono); }
 
+/* an inbox's top tasks to start */
+.suggest { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg-soft); font-size: 14px; }
+.suggest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.suggest-head .icon { width: 18px; height: 18px; color: var(--accent); }
+.suggest-head small { margin-left: auto; font-size: 12.5px; }
+.preview .suggest-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.preview .suggest-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; padding: 2px 0; }
+.preview .suggest-list li + li { border-top: 1px solid var(--line); }
+.suggest-name { flex: 1 1 200px; min-width: 0; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
+.suggest-tags { display: flex; gap: 5px; }
+.chip { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.chip.prio-high { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.suggest-list .btn .icon { width: 15px; height: 15px; }
+
 /* callouts */
 .callout {
   --c: 99, 82, 217;

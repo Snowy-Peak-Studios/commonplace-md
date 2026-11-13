@@ -112,3 +112,35 @@ test("the Inbox button opens the inbox whose github property is the signed-in lo
   assert.equal(ownInboxPath(notes, "", "Notes/Inbox.md"), "Notes/Inbox.md", "not signed in: the repo's Inbox page");
   assert.equal(ownInboxPath([{ path: "Notes/Inboxes/N.md", props: { github: 1234 } }], "1234", ""), "Notes/Inboxes/N.md", "a login YAML reads as a number");
 });
+
+test("suggested tasks: free ones in a Tasks folder, highest priority, then newest", async () => {
+  const { suggestTasks, isTaskPath } = await import("../src/vault.js");
+  const t = (path, props) => ({ path, props });
+  const notes = [
+    t("Tasks/Old high.md", { id: "T-02", priority: "High", status: "To Do", assignee: "", area: "Docs" }),
+    t("Tasks/New high.md", { id: "T-10", priority: "High", status: "To Do", assignee: "", area: "Features" }),
+    t("Tasks/Taken.md", { id: "T-11", priority: "High", status: "To Do", assignee: "Bo Example", area: "Features" }),
+    t("Tasks/Done.md", { id: "T-12", priority: "High", status: "Done", assignee: "", area: "Features" }),
+    t("Tasks/Started.md", { id: "T-13", priority: "High", status: "In Progress", assignee: null, area: "Features" }),
+    t("Tasks/Medium.md", { id: "T-20", priority: "Medium", status: "To Do", assignee: "", area: "Art" }),
+    t("Tasks/Low.md", { id: "T-30", priority: "Low", area: "Features" }),
+    t("Notes/Not a task.md", { priority: "High", status: "To Do" }),
+  ];
+  assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Medium.md"]);
+  assert.deepEqual(suggestTasks(notes, { areas: ["features", "Docs"] }).map((n) => n.path),
+    ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Low.md"]);
+  assert.deepEqual(suggestTasks(notes, { areas: "Art" }).map((n) => n.path), ["Tasks/Medium.md"]);
+  assert.equal(suggestTasks(notes, { count: 1 }).length, 1);
+  assert.ok(isTaskPath("Wiki/Tasks/A.md") && isTaskPath("tasks/a.md"));
+  assert.ok(!isTaskPath("Tasks/Deeper/A.md") && !isTaskPath("MyTasks/A.md") && !isTaskPath("Tasks/a.csv"));
+});
+
+test("claiming a task sets its status and assignee in place", async () => {
+  const { claimTask } = await import("../src/vault.js");
+  const text = '---\nid: T-18\nstatus: To Do\nassignee: ""\npriority: Medium\n---\n\n# Top three\n\nassignee: in the body stays\n';
+  assert.equal(claimTask(text, "Ann Example"),
+    "---\nid: T-18\nstatus: In Progress\nassignee: Ann Example\npriority: Medium\n---\n\n# Top three\n\nassignee: in the body stays\n");
+  assert.equal(claimTask("---\nid: T-1\n---\nbody", "Bo: art"), '---\nid: T-1\nstatus: In Progress\nassignee: "Bo: art"\n---\nbody');
+  assert.equal(claimTask("---\r\nstatus: To Do\r\n---\r\n", "Ann Example (Claude)"), "---\nstatus: In Progress\nassignee: Ann Example (Claude)\n---\n");
+  assert.equal(claimTask("# no front matter", "x"), null);
+});
