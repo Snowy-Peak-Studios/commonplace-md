@@ -10,8 +10,16 @@ One inbox per person: copy this note, name it after yourself, and put your GitHu
 
 ## New tasks
 
+*The notes below will be transferred to tasks.*
+
 - [ ] Rename this note
 
 ## Notes
 
+*Thoughts that aren't tasks. They stay here.*
+
 - Nothing yet.
+
+## Needs attention
+
+*Questions waiting for an answer, one per item, with its task. Answer under the item.*

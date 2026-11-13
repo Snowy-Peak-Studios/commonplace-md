@@ -4,6 +4,8 @@ filters:
 formulas:
   priority_rank: 'if(priority == "High", 1, if(priority == "Medium", 2, 3))'
 properties:
+  id:
+    displayName: ID
   file.name:
     displayName: Task
   status:
@@ -14,6 +16,8 @@ properties:
     displayName: Area
   assignee:
     displayName: Assignee
+  requested_by:
+    displayName: Requested by
   file.mtime:
     displayName: Last modified
 views:
@@ -23,22 +27,25 @@ views:
       property: status
       direction: DESC
     order:
+      - id
       - file.name
       - priority
       - area
       - assignee
+      - requested_by
       - file.mtime
     sort:
       - property: formula.priority_rank
         direction: ASC
-      - property: file.name
-        direction: ASC
+      - property: id
+        direction: DESC
   - type: table
     name: Open
     filters:
       and:
         - status != "Done"
     order:
+      - id
       - file.name
       - status
       - priority
@@ -49,12 +56,15 @@ views:
         direction: ASC
       - property: formula.priority_rank
         direction: ASC
+      - property: id
+        direction: DESC
   - type: table
     name: Done
     filters:
       and:
         - status == "Done"
     order:
+      - id
       - file.name
       - area
       - file.mtime

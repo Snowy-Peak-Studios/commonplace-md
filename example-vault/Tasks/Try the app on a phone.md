@@ -1,9 +1,11 @@
 ---
+id: T-3
 parent: "[[Task Board]]"
 status: In Progress
-priority: Medium
-area: Setup
 assignee: Your name
+requested_by: Your name
+area: Setup
+priority: Medium
 ---
 
 # Try the app on a phone

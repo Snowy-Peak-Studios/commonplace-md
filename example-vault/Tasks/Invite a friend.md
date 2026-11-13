@@ -1,8 +1,11 @@
 ---
+id: T-4
 parent: "[[Task Board]]"
 status: To Do
-priority: High
+assignee: ""
+requested_by: Your name
 area: Sharing
+priority: High
 ---
 
 # Invite a friend

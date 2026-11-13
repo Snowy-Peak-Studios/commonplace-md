@@ -26,6 +26,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login.
+- **AI agents (optional):** rules in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; read-only mode for people who can't push.
 
 ## Quick start
@@ -65,6 +66,8 @@ git push
 Without git: on this repo's GitHub page, **Code › Download ZIP**, unzip it, then in your notes repo on GitHub use **Add file › Upload files** and drop in everything inside `example-vault/` (folders included).
 
 This puts the vault at the top of the repo. To keep it in a folder instead (say `notes/`), copy it there and set **Folder** in step 4.
+
+The vault comes with `AGENTS.md` and `CLAUDE.md`, rules for AI agents. Keep them if you work with agents (see [Working with AI agents](#working-with-ai-agents-optional)); otherwise delete them.
 
 ### 3. Make a token
 
@@ -130,16 +133,19 @@ Settings live in this browser's storage, so each device has its own. An invite l
 example-vault/
 ├── Home.md                      start page: links, a table, a callout, an embedded section, a Mermaid diagram, an image
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
-├── Task Board.md                current goals, and the tasks' base embedded with ![[Tasks.base]]
+├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
+├── AGENTS.md                    optional: the rules for AI agents working in the vault
+├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
 ├── Bases/
 │   └── Tasks.base               a base with three views (By status, Open, Done), a formula, groups, sorts and filters
-├── Tasks/                       five task notes with status, priority, area and assignee properties, and checklists
+├── Tasks/                       five task notes with id, status, priority, area, assignee and requested_by properties, and checklists
 ├── Notes/
-│   ├── Inbox.md                 the shared inbox: owner and github properties, New tasks and Notes sections
+│   ├── Inbox.md                 the shared inbox: owner and github properties, New tasks, Notes and Needs attention sections
 │   └── Inboxes/
 │       └── Your name.md         a personal inbox: copy it, rename it, put your GitHub login in github
 ├── Templates/
-│   └── Note.md                  the note template, with {{title}} and {{date}}
+│   ├── Note.md                  the note template, with {{title}} and {{date}}
+│   └── Task.md                  the task template: a user story, acceptance criteria and the task's properties
 ├── Data/
 │   └── Reading list.csv         a CSV file, opened as a table
 └── Attachments/
@@ -207,6 +213,32 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
+
+## Working with AI agents (optional)
+
+AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code. With them, an agent:
+
+- pulls first, and reads the **current goals** on the Task Board, so what it picks and proposes serves them;
+- reads **your inbox** and turns what you wrote under **New tasks** into task notes, with IDs and acceptance criteria;
+- picks a free task and **claims** it (status and assignee, committed and pushed) before it changes anything, so two agents never work on the same task;
+- keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
+- asks you under **Needs attention** in your inbox when it needs a decision, and works on something else while it waits.
+
+This is how the makers of Commonplace.md use it with their own agents. Change the rules to fit how you work.
+
+### Set it up
+
+1. Keep `AGENTS.md` and `CLAUDE.md` at the top of the notes repo, where agents look for them. If the vault is in a folder (say `notes/`), move the two files up to the repo's top and put the folder in front of the paths in them (`notes/Home.md`, `notes/Tasks/`, ...).
+2. Give each person an inbox in `Notes/Inboxes/` (or use the shared `Notes/Inbox.md`), with `owner` their name and `github` their GitHub login.
+3. Set the agent's git `user.name` (`git config user.name`) to the inbox's `owner`, so the agent finds its person's inbox.
+4. Optional: fill in the **Areas** table on the Task Board, so each person's agents pick only their own tasks.
+
+### Every day
+
+1. You write in your inbox from the app, on your phone or anywhere: new tasks, notes, answers.
+2. The agent pulls, sorts the inbox into tasks, claims one and works on it.
+3. When it needs you, it leaves a question under **Needs attention**. You answer under the item, and the agent picks it up next time.
+4. The agent pushes after every commit, so the app shows its changes on your phone at once.
 
 ## Privacy and security
 

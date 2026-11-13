@@ -1,8 +1,11 @@
 ---
+id: T-5
 parent: "[[Task Board]]"
 status: To Do
-priority: Medium
+assignee: ""
+requested_by: Your name
 area: Notes
+priority: Medium
 ---
 
 # Add a reading list

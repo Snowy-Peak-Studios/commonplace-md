@@ -1,8 +1,11 @@
 ---
+id: T-2
 parent: "[[Task Board]]"
 status: Done
-priority: Low
+assignee: Your name
+requested_by: Your name
 area: Setup
+priority: Low
 ---
 
 # Make a note template
