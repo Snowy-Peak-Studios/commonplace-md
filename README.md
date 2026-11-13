@@ -21,7 +21,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes.
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
-- **Phone:** works at phone width and installs as an app (PWA). It needs a connection.
+- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. It needs a connection.
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
@@ -94,6 +94,16 @@ Make one token per device, so you can revoke one without the others.
 3. Press **Save repos**, then **Check access** to see that the token can read and save it.
 
 That's it: pick the repo at the top of the file list and start writing.
+
+### 5. Install it as an app (optional)
+
+Commonplace.md can be installed like any other app: it gets its own window and icon, and opens straight to your notes.
+
+- **On a computer** (Chrome, Edge, Brave and other Chromium browsers): click the **install icon** at the right end of the address bar (a screen with a small arrow), or open the browser's menu and pick **Install Commonplace.md** (in some browsers under *Cast, save and share* or *Apps*). It then sits in the Start menu or the Dock, and can be pinned to the taskbar.
+- **On Android** (Chrome): the menu (⋮) › **Install app** or **Add to home screen**.
+- **On iPhone and iPad** (Safari): the **Share** button › **Add to Home Screen**.
+
+The installed app is the same page, and it updates by itself when the app does. On a computer and on Android it shares the browser's storage, so your token and repos are already there. On iPhone and iPad it has storage of its own: connect the token and add your repos once more inside it. It still needs a connection, and your notes stay on GitHub. To remove it, uninstall it like any other app.
 
 ## One per project, or one for the whole organization
 
