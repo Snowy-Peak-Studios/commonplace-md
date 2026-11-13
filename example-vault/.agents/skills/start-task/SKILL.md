@@ -18,7 +18,7 @@ Run `git status --short`. If there's uncommitted work from before, say so in the
 ## 3. Find the task
 
 - **Your person named it** (an ID or some words): find its note (`grep -l "^id: <ID>$" Tasks/*.md`, or `ls Tasks | grep -i <word>`).
-- **They didn't**: first look for a task they claimed for you: `assignee` exactly your `git config user.name`, with no agent after it, and not done (`grep -l "^assignee: <name>$" Tasks/*.md`; any spelling of the name counts, e.g. with or without accents). The highest priority first. With none, pick the next free one: no `assignee`, an `area` that's your person's (if `Task Board.md` has an Areas table), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID). Say why you picked it.
+- **They didn't**: first look for a task they claimed for you: `assignee` exactly your `git config user.name`, with no agent after it, and not done (`grep -l "^assignee: <name>$" Tasks/*.md`; any spelling of the name counts, e.g. with or without accents). The highest priority first. With none, pick the next free one: no `assignee`, not `status: Waiting` (put off by your person), an `area` that's your person's (if `Task Board.md` has an Areas table), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID). Say why you picked it.
 - **No task for what they asked**: make one from `Templates/Task.md` (see the `sort-inbox` skill for the fields), with `requested_by` your person.
 
 ## 4. Can you take it?

@@ -40,14 +40,14 @@ If your person says the rules are already set up, just delete this section.
 ## Tasks
 
 - One note per task in `Tasks/`, made from `Templates/Task.md`. Each task is a user story with acceptance criteria.
-- Properties: `id`, `status` (To Do / In Progress / Done), `assignee`, `requested_by`, `area`, `priority` (High / Medium / Low).
+- Properties: `id`, `status` (To Do / In Progress / Waiting / Done; *Waiting* is a task your person put off with **Not now**), `assignee`, `requested_by`, `area`, `priority` (High / Medium / Low).
 - A new task's `id` is the highest one + 1 (`grep -h "^id:" Tasks/*.md | sort -V | tail -1`). IDs are never reused.
 
 ### Picking a task
 
 - Your person names one, or you take the next one in this order:
   1. **Tasks your person claimed for you**: `assignee` is exactly their name, with no agent after it (e.g. `Ann Example`), and the task isn't done. That's how they pick your next task, for example with **Claim** in the app's inbox. The highest priority first.
-  2. **Free tasks**: no `assignee`, the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
+  2. **Free tasks**: no `assignee`, not *Waiting* (your person put it off: leave it until they bring it back), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
 - If `Task Board.md` has an **Areas** table, pick only free tasks whose `area` belongs to your person.
 - A task with an agent in its `assignee` (e.g. `Ann Example (Claude)`) is taken, whatever its status: another session is on it. So is a task with someone else's name.
 - Before you build an old task, check that it still fits the notes and the goals. If it doesn't, rewrite or narrow it, or ask (see Questions). Never build a stale task as written.

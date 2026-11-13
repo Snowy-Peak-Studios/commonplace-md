@@ -168,8 +168,8 @@ await page.waitForSelector(".suggest-list a.suggest-name", { timeout: 15000 }).c
 await shot("2-inbox-desktop");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
-const boxRows = () => page.$$eval(".suggest-list li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
-  name: x.querySelector(".suggest-name").textContent, claim: !!x.querySelector("button"),
+const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
+  name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent.includes("Claim")),
   claimed: x.querySelector(".chip.claimed")?.textContent ?? null,
 })));
 const rows0 = await boxRows();
@@ -183,7 +183,8 @@ check(free0[0]?.name === "T-4 Invite a friend", "the High one comes first: " + f
 check(!free0.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested as free: " + JSON.stringify(free0.map((s) => s.name)));
 check(free0.every((s) => s.claim), "each free one has a Claim button");
 const putsBefore = puts.length;
-await page.click(".suggest-list li button");
+await page.evaluate(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes("Invite a friend"))
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }));
 await page.waitForSelector("dialog.modal[open] .btn.primary");
 await page.click("dialog.modal .btn.primary");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
@@ -211,6 +212,28 @@ check(pickPut?.url === contentsUrl("Tasks/Add a reading list.md") && pickPut.tex
 check(pickPut?.body.message?.startsWith("T-5: priority set to High"), "the commit says what changed: " + pickPut?.body.message);
 await page.waitForFunction(() => document.querySelector('select[aria-label="Priority of Add a reading list"]')?.value === "High", { timeout: 10000 }).catch(() => {});
 check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s) => s.value).catch(() => null) === "High", "the box shows the new priority");
+// Not now: a task goes on the waiting list (status Waiting), out of the suggestions; Bring back takes it off.
+const putsBeforeWait = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Add a reading list"))
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Not now") b.click(); }));
+await page.waitForFunction(() => document.querySelector(".suggest-waiting summary")?.textContent.includes("Waiting (1)"), { timeout: 15000 }).catch(() => {});
+const waitPut = puts.length > putsBeforeWait ? puts.at(-1) : null;
+check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? ""), "Not now saves the task with status Waiting");
+check(waitPut?.body.message?.startsWith("T-5: status set to Waiting"), "the commit says so: " + waitPut?.body.message);
+const afterWait = await boxRows();
+check(!afterWait.some((r) => r.name === "T-5 Add a reading list" && !r.waiting), "it leaves the suggestions: " + JSON.stringify(afterWait.map((r) => r.name)));
+await page.click(".suggest-waiting summary");
+const waitingRows = await page.$$eval(".suggest-waiting li", (li) => li.map((x) => x.querySelector(".suggest-name")?.textContent));
+check(waitingRows.length === 1 && waitingRows[0] === "T-5 Add a reading list", "the waiting list holds it: " + JSON.stringify(waitingRows));
+await shot("2c-waiting-list");
+const putsBeforeBack = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".suggest-waiting button")].find((b) => b.textContent === "Bring back")?.click());
+await page.waitForFunction(() => !document.querySelector(".suggest-waiting"), { timeout: 15000 }).catch(() => {});
+const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
+// Saves here are faked, so the real note still says To Do: Bring back reads it fresh, finds nothing to change and
+// commits nothing. Any commit it does make must say To Do.
+check((!backPut || /^status: To Do$/m.test(backPut.text)) && !(await page.$(".suggest-waiting"))
+  && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
 // The claim was never saved, so read the real tree again for the checks below.
 await page.reload({ waitUntil: "networkidle0" });
 

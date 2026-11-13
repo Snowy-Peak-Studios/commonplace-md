@@ -185,3 +185,19 @@ test("setting a task's properties changes only those lines", async () => {
   const t = (path, area) => ({ path, props: { area } });
   assert.deepEqual(taskAreas([t("Tasks/a.md", "Notes"), t("Tasks/b.md", "notes"), t("Tasks/c.md", " Art "), t("Tasks/d.md", ""), t("Notes/x.md", "Other")]), ["Art", "Notes"]);
 });
+
+test("Not now: waiting tasks leave the suggestions and the claimed ones, and make the waiting list", async () => {
+  const { suggestTasks, claimedTasks, waitingTasks } = await import("../src/vault.js");
+  const t = (path, props) => ({ path, props });
+  const notes = [
+    t("Tasks/Free.md", { id: "T-1", priority: "Low", status: "To Do", assignee: "", area: "Docs" }),
+    t("Tasks/Put off.md", { id: "T-2", priority: "High", status: "Waiting", assignee: "", area: "Docs" }),
+    t("Tasks/Put off, other area.md", { id: "T-3", priority: "High", status: "waiting", assignee: "", area: "Art" }),
+    t("Tasks/Mine, put off.md", { id: "T-4", priority: "Medium", status: "Waiting", assignee: "Ann Example", area: "Art" }),
+    t("Tasks/Mine.md", { id: "T-5", priority: "Medium", status: "In Progress", assignee: "Ann Example", area: "Docs" }),
+  ];
+  assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/Free.md"]);
+  assert.deepEqual(claimedTasks(notes, "Ann Example").map((n) => n.path), ["Tasks/Mine.md"]);
+  assert.deepEqual(waitingTasks(notes).map((n) => n.path), ["Tasks/Put off, other area.md", "Tasks/Put off.md", "Tasks/Mine, put off.md"]);
+  assert.deepEqual(waitingTasks(notes, { areas: ["Docs"], owner: "Ann Example" }).map((n) => n.path), ["Tasks/Put off.md", "Tasks/Mine, put off.md"]);
+});

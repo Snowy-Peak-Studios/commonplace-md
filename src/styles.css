@@ -647,6 +647,12 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 .chip { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
 .chip.claimed { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); font-weight: 600; }
 .chip.claimed.working { color: var(--ok); border-color: transparent; background: var(--bg-soft); }
+.suggest-waiting { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+.suggest-waiting > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px 0; }
+.suggest-waiting > summary::-webkit-details-marker { display: none; }
+.suggest-waiting > summary .icon { width: 14px; height: 14px; transition: transform 0.15s; }
+.suggest-waiting[open] > summary .icon { transform: rotate(90deg); }
+.preview .suggest-waiting .suggest-list { margin-top: 2px; }
 select.chip.pick {
   font: inherit;
   font-size: 12.5px;

@@ -173,7 +173,7 @@ export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
 const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 /** Statuses that aren't free to start. */
-const NOT_FREE = /^(done|in progress|cancell?ed|won'?t do)$/i;
+const NOT_FREE = /^(done|in progress|waiting|cancell?ed|won'?t do)$/i;
 
 /** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
 export function listProp(v) {
@@ -189,6 +189,9 @@ const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerC
 const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
 /** Statuses of work that's over. */
 const FINISHED = /^(done|cancell?ed|won'?t do)$/i;
+/** The status of a task put off with "Not now": on the waiting list, out of the suggestions. */
+export const WAITING = "Waiting";
+const isWaiting = (n) => String(n.props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase();
 
 export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
   const want = listProp(areas);
@@ -220,7 +223,7 @@ export function claimedTasks(notes, owner) {
   const me = foldName(owner);
   if (!me) return [];
   return notes
-    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim())
+    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
       && foldName(splitAssignee(n.props.assignee).name) === me)
     .map((n) => ({ ...n, agent: splitAssignee(n.props.assignee).agent }))
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
@@ -238,6 +241,20 @@ export function taskAreas(notes) {
 
 /** The priorities a task can have, highest first. */
 export const PRIORITIES = ["High", "Medium", "Low"];
+
+/**
+ * The waiting list: tasks put off with "Not now" (`status: Waiting`), from [{ path, props }]. Those in
+ * `areas` (any when empty) or claimed by `owner`; highest priority, then newest, first.
+ */
+export function waitingTasks(notes, { areas = [], owner = "" } = {}) {
+  const want = listProp(areas);
+  const me = foldName(owner);
+  return notes
+    .filter((n) => isTaskPath(n.path) && isWaiting(n) && (!want.length
+      || want.includes(String(n.props.area ?? "").trim().toLowerCase())
+      || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
+    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+}
 
 /** A YAML scalar: plain when that's safe, else double-quoted. */
 const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));

@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, waitingTasks, WAITING, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -752,7 +752,10 @@ function loadSuggestions(repo, areas, who) {
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
-      .then((notes) => ({ mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }), allAreas: taskAreas(notes) }));
+      .then((notes) => ({
+        mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }),
+        waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
+      }));
     suggestLoads.set(key, load);
     load.catch(() => suggestLoads.delete(key));
   }
@@ -796,19 +799,30 @@ function suggestBox(f) {
       tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : ""),
       tag(path, t, "area", allAreas)),
     extra);
-  loadSuggestions(repo, areas, who).then(({ mine, free, allAreas: found }) => {
+  /** Sets a task's status from the box: "Not now" puts it on the waiting list, "Bring back" takes it off. */
+  const statusButton = (path, label, value, title) => editable
+    ? h("button", { class: "btn small ghost", type: "button", title,
+      onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
+    : null;
+  const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
+  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found }) => {
     allAreas = found;
-    const claimed = mine.map((n) => row(n, h("span", {
+    const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed")));
-    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."));
-    fill(list, claimed, free.map((n) => row(n,
+    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n.path)]));
+    const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
+      h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
+      h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
+        statusButton(n.path, "Bring back", "To Do", "Take it off the waiting list: its status goes back to To Do"))))) : null;
+    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."), waitingList);
+    fill(list, claimed, free.map((n) => row(n, [
       editable && who
         ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
           onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget) }, icon("check"), "Claim")
-        : null)),
-    !free.length ? h("li", { class: "muted" }, "No free tasks right now.") : null);
+        : null,
+      notNow(n.path)])),
+    !free.length ? h("li", { class: "muted" }, "No free tasks right now.") : null, waitingList);
   }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
   return box;
 }
@@ -873,7 +887,8 @@ async function changeTask(repo, path, key, value, picker) {
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
-      toast(`${shownName(path)}: ${key} is now ${value}`, "ok");
+      toast(key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
+        : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
   } catch (e) {
     toast(`Not changed: ${e.message}`, "error");
