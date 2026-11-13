@@ -192,7 +192,10 @@ let treeVersion = 0;
 
 async function loadTree(repo, force = false) {
   if (!force && app.trees.has(repo.id)) return app.trees.get(repo.id);
-  const data = await gh.tree(repo);
+  // The branch's latest commit first, so the tree is that commit's and newer ones can be told apart later.
+  let head = null;
+  try { head = await gh.headSha(repo); } catch { /* the tree still loads by the branch's name */ }
+  const data = await gh.tree(repo, head?.sha || repo.branch);
   const prefix = repo.folder ? repo.folder.replace(/\/+$/, "") + "/" : "";
   const files = new Map();
   for (const e of data.tree) {
@@ -201,10 +204,57 @@ async function loadTree(repo, force = false) {
     if (rel.split("/").some((seg) => seg.startsWith("."))) continue; // dot-folders and files: .git, .trash, .gitkeep
     files.set(rel, e.sha);
   }
-  const tree = { files, index: new LinkIndex([...files.keys()]), truncated: data.truncated, version: ++treeVersion };
+  const tree = {
+    files, index: new LinkIndex([...files.keys()]), truncated: data.truncated, version: ++treeVersion,
+    head: head?.sha || null, etag: head?.etag || null, newer: false,
+  };
   app.trees.set(repo.id, tree);
   findOwnInbox(repo, tree);
   return tree;
+}
+
+// ---- newer notes on GitHub ----
+
+const CHECK_EVERY = 3 * 60 * 1000;
+let checking = false;
+
+/** Asks GitHub whether the open repo's branch has commits this tree doesn't, and shows the nudge if so. */
+async function checkForNewer() {
+  const repo = app.repo;
+  const tree = repo && app.trees.get(repo.id);
+  if (!tree?.head || checking || document.hidden || !app.token) return;
+  checking = true;
+  try {
+    const { sha, etag } = await gh.headSha(repo, tree.etag);
+    if (app.trees.get(repo.id) !== tree || !sha) return;
+    tree.etag = etag;
+    tree.newer = sha !== tree.head;
+    renderNudge();
+  } catch { /* offline or refused: ask again later */ } finally {
+    checking = false;
+  }
+}
+
+/** A save of ours moved the branch on: the tree is still up to date when ours was the only new commit. */
+function wroteCommit(repo, res) {
+  const tree = app.trees.get(repo.id);
+  if (tree?.head && res?.commit && res.parent === tree.head) tree.head = res.commit;
+}
+
+function renderNudge() {
+  const tree = app.repo && app.trees.get(app.repo.id);
+  $("#nudge").hidden = !tree?.newer;
+}
+
+/** Reads the repo again from GitHub, asking first when the open note has unsaved changes. */
+async function reloadFromGitHub() {
+  if (app.file?.dirty && !(await confirmDialog("Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
+  if (app.file) store.remove(draftKey(app.file));
+  if (app.repo) app.trees.delete(app.repo.id);
+  closeFile();
+  app.repo = null;
+  $("#nudge").hidden = true;
+  route();
 }
 
 /** The Inbox button's page: the signed-in person's own inbox once it's found, else the repo's Inbox page. */
@@ -397,6 +447,8 @@ function parentPath(f) {
 
 function renderHeader() {
   const f = app.file;
+  $("#reload-btn").hidden = !app.repo || !app.token;
+  renderNudge();
   const up = parentPath(f);
   const upBtn = $("#up-btn");
   upBtn.hidden = !up;
@@ -780,6 +832,7 @@ async function claimSuggested(repo, path, who, button) {
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who} from ${APP_NAME}`);
+      wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
       toast(`Claimed ${shownName(path)}`, "ok");
@@ -817,6 +870,7 @@ async function changeTask(repo, path, key, value, picker) {
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${key} set to ${value} from ${APP_NAME}`);
+      wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
       toast(`${shownName(path)}: ${key} is now ${value}`, "ok");
@@ -1395,6 +1449,7 @@ async function save() {
   renderHeader();
   try {
     const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), text, f.sha, `Edit ${f.path} from ${APP_NAME}`);
+    wroteCommit(f.repo, res);
     if (app.file !== f) return;
     f.sha = res.sha;
     f.saved = text;
@@ -1580,6 +1635,7 @@ async function newNote() {
         try {
           const text = await startingText(repo, tree, p);
           const res = await gh.writeText(repo, fullPath(repo, p.path), text, null, `Add ${p.path} from ${APP_NAME}`);
+          wroteCommit(repo, res);
           treeChanged(repo, p.path, res.sha);
           return p.path;
         } catch (e) {
@@ -1934,15 +1990,8 @@ function start() {
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
   $("#side-new").addEventListener("click", () => { closeSideOnPhone(); newNote(); });
-  $("#reload-btn").addEventListener("click", async () => {
-    closeMenu();
-    if (app.file?.dirty && !(await confirmDialog("Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
-    if (app.file) store.remove(draftKey(app.file));
-    if (app.repo) app.trees.delete(app.repo.id);
-    closeFile();
-    app.repo = null;
-    route();
-  });
+  $("#reload-btn").addEventListener("click", reloadFromGitHub);
+  $("#nudge-reload").addEventListener("click", reloadFromGitHub);
   $("#settings-btn").addEventListener("click", () => { closeMenu(); location.hash = "#/settings"; });
   $("#side-settings").addEventListener("click", () => { location.hash = "#/settings"; });
   $("#filter").addEventListener("input", debounce(renderTree, 120));
@@ -1965,7 +2014,8 @@ function start() {
   });
   addEventListener("hashchange", route);
   addEventListener("pagehide", flushDraft);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) flushDraft(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushDraft(); else checkForNewer(); });
+  setInterval(checkForNewer, CHECK_EVERY);
   addEventListener("beforeunload", (e) => { if (app.file?.dirty) e.preventDefault(); });
   matchMedia("(min-width: 1180px)").addEventListener("change", () => applyMode());
   // Diagrams are drawn in the scheme's colours, so a scheme change redraws them.

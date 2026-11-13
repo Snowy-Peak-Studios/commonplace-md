@@ -329,6 +329,24 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
 .title .dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; align-self: center; }
 .bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
+/* newer notes on GitHub */
+.nudge {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+.nudge[hidden] { display: none; }
+.nudge > span { display: inline-flex; align-items: center; gap: 7px; }
+.nudge .icon { width: 16px; height: 16px; color: var(--accent); }
+
 .seg {
   display: inline-flex;
   padding: 3px;
@@ -1040,8 +1058,10 @@ select.input { padding-right: 8px; }
   .phone-only { display: inline-flex !important; }
   .bar { padding: 0 6px; padding-top: env(safe-area-inset-top); gap: 4px; }
   .bar .label { display: none; }
-  .bar .btn.ghost { width: 34px; padding: 0; }
-  .seg button { padding: 0 9px; }
+  .bar .btn.ghost { width: 30px; padding: 0; }
+  .bar .icon-btn { width: 30px; }
+  .bar-actions { gap: 2px; }
+  .seg button { padding: 0 7px; }
   .save { min-width: 0; padding: 0 12px; }
   .save .label { display: inline; }
   /* Saved needs no word on a phone: the tick says it, and the title keeps its room. */

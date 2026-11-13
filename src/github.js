@@ -73,9 +73,34 @@ export class GitHub {
     return this.request("GET", `/repos/${r.owner}/${r.repo}/branches/${encodeURIComponent(r.branch)}`);
   }
 
-  /** Every file of the branch in one request. */
-  tree(r) {
-    return this.request("GET", `/repos/${r.owner}/${r.repo}/git/trees/${encodeURIComponent(r.branch)}?recursive=1`);
+  /** Every file of the branch (or of one commit, by its sha) in one request. */
+  tree(r, ref = r.branch) {
+    return this.request("GET", `/repos/${r.owner}/${r.repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+  }
+
+  /**
+   * The branch's latest commit sha, asked cheaply: just the sha, and with the last answer's ETag an
+   * unchanged branch answers 304 Not Modified, which GitHub doesn't count against the rate limit.
+   * Resolves to { sha, etag }, with `sha` null when nothing changed since that ETag.
+   */
+  async headSha(r, etag = null) {
+    let res;
+    try {
+      res = await fetch(`${API}/repos/${r.owner}/${r.repo}/commits/${encodeURIComponent(r.branch)}`, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: "application/vnd.github.sha",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(etag ? { "If-None-Match": etag } : {}),
+        },
+      });
+    } catch {
+      throw new GitHubError(0, "Can't reach GitHub. Check the connection.");
+    }
+    if (res.status === 304) return { sha: null, etag };
+    if (!res.ok) throw new GitHubError(res.status, res.statusText);
+    return { sha: (await res.text()).trim(), etag: res.headers.get("ETag") };
   }
 
   async readText(r, path) {
@@ -109,7 +134,7 @@ export class GitHub {
     const body = { message, content: encodeBase64(text), branch: r.branch };
     if (sha) body.sha = sha;
     const data = await this.request("PUT", `/repos/${r.owner}/${r.repo}/contents/${encodePath(path)}`, { body });
-    return { sha: data.content.sha, commit: data.commit.sha };
+    return { sha: data.content.sha, commit: data.commit.sha, parent: data.commit.parents?.[0]?.sha ?? null };
   }
 
   /** GitHub's code search; it only covers the repo's default branch and lags a little behind. */

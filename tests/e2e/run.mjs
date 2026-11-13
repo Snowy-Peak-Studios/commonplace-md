@@ -34,6 +34,7 @@ const log = (...a) => console.log(...a);
 const errors = [];
 const puts = [];
 let putMode = "ok";
+let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
 
 const CSV_PATH = "Data/Test table.csv";
@@ -67,6 +68,10 @@ page.on("request", async (req) => {
     puts.push({ url, body, text: Buffer.from(body.content, "base64").toString("utf8") });
     if (putMode === "conflict") return req.respond(json(409, { message: "is at abc but expected def" }));
     return req.respond(json(200, { content: { sha: "fake" + puts.length }, commit: { sha: "c" + puts.length } }));
+  }
+  if (fakeHead && req.method() === "GET" && url.startsWith(`${REPO_API}/commits/`)) {
+    return req.respond({ status: 200, contentType: "text/plain", body: fakeHead,
+      headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });
   }
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
@@ -226,13 +231,33 @@ await page.goForward();
 await page.waitForFunction((p) => decodeURIComponent(location.hash).includes(p.split("/").pop()), {}, linked);
 check(hashPath(page.url()) === linked && !(await backHidden()), "Forward (the browser's) goes on to the linked note, with Back shown");
 
+// 3a. Reload sits beside Save, and a quiet banner says when GitHub has newer notes.
+const reloadBtn = await page.evaluate(() => {
+  const b = document.querySelector("#reload-btn");
+  return { inBar: !!b?.closest(".bar-actions") && !b.closest(".menu"), shown: !!b && !b.hidden, nextToSave: b?.nextElementSibling?.id === "save-btn" };
+});
+check(reloadBtn.inBar && reloadBtn.shown && reloadBtn.nextToSave, "Reload from GitHub is a button beside Save, not in the menu: " + JSON.stringify(reloadBtn));
+check(await page.$eval("#nudge", (n) => n.hidden), "no newer-notes banner while the notes are up to date");
+await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+await wait(1500);
+check(await page.$eval("#nudge", (n) => n.hidden), "coming back to the tab, GitHub has nothing newer: still no banner");
+fakeHead = "0123456789abcdef0123456789abcdef01234567";
+await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+await page.waitForFunction(() => !document.querySelector("#nudge").hidden, { timeout: 8000 }).catch(() => {});
+check(!(await page.$eval("#nudge", (n) => n.hidden)), "when GitHub has a newer commit, the banner shows");
+await shot("3c-newer-notes");
+fakeHead = null;
+await page.click("#nudge-reload");
+await page.waitForFunction(() => document.querySelector("#nudge").hidden && document.querySelector(".preview h1"), { timeout: 15000 }).catch(() => {});
+check(await page.$eval("#nudge", (n) => n.hidden), "its Reload reads the notes again, and the banner goes");
+
 // 3b. Go up: to the page in the note's parent property.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".preview h1");
 const upBtn = await page.$eval("#up-btn", (b) => ({ hidden: b.hidden, title: b.title }));
 check(!upBtn.hidden && upBtn.title === "Up to Home", "the Guide has an Up button to its parent, Home: " + JSON.stringify(upBtn));
 await page.click("#up-btn");
-await page.waitForFunction(() => location.hash.endsWith("/Home.md") && document.querySelector(".preview h1"));
+await page.waitForFunction(() => location.hash.endsWith("/Home.md") && document.querySelector("#title .name")?.textContent === "Home");
 check(hashPath(page.url()) === `/${ID}/Home.md`, "Up opens Home: " + hashPath(page.url()));
 check(await page.$eval("#up-btn", (b) => b.hidden), "Home has no parent, so no Up button");
 
