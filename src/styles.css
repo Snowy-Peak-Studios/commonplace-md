@@ -1028,6 +1028,9 @@ select.input { padding-right: 8px; }
   .seg button { padding: 0 9px; }
   .save { min-width: 0; padding: 0 12px; }
   .save .label { display: inline; }
+  /* Saved needs no word on a phone: the tick says it, and the title keeps its room. */
+  .save:disabled:not(.busy) { padding: 0 9px; }
+  .save:disabled:not(.busy) .label { display: none; }
   .title .crumbs { display: none; }
   .doc { padding: 4px 18px 120px; }
   .doc.kind-csv { padding-left: 12px; padding-right: 12px; }

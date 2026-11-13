@@ -1,6 +1,6 @@
 // Caches the app's own files so it opens fast and survives a flaky connection.
 // Notes always come from api.github.com and are never cached here.
-const CACHE = "commonplace-v10";
+const CACHE = "commonplace-v11";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "src/styles.css", "src/app.js", "src/store.js",
   "src/github.js", "src/vault.js", "src/markdown.js", "src/bases.js", "src/editor.js", "src/csv.js", "src/icons.js",

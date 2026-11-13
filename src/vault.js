@@ -216,3 +216,13 @@ export function claimTask(text, who) {
   // The front matter starts right after the opening `---` line.
   return `---\n${raw}${src.slice(4 + fm.raw.length)}`;
 }
+
+/**
+ * The page a note's `parent` property links to, as a link target (`[[Task Board]]` -> "Task Board"),
+ * or null when it has none. Read from the front matter's text, so it's cheap enough for every keystroke.
+ */
+export function parentTarget(text) {
+  const fm = splitFrontMatter(text);
+  const m = fm && /^parent:[ \t]*["']?\[\[([^\]\n]+)\]\]/m.exec(fm.raw);
+  return m ? parseWikilink(m[1]).target || null : null;
+}

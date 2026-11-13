@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimTask, listProp,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimTask, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -387,8 +387,21 @@ function closeSideOnPhone() {
 // The toolbar
 // ================================================================
 
+/** The page above a note: the one its `parent` property links to, when that page exists. */
+function parentPath(f) {
+  if (f?.kind !== "md") return null;
+  const target = parentTarget(f.text);
+  const up = target && app.trees.get(f.repo.id)?.index.resolve(target, f.path);
+  return up && up !== f.path ? up : null;
+}
+
 function renderHeader() {
   const f = app.file;
+  const up = parentPath(f);
+  const upBtn = $("#up-btn");
+  upBtn.hidden = !up;
+  upBtn.title = up ? `Up to ${shownName(up)}` : "Up";
+  upBtn.setAttribute("aria-label", upBtn.title);
   $("#inbox-btn").hidden = !inboxOf(app.repo) || !app.token;
   $("#inbox-btn").classList.toggle("on", !!f && f.path === inboxOf(app.repo));
   const title = $("#title");
@@ -1849,6 +1862,10 @@ function start() {
     if (repo) location.hash = hrefFor(repo);
   });
   $("#back-btn").addEventListener("click", goBack);
+  $("#up-btn").addEventListener("click", () => {
+    const up = parentPath(app.file);
+    if (up) location.hash = hrefFor(app.file.repo, up);
+  });
   $("#inbox-btn").addEventListener("click", () => { if (inboxOf(app.repo)) location.hash = hrefFor(app.repo, inboxOf(app.repo)); });
   $("#mode").addEventListener("click", (e) => {
     const i = [...$("#mode").children].indexOf(e.target.closest("button"));

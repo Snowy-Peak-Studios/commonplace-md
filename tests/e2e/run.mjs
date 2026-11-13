@@ -200,6 +200,16 @@ await page.goForward();
 await page.waitForFunction((p) => decodeURIComponent(location.hash).includes(p.split("/").pop()), {}, linked);
 check(hashPath(page.url()) === linked && !(await backHidden()), "Forward (the browser's) goes on to the linked note, with Back shown");
 
+// 3b. Go up: to the page in the note's parent property.
+await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".preview h1");
+const upBtn = await page.$eval("#up-btn", (b) => ({ hidden: b.hidden, title: b.title }));
+check(!upBtn.hidden && upBtn.title === "Up to Home", "the Guide has an Up button to its parent, Home: " + JSON.stringify(upBtn));
+await page.click("#up-btn");
+await page.waitForFunction(() => location.hash.endsWith("/Home.md") && document.querySelector(".preview h1"));
+check(hashPath(page.url()) === `/${ID}/Home.md`, "Up opens Home: " + hashPath(page.url()));
+check(await page.$eval("#up-btn", (b) => b.hidden), "Home has no parent, so no Up button");
+
 // 4. The Guide: folded nav box, no %% left, links with headings and aliases.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".preview h1");

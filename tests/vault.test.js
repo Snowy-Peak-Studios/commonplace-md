@@ -144,3 +144,13 @@ test("claiming a task sets its status and assignee in place", async () => {
   assert.equal(claimTask("---\r\nstatus: To Do\r\n---\r\n", "Ann Example (Claude)"), "---\nstatus: In Progress\nassignee: Ann Example (Claude)\n---\n");
   assert.equal(claimTask("# no front matter", "x"), null);
 });
+
+test("the parent property gives the page above", async () => {
+  const { parentTarget } = await import("../src/vault.js");
+  assert.equal(parentTarget('---\nparent: "[[Task Board]]"\nstatus: To Do\n---\n# A'), "Task Board");
+  assert.equal(parentTarget("---\nparent: '[[Notes/Home#Top|home]]'\n---\n"), "Notes/Home");
+  assert.equal(parentTarget("---\nparent: [[Home]]\n---\n"), "Home");
+  assert.equal(parentTarget("---\nstatus: To Do\n---\nparent: \"[[Home]]\" in the body"), null);
+  assert.equal(parentTarget("---\nparent: Home\n---\n"), null);
+  assert.equal(parentTarget("# no front matter"), null);
+});
