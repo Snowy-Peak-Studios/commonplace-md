@@ -174,3 +174,14 @@ test("claimed tasks: the owner's own, waiting ones first, any spelling of the na
     [["Tasks/Waiting high.md", null], ["Tasks/Waiting low.md", null], ["Tasks/Agent on it.md", "Claude"]]);
   assert.deepEqual(claimedTasks(notes, ""), []);
 });
+
+test("setting a task's properties changes only those lines", async () => {
+  const { setProps, taskAreas } = await import("../src/vault.js");
+  const text = "---\nid: T-5\nstatus: To Do\npriority: Medium\narea: Notes\n---\n\n# A\n\npriority: in the body stays\n";
+  assert.equal(setProps(text, [["priority", "High"]]), text.replace("priority: Medium", "priority: High"));
+  assert.equal(setProps(text, [["area", "Two words"]]), text.replace("area: Notes", "area: Two words"));
+  assert.equal(setProps("---\nid: T-1\n---\n", [["area", "Docs: art"]]), '---\nid: T-1\narea: "Docs: art"\n---\n');
+  assert.equal(setProps("no front matter", [["area", "x"]]), null);
+  const t = (path, area) => ({ path, props: { area } });
+  assert.deepEqual(taskAreas([t("Tasks/a.md", "Notes"), t("Tasks/b.md", "notes"), t("Tasks/c.md", " Art "), t("Tasks/d.md", ""), t("Notes/x.md", "Other")]), ["Art", "Notes"]);
+});

@@ -226,6 +226,19 @@ export function claimedTasks(notes, owner) {
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
+/** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */
+export function taskAreas(notes) {
+  const seen = new Map();
+  for (const n of notes) {
+    const area = String(n.props.area ?? "").trim();
+    if (isTaskPath(n.path) && area && !seen.has(area.toLowerCase())) seen.set(area.toLowerCase(), area);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** The priorities a task can have, highest first. */
+export const PRIORITIES = ["High", "Medium", "Low"];
+
 /** A YAML scalar: plain when that's safe, else double-quoted. */
 const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
 
@@ -233,12 +246,18 @@ const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/
  * A task note claimed by `who`: its front matter's `status` becomes "In Progress" and its `assignee` `who`,
  * each line changed in place (or added at the end of the front matter). Null when the note has no front matter.
  */
-export function claimTask(text, who) {
+export const claimTask = (text, who) => setProps(text, [["status", "In Progress"], ["assignee", who]]);
+
+/**
+ * A note with some front matter properties set, each `key: value` line changed in place (or added at the
+ * end of the front matter); nothing else changes. Null when the note has no front matter.
+ */
+export function setProps(text, entries) {
   const src = toLf(text);
   const fm = splitFrontMatter(src);
   if (!fm) return null;
   let raw = fm.raw;
-  for (const [key, value] of [["status", "In Progress"], ["assignee", who]]) {
+  for (const [key, value] of entries) {
     const line = `${key}: ${yamlValue(value)}`;
     const re = new RegExp(`^${key}:.*$`, "m");
     raw = re.test(raw) ? raw.replace(re, () => line) : raw.trim() ? `${raw}\n${line}` : line;

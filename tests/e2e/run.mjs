@@ -190,6 +190,22 @@ await page.waitForFunction(() => [...document.querySelectorAll(".suggest-list li
 const rows1 = await boxRows();
 check(rows1.find((r) => r.name === "T-4 Invite a friend")?.claimed === "Claimed" && rows1[0].name === "T-4 Invite a friend",
   "the claimed task stays, at the top (High), marked Claimed: " + JSON.stringify(rows1));
+// The box's pickers: a task's priority and area, each change one commit of one line.
+const pickers = await page.$$eval(".suggest-list select.pick", (s) => s.map((x) => x.getAttribute("aria-label")));
+check(pickers.includes("Priority of Add a reading list") && pickers.includes("Area of Add a reading list"), "each task has a priority and an area picker: " + JSON.stringify(pickers));
+const areaOptions = await page.$eval('select[aria-label="Area of Add a reading list"]', (s) => [...s.options].map((o) => o.value));
+check(["Docs", "Notes", "Setup", "Sharing"].every((a) => areaOptions.includes(a)), "the area picker offers the areas the tasks use: " + JSON.stringify(areaOptions));
+const putsBeforePick = puts.length;
+await page.select('select[aria-label="Priority of Add a reading list"]', "High");
+await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("priority is now High"), { timeout: 15000 }).catch(() => {});
+const pickPut = puts.length > putsBeforePick ? puts.at(-1) : null;
+const pickBefore = await ghGet(`/repos/${OWNER}/${REPO}/contents/${encPath(PRE + "Tasks/Add a reading list.md")}?ref=${BRANCH}`)
+  .then((d) => Buffer.from(d.content, "base64").toString("utf8")).catch(() => "");
+check(pickPut?.url === contentsUrl("Tasks/Add a reading list.md") && pickPut.text === pickBefore.replace(/^priority: .*$/m, "priority: High"),
+  "a new priority saves the task with only that line changed");
+check(pickPut?.body.message?.startsWith("T-5: priority set to High"), "the commit says what changed: " + pickPut?.body.message);
+await page.waitForFunction(() => document.querySelector('select[aria-label="Priority of Add a reading list"]')?.value === "High", { timeout: 10000 }).catch(() => {});
+check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s) => s.value).catch(() => null) === "High", "the box shows the new priority");
 // The claim was never saved, so read the real tree again for the checks below.
 await page.reload({ waitUntil: "networkidle0" });
 

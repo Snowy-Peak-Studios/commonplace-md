@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, claimTask, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -700,7 +700,7 @@ function loadSuggestions(repo, areas, who) {
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
-      .then((notes) => ({ mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }) }));
+      .then((notes) => ({ mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }), allAreas: taskAreas(notes) }));
     suggestLoads.set(key, load);
     load.catch(() => suggestLoads.delete(key));
   }
@@ -724,20 +724,35 @@ function suggestBox(f) {
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
       h("small", { class: "muted" }, areas.length ? `Areas: ${Array.isArray(props.areas) ? props.areas.join(", ") : props.areas}` : "All areas")),
     list);
+  const editable = canWrite(repo) && !!app.token;
+  let allAreas = [];
+  /** A property as a chip, or as a chip-like picker that saves the task when it changes. */
+  const tag = (path, t, key, options, cls = "") => {
+    const value = String(t[key] ?? "").trim();
+    if (!editable) return value ? h("span", { class: `chip ${cls}` }, value) : null;
+    const list = value && !options.some((o) => o.toLowerCase() === value.toLowerCase()) ? [value, ...options] : options;
+    const label = key === "priority" ? "Priority" : "Area";
+    const pick = h("select", { class: `chip pick ${cls}`, "aria-label": `${label} of ${shownName(path)}`, title: `Change its ${label.toLowerCase()}` },
+      value ? null : h("option", { value: "", selected: true, disabled: true }, label),
+      list.map((o) => h("option", { value: o, selected: o.toLowerCase() === value.toLowerCase() }, o)));
+    pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick));
+    return pick;
+  };
   const row = ({ path, props: t }, extra) => h("li", {},
     h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
     h("span", { class: "suggest-tags" },
-      t.priority ? h("span", { class: `chip prio-${String(t.priority).toLowerCase()}` }, String(t.priority)) : null,
-      t.area ? h("span", { class: "chip" }, String(t.area)) : null),
+      tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : ""),
+      tag(path, t, "area", allAreas)),
     extra);
-  loadSuggestions(repo, areas, who).then(({ mine, free }) => {
+  loadSuggestions(repo, areas, who).then(({ mine, free, allAreas: found }) => {
+    allAreas = found;
     const claimed = mine.map((n) => row(n, h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
     }, n.agent ? `${n.agent} is on it` : "Claimed")));
     if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."));
     fill(list, claimed, free.map((n) => row(n,
-      canWrite(repo) && who && app.token
+      editable && who
         ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
           onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget) }, icon("check"), "Claim")
         : null)),
@@ -772,11 +787,44 @@ async function claimSuggested(repo, path, who, button) {
   } catch (e) {
     toast(`Not claimed: ${e.message}`, "error");
   }
-  if (app.file?.repo === repo && isInbox(repo, app.file.path) && app.file.dom?.preview.isConnected) {
-    const scroll = $("#main").scrollTop;
-    renderPreview();
-    $("#main").scrollTop = scroll;
-  } else button.disabled = false;
+  if (!refreshInboxBox(repo)) button.disabled = false;
+}
+
+/** Draws the open inbox again (its box re-sorts), keeping the scroll. False when no inbox of `repo` is open. */
+function refreshInboxBox(repo) {
+  if (!(app.file?.repo === repo && isInbox(repo, app.file.path) && app.file.dom?.preview.isConnected)) return false;
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+  return true;
+}
+
+/** Sets one property of a task from the inbox's box: one commit that changes only that line. */
+async function changeTask(repo, path, key, value, picker) {
+  picker.disabled = true;
+  try {
+    const { text, sha } = await gh.readText(repo, fullPath(repo, path));
+    const now = noteProps(text);
+    const known = baseCache("baseProps", repo);
+    const next = setProps(text, [[key, value]]);
+    if (!next) {
+      known[sha] = now;
+      treeChanged(repo, path, sha);
+      toast(`${shownName(path)} has no properties to change.`, "error");
+    } else if (next === toLf(text)) {
+      known[sha] = now;
+      treeChanged(repo, path, sha);
+    } else {
+      const id = String(now.id ?? "").trim();
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${key} set to ${value} from ${APP_NAME}`);
+      known[res.sha] = noteProps(next);
+      treeChanged(repo, path, res.sha);
+      toast(`${shownName(path)}: ${key} is now ${value}`, "ok");
+    }
+  } catch (e) {
+    toast(`Not changed: ${e.message}`, "error");
+  }
+  if (!refreshInboxBox(repo)) picker.disabled = false;
 }
 
 /** Icons, external links and images: what the sanitized HTML still needs. */
