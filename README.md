@@ -35,7 +35,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login.
-- **AI agents (optional):** rules in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
+- **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; read-only mode for people who can't push.
 
 </details>
@@ -59,8 +59,8 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 3. Fill it with the example vault:
    git clone --depth 1 --filter=blob:none --sparse https://github.com/Snowy-Peak-Studios/commonplace-md.git
    git -C commonplace-md sparse-checkout set example-vault
-   Copy everything inside commonplace-md/example-vault/ (folders and the AGENTS.md and CLAUDE.md files too)
-   to the top of my notes repo.
+   Copy everything inside commonplace-md/example-vault/ (folders, the hidden .agents and .claude folders, and
+   the AGENTS.md and CLAUDE.md files too) to the top of my notes repo.
 4. Make the inbox mine: in Notes/Inbox.md set owner to my name and github to my GitHub login, and rename
    Notes/Inboxes/Your name.md to my name with the same two properties. Then commit everything as
    "Start from the Commonplace.md example vault" and push to main. Delete the commonplace-md clone.
@@ -107,11 +107,11 @@ git commit -m "Start from the Commonplace.md example vault"
 git push
 ```
 
-Without git: on this repo's GitHub page, **Code › Download ZIP**, unzip it, then in your notes repo on GitHub use **Add file › Upload files** and drop in everything inside `example-vault/` (folders included).
+Without git: on this repo's GitHub page, **Code › Download ZIP**, unzip it, then in your notes repo on GitHub use **Add file › Upload files** and drop in everything inside `example-vault/` (folders included; the `.agents` and `.claude` folders are hidden on most computers, so show hidden files first if you want the agent skills).
 
 This puts the vault at the top of the repo. To keep it in a folder instead (say `notes/`), copy it there and set **Folder** in step 4.
 
-The vault comes with `AGENTS.md` and `CLAUDE.md`, rules for AI agents. Keep them if you work with agents (see [Working with AI agents](#working-with-ai-agents-optional)); otherwise delete them.
+The vault comes with `AGENTS.md` and `CLAUDE.md`, rules for AI agents, and their skills in `.agents/` and `.claude/`. Keep them if you work with agents (see [Working with AI agents](#working-with-ai-agents-optional)); otherwise delete them.
 
 ### 3. Make a token
 
@@ -203,6 +203,8 @@ example-vault/
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
 ├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
+├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)
+├── .claude/skills/              optional: pointers to those skills, so Claude Code finds them
 ├── Bases/
 │   └── Tasks.base               a base with three views (By status, Open, Done), a formula, groups, sorts and filters
 ├── Tasks/                       five task notes with id, status, priority, area, assignee and requested_by properties, and checklists
@@ -303,7 +305,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
 <details>
 <summary>What agents do with your notes, how to set them up, and a day with them</summary>
 
-AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code. With them, an agent:
+AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code, plus [step-by-step skills](#the-skills) for the jobs they do. With them, an agent:
 
 - pulls first, and reads the **current goals** on the Task Board, so what it picks and proposes serves them;
 - reads **your inbox** and turns what you wrote under **New tasks** into task notes, with IDs and acceptance criteria;
@@ -311,15 +313,28 @@ AI agents that can run git (Claude Code, Codex and others) can work in your vaul
 - keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
 - asks you under **Needs attention** in your inbox when it needs a decision, and works on something else while it waits.
 
-This is how the makers of Commonplace.md use it with their own agents. Change the rules to fit how you work.
+This is how the makers of Commonplace.md use it with their own agents: these are our rules and skills, made general. Change them to fit how you work.
+
+### The skills
+
+Each skill is one file, `.agents/skills/<name>/SKILL.md`, that walks an agent through one job step by step. Agents that know skills (Codex, Claude Code and others) find them there; Claude Code through the short pointers in `.claude/skills/`. Any other agent can be told to read the file.
+
+| Skill | What it does |
+| --- | --- |
+| [`sort-inbox`](example-vault/.agents/skills/sort-inbox/SKILL.md) | Starts a session: pulls, reads the current goals, turns your New tasks into task notes, acts on your answers, commits and pushes. |
+| [`start-task`](example-vault/.agents/skills/start-task/SKILL.md) | Picks or makes a task, claims it before any other change, checks it still fits, and plans it. |
+| [`wrap-up-task`](example-vault/.agents/skills/wrap-up-task/SKILL.md) | Checks every acceptance criterion, marks the task Done (or splits off what's left), keeps the notes in step, commits and pushes. |
+| [`public-check`](example-vault/.agents/skills/public-check/SKILL.md) | Before a push to a public repo: checks the files and the commits for names, emails, tokens, private repo names and task IDs. |
+
+Not using the example vault? Copy the `.agents` and `.claude` folders and [`AGENTS.md`](example-vault/AGENTS.md) into your repo, and change the paths in them to yours.
 
 ### Set it up
 
-1. Keep `AGENTS.md` and `CLAUDE.md` at the top of the notes repo, where agents look for them. If the vault is in a folder (say `notes/`), move the two files up to the repo's top and put the folder in front of the paths in them (`notes/Home.md`, `notes/Tasks/`, ...).
+1. Keep `AGENTS.md`, `CLAUDE.md` and the `.agents` and `.claude` folders at the top of the notes repo, where agents look for them. If the vault is in a folder (say `notes/`), move them up to the repo's top and put the folder in front of the paths in them and in the skills (`notes/Home.md`, `notes/Tasks/`, ...).
 2. Give each person an inbox in `Notes/Inboxes/` (or use the shared `Notes/Inbox.md`), with `owner` their name and `github` their GitHub login.
 3. Set the agent's git `user.name` (`git config user.name`) to the inbox's `owner`, so the agent finds its person's inbox.
 4. Optional: fill in the **Areas** table on the Task Board, so each person's agents pick only their own tasks.
-5. **The first time** an agent works in the vault, it goes through the rules with you one by one: keep, change or drop each, add your own, and decide which stay **local** (this vault) and which go **global** (your agent's own user-level rules, for all your projects). Then it removes that first-run section from `AGENTS.md`.
+5. **The first time** an agent works in the vault, it goes through the rules with you one by one: keep, change or drop each, add your own, and decide which stay **local** (this vault) and which go **global** (your agent's own user-level rules, for all your projects). Then the skills, the same way. Then it removes that first-run section from `AGENTS.md`.
 
 ### Every day
 

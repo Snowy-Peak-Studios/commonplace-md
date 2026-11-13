@@ -16,7 +16,8 @@ The rules for any AI agent (and any person) working in these notes. Your person 
 4. **Local or global?** For every rule they keep or add, suggest where it belongs, and move it where they say:
    - **Local**, in this file: rules about these notes (the paths, the Task Board, the areas, the inboxes).
    - **Global**, in your own user-level rules, for all their vaults and projects: how they like to work, their language and tone, when to ask first, commit habits. For Claude Code that's `~/.claude/CLAUDE.md`, for Codex `~/.codex/AGENTS.md`, for others their user-level instructions. Ask before you write anything outside this repo.
-5. **Finish**: delete this whole section, commit as `Rules set up with <your person's name>`, and push.
+5. **Then the skills** (see Skills below): for each one, say in a line what it does and ask: keep, change or drop? Change or drop it in `.agents/skills/` and its pointer in `.claude/skills/`.
+6. **Finish**: delete this whole section, commit as `Rules set up with <your person's name>`, and push.
 
 If your person says the rules are already set up, just delete this section.
 
@@ -75,6 +76,19 @@ If your person says the rules are already set up, just delete this section.
 
 - When something changes, change the pages that describe it in the same commit: the task, the page about the topic, and the links and `parent` properties of any page you add, move or rename.
 - Facts come from the notes, the commits and your person's words. Where something isn't known, say so rather than guess.
+
+## Skills
+
+Step-by-step ways of doing the jobs above, one per folder in `.agents/skills/<name>/SKILL.md`. Agents that know skills find them there (Claude Code through the pointers in `.claude/skills/`); any other agent reads the file and follows it.
+
+| When | Skill |
+| --- | --- |
+| A session starts, or your person says to check the inbox | `sort-inbox`: pull, the goals, the inbox into tasks, the answers acted on |
+| Starting work on something | `start-task`: pick or make the task, claim it, check it still fits, plan it |
+| The work is done | `wrap-up-task`: the criteria, the checks, Done or split, the notes in step, commit and push |
+| Before a push to a public repo | `public-check`: nothing private in the files or the commits |
+
+A skill is kept in one place, `.agents/skills/`. To change one, change it there; a new skill also gets a pointer in `.claude/skills/` (the same `name` and `description`) and a line here.
 
 ## Commits
 
