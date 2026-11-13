@@ -1,6 +1,6 @@
-// Obsidian Bases (`.base` files): the YAML, a small expression language for filters and formulas, and the
+// Bases (`.base` files): the YAML, a small expression language for filters and formulas, and the
 // rows, columns and groups of a table view. No DOM and no network here, so tests can run it in Node.
-// What Obsidian documents: https://help.obsidian.md/bases/syntax. Only what the app's vaults use is covered;
+// Only the part of the `.base` format the app's vaults use is covered;
 // anything else is refused with a message the view shows instead of a wrong table.
 
 import { yamlLoad } from "../vendor/vendor.js";
@@ -448,7 +448,7 @@ export function runView(base, viewIndex, notes, dates = null) {
     const group = view.groupBy ? valueOf(ctx, view.groupBy.property) : null;
     rows.push({ path: note.path, name: baseNameOf(note.path), values, sortKeys, group });
   }
-  // Empty values go last whichever way a column sorts, as in Obsidian.
+  // Empty values go last whichever way a column sorts.
   const cmp = (a, b, dir) => {
     const ea = isEmptyValue(a), eb = isEmptyValue(b);
     if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1;

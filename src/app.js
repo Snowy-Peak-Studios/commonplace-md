@@ -198,7 +198,7 @@ async function loadTree(repo, force = false) {
   for (const e of data.tree) {
     if (e.type !== "blob" || !e.path.startsWith(prefix)) continue;
     const rel = e.path.slice(prefix.length);
-    if (rel.split("/").some((seg) => seg.startsWith("."))) continue; // .obsidian, .trash, .gitkeep
+    if (rel.split("/").some((seg) => seg.startsWith("."))) continue; // dot-folders and files: .git, .trash, .gitkeep
     files.set(rel, e.sha);
   }
   const tree = { files, index: new LinkIndex([...files.keys()]), truncated: data.truncated, version: ++treeVersion };
@@ -634,7 +634,7 @@ function renderPreview() {
   const { html, frontMatter } = renderNote(md, f.text, env);
   const body = h("div", { class: "note-body" });
   body.innerHTML = sanitize(html);
-  // A note without a title of its own shows its file name, as Obsidian does.
+  // A note without a title of its own shows its file name.
   if (!body.querySelector("h1")) body.prepend(h("h1", { class: "inline-title" }, shownName(f.path)));
   decorate(body, f.repo, f.path);
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
@@ -803,7 +803,7 @@ function fillEmbeds(root, repo, fromPath) {
   }
 }
 
-// ---- Obsidian bases: ![[X.base]] embeds and .base files, shown as tables ----
+// ---- Bases: ![[X.base]] embeds and .base files, shown as tables ----
 
 const BLOBS_PER_QUERY = 100;
 const HISTORIES_PER_QUERY = 50; // each one searches the branch's commits, so fewer per request
@@ -929,7 +929,7 @@ function fillBases(root, repo) {
   }
 }
 
-/** A base's views as tabs over one table, like Obsidian's. The last tab chosen is remembered per base. */
+/** A base's views as tabs over one table. The last tab chosen is remembered per base. */
 function baseView(repo, path) {
   const tabKey = `baseTab:${repo.id}:${path}`;
   const tabs = h("div", { class: "base-tabs", role: "tablist", "aria-label": "Views" });
@@ -948,7 +948,7 @@ function baseView(repo, path) {
     }, x.name)));
     const left = body.querySelector(".base-scroll")?.scrollLeft || 0;
     count.textContent = "";
-    if (v.type !== "table") return fill(body, h("p", { class: "note" }, `“${v.name}” is a ${v.type} view. The app shows only tables; Obsidian shows this one.`));
+    if (v.type !== "table") return fill(body, h("p", { class: "note" }, `“${v.name}” is a ${v.type} view. The app shows only table views.`));
     let result;
     try {
       result = runView(base, tab, loaded.notes, loaded.dates);
@@ -1651,7 +1651,7 @@ function showSettings(adding = false) {
       field("New notes folder", "notes", r.notes, "e.g. Notes. New note then asks only for a title and puts the note here. Empty: you pick the folder and kind each time."),
       field("Note template", "template", r.template, "A note new notes start from, e.g. Templates/Note.md; {{title}} and {{date}} are filled in. Empty: a new note starts with its title."),
       h("label", { class: "check-line full" }, h("input", { type: "checkbox", name: "vault", checked: !!r.vault }),
-        h("span", {}, "Obsidian vault rules: the generated navigation box (between %% nav: … %% and %% /nav %%) is folded and can't be edited, and links that lead to no page are warned about")),
+        h("span", {}, "Vault rules: the generated navigation box (between %% nav: … %% and %% /nav %%) is folded and can't be edited, and links that lead to no page are warned about")),
       h("div", { class: "full card-actions" },
         r.repo ? h("button", { class: "btn small", type: "button", onclick: async () => {
           try {

@@ -1,4 +1,4 @@
-// Obsidian vault rules: wikilinks, link resolution, front matter, the generated navigation box and note templates.
+// Vault rules: wikilinks, link resolution, front matter, the generated navigation box and note templates.
 // No DOM and no network here, so tests can run it in Node.
 
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/;
@@ -71,7 +71,7 @@ export function findWikilinks(text) {
   return out;
 }
 
-/** Finds pages the way Obsidian does: a bare name matches a file name anywhere in the vault. */
+/** Finds pages: a bare name matches a file name anywhere in the vault. */
 export class LinkIndex {
   constructor(paths) {
     this.paths = paths;

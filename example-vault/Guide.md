@@ -27,7 +27,7 @@ What a note can hold. Open this page in Edit mode to see how each part is writte
 - A link with its own text: [[Notes/Inbox|the shared inbox]]
 - A link to a heading, with its own text: [[Home#How saving works|how saving works]]
 - A bare name finds the page in any folder: [[Make a note template]]
-- Normal Markdown links work too: [Obsidian's help](https://help.obsidian.md/)
+- Normal Markdown links work too: [the Markdown guide](https://commonmark.org/help/)
 
 ## Embeds
 
@@ -74,4 +74,4 @@ flowchart LR
 
 ## The navigation box
 
-The box at the top of this page, between `%% nav: ... %%` and `%% /nav %%`, is made by a script you run yourself (any script that writes that block will do). With the repo's **Obsidian vault rules** setting on, the app shows it folded and won't let you edit it, so the script stays in charge of it.
+The box at the top of this page, between `%% nav: ... %%` and `%% /nav %%`, is made by a script you run yourself (any script that writes that block will do). With the repo's **Vault rules** setting on, the app shows it folded and won't let you edit it, so the script stays in charge of it.

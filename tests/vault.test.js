@@ -33,7 +33,7 @@ test("wikilinks split into target, heading and alias", () => {
   assert.deepEqual(parseWikilink("folder/Page\\|alias"), { target: "folder/Page", heading: null, alias: "alias" });
 });
 
-test("a bare name finds the page anywhere, like Obsidian", () => {
+test("a bare name finds the page anywhere", () => {
   const idx = new LinkIndex(["Home.md", "Notes/Inbox.md", "Guides/Setup.md", "Attachments/a b.png", "Bases/Task Board.base", "Notes/Old/Setup.md"]);
   assert.equal(idx.resolve("Inbox"), "Notes/Inbox.md");
   assert.equal(idx.resolve("inbox"), "Notes/Inbox.md");

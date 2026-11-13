@@ -2,21 +2,21 @@
 
 **Your project's wiki, notes and task board, in your own GitHub repo, for free.**
 
-No more paying for Notion, Jira, Azure DevOps or Obsidian Sync. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
+No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
 
-Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The same folder opens in Obsidian too.
+Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
 
 ## What it does
 
 - **Files:** a folder tree of the chosen repo, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
-  - Obsidian's `[[wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder, as in Obsidian.
+  - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
   - `![[image.png]]` embeds show, and so do callouts and the front matter as properties.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
-- **Base views:** Obsidian's `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas; "Last modified" is the date of the note's last commit.
+- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas; "Last modified" is the date of the note's last commit.
 - **CSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as CSV.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes.
@@ -87,7 +87,7 @@ Make one token per device, so you can revoke one without the others.
    - **Inboxes folder:** `Notes/Inboxes`
    - **New notes folder:** `Notes`
    - **Note template:** `Templates/Note.md`
-   - **Obsidian vault rules:** on
+   - **Vault rules:** on
 3. Press **Save repos**, then **Check access** to see that the token can read and save it.
 
 That's it: pick the repo at the top of the file list and start writing.
@@ -118,13 +118,13 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 | Inboxes folder | `inboxes` | A folder with one inbox per person. The Inbox button opens the one whose `github` property is your login. | `Notes/Inboxes` |
 | New notes folder | `notes` | New note asks only for a title and puts the note here. Empty: you pick the name, kind (note or CSV) and folder each time. | `Notes` |
 | Note template | `template` | A note that new Markdown notes start from. `{{title}}` becomes the title and `{{date}}` today's date (YYYY-MM-DD). Empty, or the file isn't there: a new note starts with `# Title`. | `Templates/Note.md` |
-| Obsidian vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
+| Vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
 
 Settings live in this browser's storage, so each device has its own. An invite link copies them to another device.
 
 ## The example vault
 
-`example-vault/` is a small Obsidian-style vault to copy into your notes repo. Each file shows something the app supports.
+`example-vault/` is a small vault to copy into your notes repo. Each file shows something the app supports.
 
 ```text
 example-vault/
@@ -148,11 +148,11 @@ example-vault/
 
 Every page but `Home.md` has a `parent` property that links to the page above it.
 
-The navigation box in `Guide.md` is the kind a script writes and keeps up to date (a breadcrumb and the page's headings). The app doesn't make it; with **Obsidian vault rules** on, it only protects it. Leave it out if you don't use such a script.
+The navigation box in `Guide.md` is the kind a script writes and keeps up to date (a breadcrumb and the page's headings). The app doesn't make it; with **Vault rules** on, it only protects it. Leave it out if you don't use such a script.
 
-## Obsidian compatibility
+## Works with other Markdown editors
 
-The same folder opens in Obsidian and in the app. What the app supports:
+The notes are plain Markdown files, so the same folder opens in any Markdown editor, and desktop note apps that use `[[wikilinks]]` read it as it is. What the app supports:
 
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
@@ -162,17 +162,17 @@ The same folder opens in Obsidian and in the app. What the app supports:
 - ` ```mermaid ` diagrams
 - checkboxes, ticked in Read mode
 - `%% comments %%`, hidden in the preview
-- note templates with `{{title}}` and `{{date}}`, as Obsidian's core Templates plugin writes them
+- note templates with `{{title}}` and `{{date}}`
 
 What it doesn't do:
 
-- community plugins (Dataview, Templater and the like), Canvas, the graph view
+- plugins, canvases, a graph view
 - base views other than tables (the app says so, and shows the base's other views)
 - other template variables (`{{time}}`, custom date formats); they stay as written
 - editing images or other binary files
 - working offline
 
-Folders and files starting with a dot (`.obsidian/`, `.trash/`) are left out of the tree.
+Folders and files starting with a dot (like `.trash/`) are left out of the tree.
 
 ## Sharing
 
@@ -206,7 +206,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ---
   ```
 
-- Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for Obsidian only.
+- Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
 
 ## Privacy and security
 
@@ -256,9 +256,9 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
-| `src/vault.js` | Obsidian rules: link resolution, front matter, the navigation box, note templates, inboxes |
+| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
-| `src/bases.js` | Obsidian bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
+| `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
 | `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view |
 | `src/csv.js` | CSV parsing and writing |
 | `src/store.js` | This browser's storage, and moving older settings forward |

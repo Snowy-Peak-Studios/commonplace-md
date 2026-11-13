@@ -944,7 +944,7 @@ select.input { padding-right: 8px; }
 @media (prefers-color-scheme: dark) { #toast { background: #34333d; } }
 
 /* ================================================================
-   Base views: Obsidian's .base tables, with their views as tabs
+   Base views: .base tables, with their views as tabs
    ================================================================ */
 .doc.kind-base { max-width: 1400px; }
 .panes > * { min-width: 0; }

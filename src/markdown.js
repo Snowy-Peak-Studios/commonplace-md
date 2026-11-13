@@ -1,4 +1,4 @@
-// Markdown preview the way Obsidian shows it: wikilinks, embeds, callouts, task checkboxes.
+// Markdown preview: wikilinks, embeds, callouts, task checkboxes.
 // `env` (passed to render) supplies { resolve(target) -> path|null, href(path, heading), fromPath, depth }.
 // Icons, embedded pages, base views and Mermaid diagrams are left as placeholders (`data-icon`, `.embed-page`, `.embed-base`,
 // `.mermaid-diagram`) for the app to fill.
@@ -6,7 +6,7 @@
 import { MarkdownIt } from "../vendor/vendor.js";
 import { parseWikilink, isImagePath, prepareForPreview } from "./vault.js";
 
-/** Callout kinds, as Obsidian names them, and the icon each shows. */
+/** Callout kinds and the icon each shows. */
 const CALLOUT_ICONS = {
   abstract: "abstract", summary: "abstract", tldr: "abstract", info: "info", note: "note", todo: "todo",
   tip: "tip", hint: "tip", important: "danger", success: "success", check: "success", done: "success",
@@ -112,7 +112,7 @@ export function createMarkdown() {
       return `<span class="embed-img" data-path="${esc(path)}" data-width="${width}" data-alt="${esc(link.target)}"></span>`;
     }
     if (/\.base$/i.test(link.target)) {
-      // An Obsidian base: the app fills the placeholder with its table. Inside an embedded page it stays a link.
+      // A base: the app fills the placeholder with its table. Inside an embedded page it stays a link.
       const path = env.resolve(link.target);
       if (!path) return `<span class="embed-note missing">Missing view: ${esc(link.target)}</span>`;
       if (env.depth) return `<span class="embed-note">${linkHtml(link, env)}</span>`;
