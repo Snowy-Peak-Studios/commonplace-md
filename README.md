@@ -51,25 +51,38 @@ Five steps, about ten minutes. Or let your AI agent do most of them:
 Set up Commonplace.md for me: a notes app that reads and edits Markdown notes kept in a GitHub repo,
 at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.com/Snowy-Peak-Studios/commonplace-md).
 
-1. Ask me for: the GitHub owner of the notes repo (my user name or an organization), the repo's name
-   (default "notes"), my name, and my GitHub login.
-2. Make the repo, private: with the GitHub CLI if it's installed and signed in
-   (gh repo create <owner>/<repo> --private), otherwise ask me to make an empty private repo
-   at https://github.com/new and wait for me.
+1. Ask me for my name, my GitHub login, and where the notes go: a new repo, or a repo I already have.
+   - A new repo: ask for its GitHub owner (my user name or an organization) and its name (default "notes").
+     The notes go at the top of the repo, on the branch main.
+   - A repo I already have (for example a project's own repo): ask for <owner>/<repo> and the folder for
+     the notes in it (default "notes"; empty means the top of the repo). If the repo is public, tell me my
+     notes would be public too, and ask before going on.
+2. The repo:
+   - New: make it private, with the GitHub CLI if it's installed and signed in
+     (gh repo create <owner>/<repo> --private), otherwise ask me to make an empty private repo
+     at https://github.com/new and wait for me. Then clone it.
+   - Existing: clone it. Its branch is the one the clone is on (its default branch), unless I name another.
+     Check that I can push to it: with the GitHub CLI, gh repo view <owner>/<repo> --json viewerPermission
+     says WRITE, MAINTAIN or ADMIN; otherwise git push --dry-run works. If I can't, stop and tell me.
 3. Fill it with the example vault:
    git clone --depth 1 --filter=blob:none --sparse https://github.com/Snowy-Peak-Studios/commonplace-md.git
    git -C commonplace-md sparse-checkout set example-vault
    Copy everything inside commonplace-md/example-vault/ (folders, the hidden .agents and .claude folders, and
-   the AGENTS.md and CLAUDE.md files too) to the top of my notes repo.
-4. Make the inbox mine: in Notes/Inbox.md set owner to my name and github to my GitHub login, and rename
-   Notes/Inboxes/Your name.md to my name with the same two properties. Then commit everything as
-   "Start from the Commonplace.md example vault" and push to main. Delete the commonplace-md clone.
+   the AGENTS.md and CLAUDE.md files too) into the notes folder (for a new repo, its top).
+   Never overwrite a file that's already there: if any of those paths exist, list them and ask me what to do.
+4. Make the inbox mine: in Notes/Inbox.md (inside the notes folder) set owner to my name and github to my
+   GitHub login, and rename Notes/Inboxes/Your name.md to my name with the same two properties. Then commit
+   everything as "Start from the Commonplace.md example vault" and push to the branch. Delete the
+   commonplace-md clone.
 5. Tell me to make a token myself (you can't, and I must never paste it to you): at
    https://github.com/settings/personal-access-tokens/new, Resource owner: <owner>,
    Repository access: Only select repositories: <repo>, Repository permissions: Contents: Read and write.
-6. Give me this link with <owner> and <repo> filled in, to open and paste the token into:
-   https://snowy-peak-studios.github.io/commonplace-md/#/join?owner=<owner>&repo=<repo>&branch=main&label=My+notes&vault=1&inbox=Notes%2FInbox.md&inboxes=Notes%2FInboxes&home=Home.md&notes=Notes&template=Templates%2FNote.md
-7. From now on, when you work in that repo, follow its AGENTS.md, with git user.name set to my name.
+6. Give me this link with <owner>, <repo> and <branch> filled in, to open and paste the token into. Put
+   &folder=<folder> after &label=My+notes when the notes are in a folder (with / written as %2F):
+   https://snowy-peak-studios.github.io/commonplace-md/#/join?owner=<owner>&repo=<repo>&branch=<branch>&label=My+notes&vault=1&inbox=Notes%2FInbox.md&inboxes=Notes%2FInboxes&home=Home.md&notes=Notes&template=Templates%2FNote.md
+7. From now on, when you work in that repo, follow the AGENTS.md in the notes folder (its paths start
+   there), with git user.name set to my name. If the repo already has its own AGENTS.md or CLAUDE.md at
+   its top, ask me before adding a line there that points to the notes' AGENTS.md.
    Start with its "First run" section: go through the rules with me one by one, then the skills in
    .agents/skills/ one by one (what each does and its steps), so I can approve, change or drop each.
 ```
@@ -90,7 +103,7 @@ Either:
 
 ### 2. Make a notes repo
 
-Make a new repo on GitHub for your notes ([github.com/new](https://github.com/new)). **Private is fine**, and usually what you want. Then fill it with the example vault, so you start with something that shows every feature.
+Make a new repo on GitHub for your notes ([github.com/new](https://github.com/new)), or use one you already have, such as a project's own repo (then put the vault in a folder, see below). **Private is fine**, and usually what you want. Then fill it with the example vault, so you start with something that shows every feature.
 
 With git:
 
