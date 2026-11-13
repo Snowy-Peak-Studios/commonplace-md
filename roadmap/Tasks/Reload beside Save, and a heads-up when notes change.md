@@ -1,5 +1,5 @@
 ---
-status: Next
+status: Recently done
 ---
 
 # Reload beside Save, and a heads-up when notes change

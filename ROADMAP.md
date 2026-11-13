@@ -7,7 +7,6 @@ The same list is a task board in [`roadmap/`](roadmap/Roadmap.md): one note per 
 ## ⏭️ Next
 
 - **Images in notes**: paste, drop or pick an image, and it's saved in your repo and linked into the note.
-- **Reload beside Save, and a heads-up when notes change**: a Reload button next to Save, and a quiet note when the notes on GitHub are newer than the ones you have open.
 
 ## 🔭 Exploring
 
@@ -19,3 +18,4 @@ The same list is a task board in [`roadmap/`](roadmap/Roadmap.md): one note per 
 - **A roadmap you can see**: this page, kept up to date as the work moves.
 - **Install it as an app**: the README shows how to install Commonplace.md on a computer or a phone.
 - **Rules and prompts for AI agents**: the example vault comes with rules for agents, and the README has prompts to copy: one that sets everything up, one that starts a working session.
+- **Reload beside Save, and a heads-up when notes change**: a Reload button next to Save, and a quiet note when the notes on GitHub are newer than the ones you have open.
