@@ -45,15 +45,17 @@ If your person says the rules are already set up, just delete this section.
 
 ### Picking a task
 
-- Your person names one, or you pick the next free one yourself: no `assignee`, the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
-- If `Task Board.md` has an **Areas** table, pick only tasks whose `area` belongs to your person.
-- A task with an `assignee` is taken, whatever its status, even when it's your own person's name: another session may be on it.
+- Your person names one, or you take the next one in this order:
+  1. **Tasks your person claimed for you**: `assignee` is exactly their name, with no agent after it (e.g. `Ann Example`), and the task isn't done. That's how they pick your next task, for example with **Claim** in the app's inbox. The highest priority first.
+  2. **Free tasks**: no `assignee`, the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
+- If `Task Board.md` has an **Areas** table, pick only free tasks whose `area` belongs to your person.
+- A task with an agent in its `assignee` (e.g. `Ann Example (Claude)`) is taken, whatever its status: another session is on it. So is a task with someone else's name.
 - Before you build an old task, check that it still fits the notes and the goals. If it doesn't, rewrite or narrow it, or ask (see Questions). Never build a stale task as written.
 
 ### Claim before any other change
 
 1. `git pull --rebase --autostash`.
-2. Set `status: In Progress` and `assignee: <git user.name> (<agent name>)`, e.g. `Ann Example (Claude)`.
+2. Set `status: In Progress` and `assignee: <git user.name> (<agent name>)`, e.g. `Ann Example (Claude)`. A task your person claimed for you gets your agent name added the same way, so other sessions see it's taken.
 3. Commit only that task note, as `<ID>: claimed by <assignee>`, and push.
 4. If the push is refused, pull and look again. If the task is now someone else's, theirs stands: drop your claim and pick another.
 

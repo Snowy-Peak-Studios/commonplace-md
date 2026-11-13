@@ -162,14 +162,21 @@ check(inbox.missing === 0, "no missing links on the Inbox: " + inbox.missing);
 await page.waitForSelector(".suggest-list a.suggest-name", { timeout: 15000 }).catch(() => {});
 await shot("2-inbox-desktop");
 
-// 2b. The inbox's top tasks to start: free tasks only, highest priority first, and Claim saves the task.
-const suggested = await page.$$eval(".suggest-list li", (li) => li.map((x) => ({
-  name: x.querySelector(".suggest-name")?.textContent, claim: !!x.querySelector("button"),
+// 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
+const boxRows = () => page.$$eval(".suggest-list li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
+  name: x.querySelector(".suggest-name").textContent, claim: !!x.querySelector("button"),
+  claimed: x.querySelector(".chip.claimed")?.textContent ?? null,
 })));
-check(suggested.length >= 1 && suggested.length <= 3, "the inbox suggests one to three tasks: " + suggested.length);
-check(suggested[0]?.name === "T-4 Invite a friend", "the High one comes first: " + suggested[0]?.name);
-check(!suggested.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested: " + JSON.stringify(suggested.map((s) => s.name)));
-check(suggested.every((s) => s.claim), "each has a Claim button");
+const rows0 = await boxRows();
+const free0 = rows0.filter((r) => !r.claimed);
+const mine0 = rows0.filter((r) => r.claimed);
+check(mine0.length === 1 && mine0[0].name === "T-3 Try the app on a phone" && mine0[0].claimed === "Claimed" && !mine0[0].claim,
+  "the owner's claimed task stays in the box, marked Claimed, with no Claim button: " + JSON.stringify(mine0));
+check(rows0.findIndex((r) => r.claimed) === 0, "claimed tasks come before the free ones");
+check(free0.length >= 1 && free0.length <= 3, "the inbox suggests one to three free tasks: " + free0.length);
+check(free0[0]?.name === "T-4 Invite a friend", "the High one comes first: " + free0[0]?.name);
+check(!free0.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested as free: " + JSON.stringify(free0.map((s) => s.name)));
+check(free0.every((s) => s.claim), "each free one has a Claim button");
 const putsBefore = puts.length;
 await page.click(".suggest-list li button");
 await page.waitForSelector("dialog.modal[open] .btn.primary");
@@ -179,7 +186,10 @@ const claim = puts.length > putsBefore ? puts.at(-1) : null;
 check(claim?.url === contentsUrl("Tasks/Invite a friend.md"), "Claim saves the task: " + claim?.url);
 check(/^status: In Progress$/m.test(claim?.text ?? "") && /^assignee: Your name$/m.test(claim?.text ?? ""), "its status is In Progress and its assignee the inbox's owner");
 check(claim?.body.message?.startsWith("T-4: claimed by Your name"), "the commit says who claimed it: " + claim?.body.message);
-check(!(await page.$$eval(".suggest-list .suggest-name", (a) => a.map((x) => x.textContent))).some((n) => n.includes("Invite a friend")), "the claimed task leaves the list");
+await page.waitForFunction(() => [...document.querySelectorAll(".suggest-list li")].some((li) => li.querySelector(".chip.claimed") && li.textContent.includes("Invite a friend")), { timeout: 10000 }).catch(() => {});
+const rows1 = await boxRows();
+check(rows1.find((r) => r.name === "T-4 Invite a friend")?.claimed === "Claimed" && rows1[0].name === "T-4 Invite a friend",
+  "the claimed task stays, at the top (High), marked Claimed: " + JSON.stringify(rows1));
 // The claim was never saved, so read the real tree again for the checks below.
 await page.reload({ waitUntil: "networkidle0" });
 

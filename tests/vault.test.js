@@ -154,3 +154,23 @@ test("the parent property gives the page above", async () => {
   assert.equal(parentTarget("---\nparent: Home\n---\n"), null);
   assert.equal(parentTarget("# no front matter"), null);
 });
+
+test("claimed tasks: the owner's own, waiting ones first, any spelling of the name", async () => {
+  const { claimedTasks, splitAssignee, foldName } = await import("../src/vault.js");
+  assert.deepEqual(splitAssignee("Ann Example (Claude)"), { name: "Ann Example", agent: "Claude" });
+  assert.deepEqual(splitAssignee(" Ann Example "), { name: "Ann Example", agent: null });
+  assert.deepEqual(splitAssignee(""), { name: "", agent: null });
+  assert.equal(foldName("  Zoë  Łukasz-Ørsted "), foldName("zoe lukasz-orsted"));
+  const t = (path, props) => ({ path, props });
+  const notes = [
+    t("Tasks/Agent on it.md", { id: "T-9", priority: "High", status: "In Progress", assignee: "Zoë Example (Claude)" }),
+    t("Tasks/Waiting low.md", { id: "T-3", priority: "Low", status: "In Progress", assignee: "Zoe Example" }),
+    t("Tasks/Waiting high.md", { id: "T-2", priority: "High", status: "In Progress", assignee: "zoe example" }),
+    t("Tasks/Done.md", { id: "T-8", priority: "High", status: "Done", assignee: "Zoe Example" }),
+    t("Tasks/Someone else.md", { id: "T-7", priority: "High", status: "In Progress", assignee: "Bo Example" }),
+    t("Notes/Not a task.md", { status: "In Progress", assignee: "Zoe Example" }),
+  ];
+  assert.deepEqual(claimedTasks(notes, "Zoe Example").map((n) => [n.path, n.agent]),
+    [["Tasks/Waiting high.md", null], ["Tasks/Waiting low.md", null], ["Tasks/Agent on it.md", "Claude"]]);
+  assert.deepEqual(claimedTasks(notes, ""), []);
+});

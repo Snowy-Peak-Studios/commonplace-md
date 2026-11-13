@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimTask, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, claimTask, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -694,12 +694,13 @@ const isInbox = (repo, path) => inboxCandidates([path], repo.inbox, repo.inboxes
 
 /** One look-up per tree version and areas, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas) {
+function loadSuggestions(repo, areas, who) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}`;
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
-    const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then((notes) => suggestTasks(notes, { areas }));
+    const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
+      .then((notes) => ({ mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }) }));
     suggestLoads.set(key, load);
     load.catch(() => suggestLoads.delete(key));
   }
@@ -709,6 +710,7 @@ function loadSuggestions(repo, areas) {
 /**
  * The top three free tasks, over the inbox's text: the notes in a `Tasks` folder with no assignee, highest
  * priority first. The inbox's `areas` property limits them to those areas; `owner` is who a click claims them for.
+ * Above them, the tasks its owner has claimed and not finished: waiting for their agent, or with an agent on it.
  */
 function suggestBox(f) {
   const { repo } = f;
@@ -722,17 +724,24 @@ function suggestBox(f) {
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
       h("small", { class: "muted" }, areas.length ? `Areas: ${Array.isArray(props.areas) ? props.areas.join(", ") : props.areas}` : "All areas")),
     list);
-  loadSuggestions(repo, areas).then((tasks) => {
-    if (!tasks.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."));
-    fill(list, tasks.map(({ path, props: t }) => h("li", {},
-      h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
-      h("span", { class: "suggest-tags" },
-        t.priority ? h("span", { class: `chip prio-${String(t.priority).toLowerCase()}` }, String(t.priority)) : null,
-        t.area ? h("span", { class: "chip" }, String(t.area)) : null),
+  const row = ({ path, props: t }, extra) => h("li", {},
+    h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
+    h("span", { class: "suggest-tags" },
+      t.priority ? h("span", { class: `chip prio-${String(t.priority).toLowerCase()}` }, String(t.priority)) : null,
+      t.area ? h("span", { class: "chip" }, String(t.area)) : null),
+    extra);
+  loadSuggestions(repo, areas, who).then(({ mine, free }) => {
+    const claimed = mine.map((n) => row(n, h("span", {
+      class: `chip claimed${n.agent ? " working" : ""}`,
+      title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
+    }, n.agent ? `${n.agent} is on it` : "Claimed")));
+    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."));
+    fill(list, claimed, free.map((n) => row(n,
       canWrite(repo) && who && app.token
         ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
-          onclick: (e) => claimSuggested(repo, path, who, e.currentTarget) }, icon("check"), "Claim")
-        : null)));
+          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget) }, icon("check"), "Claim")
+        : null)),
+    !free.length ? h("li", { class: "muted" }, "No free tasks right now.") : null);
   }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
   return box;
 }

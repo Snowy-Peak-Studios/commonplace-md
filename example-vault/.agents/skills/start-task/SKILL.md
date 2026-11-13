@@ -18,17 +18,18 @@ Run `git status --short`. If there's uncommitted work from before, say so in the
 ## 3. Find the task
 
 - **Your person named it** (an ID or some words): find its note (`grep -l "^id: <ID>$" Tasks/*.md`, or `ls Tasks | grep -i <word>`).
-- **They didn't**: pick the next free one yourself: no `assignee`, an `area` that's your person's (if `Task Board.md` has an Areas table), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID). Say why you picked it.
+- **They didn't**: first look for a task they claimed for you: `assignee` exactly your `git config user.name`, with no agent after it, and not done (`grep -l "^assignee: <name>$" Tasks/*.md`; any spelling of the name counts, e.g. with or without accents). The highest priority first. With none, pick the next free one: no `assignee`, an `area` that's your person's (if `Task Board.md` has an Areas table), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID). Say why you picked it.
 - **No task for what they asked**: make one from `Templates/Task.md` (see the `sort-inbox` skill for the fields), with `requested_by` your person.
 
 ## 4. Can you take it?
 
-- It has an `assignee`: it's taken, whatever its status, even when the name is your own person's (another session may be on it). Stop and report, unless that person told you to take it over.
+- Its `assignee` is your person's name alone: they claimed it for you. Take it (step 5).
+- Its `assignee` has an agent after the name (`Ann Example (Claude)`), or is someone else: it's taken, whatever its status, since another session is on it. Stop and report, unless your person told you to take it over.
 - Its `area` belongs to someone else: stop and report, unless your person named this task.
 
 ## 5. Claim it, before any other change
 
-1. Set `status: In Progress` and `assignee: <git user.name> (<agent name>)`, e.g. `Ann Example (Claude)`.
+1. Set `status: In Progress` and `assignee: <git user.name> (<agent name>)`, e.g. `Ann Example (Claude)` (also when your person claimed it for you: the agent name tells other sessions it's taken).
 2. Stage only that task note, commit as `<ID>: claimed by <assignee>`, and push.
 3. If the push is refused, pull and look again. If the task is now someone else's, theirs stands: drop your claim and pick another.
 

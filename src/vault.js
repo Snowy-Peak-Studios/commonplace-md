@@ -185,15 +185,45 @@ export function listProp(v) {
  * The top free tasks, from [{ path, props }]: no assignee, not started or done, in one of `areas`
  * (any area when empty). Highest priority first; within a priority, the newest (highest ID number) first.
  */
+const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerCase()] ?? 3;
+const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
+/** Statuses of work that's over. */
+const FINISHED = /^(done|cancell?ed|won'?t do)$/i;
+
 export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
   const want = listProp(areas);
-  const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerCase()] ?? 3;
-  const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
   return notes
     .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim())
       && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
     .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
     .slice(0, count);
+}
+
+/** A person's name for comparing: any case, accents and spacing (`Paweł` matches `Pawel`). */
+export const foldName = (s) => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "")
+  .replace(/[łŁ]/g, "l").replace(/[øØ]/g, "o").replace(/[đĐ]/g, "d").replace(/ß/g, "ss")
+  .toLowerCase().replace(/\s+/g, " ").trim();
+
+/** An assignee split into the person and their agent: `Ann Example (Claude)` -> { name: "Ann Example", agent: "Claude" }. */
+export function splitAssignee(value) {
+  const s = String(value ?? "").trim();
+  const m = /^(.*?)\s*\(([^()]+)\)$/.exec(s);
+  return m && m[1] ? { name: m[1], agent: m[2].trim() } : { name: s, agent: null };
+}
+
+/**
+ * The tasks claimed by `owner` and not finished, from [{ path, props }], each with `agent` (null when the
+ * person claimed it for themself, which means it waits for their agent). Those waiting come first, then by
+ * priority and newest, like the free ones.
+ */
+export function claimedTasks(notes, owner) {
+  const me = foldName(owner);
+  if (!me) return [];
+  return notes
+    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim())
+      && foldName(splitAssignee(n.props.assignee).name) === me)
+    .map((n) => ({ ...n, agent: splitAssignee(n.props.assignee).agent }))
+    .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
 /** A YAML scalar: plain when that's safe, else double-quoted. */

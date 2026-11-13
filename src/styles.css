@@ -627,6 +627,8 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 .suggest-name { flex: 1 1 200px; min-width: 0; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
 .suggest-tags { display: flex; gap: 5px; }
 .chip { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.chip.claimed { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); font-weight: 600; }
+.chip.claimed.working { color: var(--ok); border-color: transparent; background: var(--bg-soft); }
 .chip.prio-high { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .suggest-list .btn .icon { width: 15px; height: 15px; }
 
