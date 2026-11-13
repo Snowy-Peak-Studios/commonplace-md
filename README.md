@@ -17,7 +17,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 <details>
 <summary>Everything it does</summary>
 
-- **Files:** a folder tree of the chosen repo, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
+- **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.

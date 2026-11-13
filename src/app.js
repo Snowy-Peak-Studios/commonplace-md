@@ -428,7 +428,38 @@ function renderHeader() {
 // Routing
 // ================================================================
 
+/**
+ * How many of this app's pages lie behind the current one in the tab's history. Each history entry
+ * keeps its number in `history.state`, so it survives a reload; a new entry is the last one + 1. The
+ * browser's own `history.length` can't tell this app's pages from other sites', or back from forward.
+ */
+let navDepth = 0;
+let navSeen = false;
+function trackHistory() {
+  const n = history.state?.navDepth;
+  if (Number.isInteger(n) && n >= 0) navDepth = n;
+  else {
+    navDepth = navSeen ? navDepth + 1 : 0;
+    try { history.replaceState({ ...(history.state ?? {}), navDepth }, ""); } catch { /* Back just stays hidden */ }
+  }
+  navSeen = true;
+  $("#back-btn").hidden = navDepth === 0;
+}
+
+/** Goes to `href` in place of the current page (no new history entry), keeping its place in the history. */
+function redirect(href) {
+  try { history.replaceState({ ...(history.state ?? {}), navDepth }, "", href); } catch { return void location.replace(href); }
+  return route();
+}
+
+/** Back to the page before, or the start page when this app has none behind it. */
+function goBack() {
+  if (navDepth > 0) history.back();
+  else location.hash = "#/";
+}
+
 async function route() {
+  trackHistory();
   flushDraft();
   closeSideOnPhone();
   const { parts, heading, params } = parseHash();
@@ -446,7 +477,7 @@ async function route() {
         "Add the GitHub repo that holds your notes in Settings, or open an invite link someone sent you.",
         h("a", { class: "btn primary", href: "#/settings?add=1" }, icon("plus"), "Add a repo in Settings")));
     }
-    return location.replace(hrefFor(last));
+    return redirect(hrefFor(last));
   }
   const path = parts.slice(1).join("/");
   if (app.file && app.file.repo === repo && app.file.path === path) {
@@ -486,7 +517,7 @@ async function route() {
   if (nav !== app.nav) return;
   if (!path) {
     const home = [repo.home, repo.inbox, "Home.md", "README.md"].find((p) => p && tree.files.has(p));
-    if (home) return location.replace(hrefFor(repo, home));
+    if (home) return redirect(hrefFor(repo, home));
     app.pageTitle = repo.label;
     renderHeader();
     return showMain(emptyState("note", "No notes yet", `${repo.label} is empty. Start with a first note.`,
@@ -1583,7 +1614,7 @@ function join(params) {
     store.set("join", r);
     return showWelcome(r);
   }
-  location.replace(hrefFor(addRepo(r)));
+  redirect(hrefFor(addRepo(r)));
 }
 
 function guestSteps(r) {
@@ -1612,11 +1643,12 @@ function showWelcome(joining = null) {
   const go = async () => {
     if (!input.value.trim()) return input.focus();
     if (!(await connect(input.value.trim(), out))) return;
+    // The welcome page takes no place in the history: Back must not lead to it once connected.
     // A new device without an invite has no repos yet: the next step is adding one.
-    if (!joining) return void (location.hash = app.repos.length ? "#/" : "#/settings?add=1");
+    if (!joining) return void redirect(app.repos.length ? "#/" : "#/settings?add=1");
     const r = addRepo(joining);
     store.remove("join");
-    location.hash = hrefFor(r);
+    redirect(hrefFor(r));
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
   showMain(h("div", { class: "welcome" },
@@ -1796,9 +1828,7 @@ function showSettings(adding = false) {
 
   showMain(h("div", { class: "page" },
     h("div", { class: "page-head" },
-      h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: () => {
-        if (history.length > 1) history.back(); else location.hash = "#/";
-      } }, icon("back")),
+      h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
     github, repos, device));
 }
@@ -1818,6 +1848,7 @@ function start() {
     const repo = app.repos.find((r) => r.id === e.target.value);
     if (repo) location.hash = hrefFor(repo);
   });
+  $("#back-btn").addEventListener("click", goBack);
   $("#inbox-btn").addEventListener("click", () => { if (inboxOf(app.repo)) location.hash = hrefFor(app.repo, inboxOf(app.repo)); });
   $("#mode").addEventListener("click", (e) => {
     const i = [...$("#mode").children].indexOf(e.target.closest("button"));

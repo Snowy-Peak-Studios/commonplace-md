@@ -127,6 +127,8 @@ await page.waitForSelector(".preview h1", { timeout: 20000 }).catch(async (e) =>
   throw e;
 });
 check(page.url().endsWith(`#/${ID}/Home.md`), "start page is the example vault's Home: " + page.url());
+const backHidden = () => page.$eval("#back-btn", (b) => b.hidden);
+check(await backHidden(), "no Back button on the first page (the invite link was replaced, not left behind)");
 const realTree = await ghGet(`/repos/${OWNER}/${REPO}/git/trees/${encodeURIComponent(BRANCH)}?recursive=1`);
 const realFiles = realTree.tree.filter((e) => e.type === "blob" && e.path.startsWith(PRE) && !e.path.slice(PRE.length).split("/").some((s) => s.startsWith(".")));
 const treeCount = await page.$$eval("#tree a.file", (a) => a.length);
@@ -185,6 +187,18 @@ await page.reload({ waitUntil: "networkidle0" });
 await page.evaluate(() => [...document.querySelectorAll(".preview a.wikilink")].find((a) => a.dataset.path && !a.dataset.path.endsWith("Inbox.md"))?.click());
 await page.waitForFunction(() => !location.hash.includes("Inbox.md") && document.querySelector(".preview h1, .preview h2"));
 check(true, "a wikilink opened " + hashPath(page.url()));
+const linked = hashPath(page.url());
+check(!(await backHidden()), "after a link, the Back button shows");
+await page.click("#back-btn");
+await page.waitForFunction(() => location.hash.includes("Inbox.md") && document.querySelector(".preview h1, .preview h2"));
+check(hashPath(page.url()) === `/${ID}/Notes/Inbox.md`, "Back returns to the Inbox: " + hashPath(page.url()));
+await page.click("#back-btn");
+await page.waitForFunction(() => location.hash.endsWith("Home.md") && document.querySelector(".preview h1"));
+check(hashPath(page.url()) === `/${ID}/Home.md` && await backHidden(), "and again to Home, the first page, where it hides");
+await page.goForward();
+await page.goForward();
+await page.waitForFunction((p) => decodeURIComponent(location.hash).includes(p.split("/").pop()), {}, linked);
+check(hashPath(page.url()) === linked && !(await backHidden()), "Forward (the browser's) goes on to the linked note, with Back shown");
 
 // 4. The Guide: folded nav box, no %% left, links with headings and aliases.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
