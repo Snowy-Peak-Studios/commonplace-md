@@ -8,6 +8,15 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 
 ## What it does
 
+- Your notes are plain Markdown files in your own GitHub repo, and every save is a commit.
+- Read and edit them on a computer or a phone, and install it as an app.
+- Wikilinks, embeds, callouts, diagrams, checklists, and tables of your notes from `.base` files.
+- Inboxes, invite links and read-only mode for working as a team, and rules for AI agents if you like.
+- Free: no server, no account of ours, nothing to install.
+
+<details>
+<summary>Everything it does</summary>
+
 - **Files:** a folder tree of the chosen repo, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
@@ -28,6 +37,8 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login.
 - **AI agents (optional):** rules in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; read-only mode for people who can't push.
+
+</details>
 
 ## Quick start
 
@@ -139,6 +150,9 @@ The installed app is the same page, and it updates by itself when the app does. 
 
 ## One per project, or one for the whole organization
 
+<details>
+<summary>A vault per project, one for the organization, or both</summary>
+
 The app opens as many repos as you add, and you switch between them at the top of the file list. Set it up the way your team works:
 
 - **A vault per project:** keep each project's notes next to its code, in a folder of the project's own repo (say `Wiki/`, on the branch you work on). Add each repo in Settings with its **Folder** and **Branch**; each one gets its own invite link. The notes then move with the code, and a commit can change both.
@@ -147,7 +161,12 @@ The app opens as many repos as you add, and you switch between them at the top o
 
 A device holds one token, so the repos it opens should share an owner. Make the token with the organization as **Resource owner** and *All repositories*, and every repo of the organization works, new ones too. A fine-grained token has one owner, so repos of your own account and of an organization can't share one.
 
+</details>
+
 ## Settings reference
+
+<details>
+<summary>Every setting a repo has, and its name in an invite link</summary>
 
 Each repo in **Settings › Notes repos** has these fields. Paths are inside the repo's **Folder** (or the whole repo when it's empty). The second column is the same setting's name in an invite link.
 
@@ -167,7 +186,12 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 
 Settings live in this browser's storage, so each device has its own. An invite link copies them to another device.
 
+</details>
+
 ## The example vault
+
+<details>
+<summary>The files it comes with, and what each one shows</summary>
 
 `example-vault/` is a small vault to copy into your notes repo. Each file shows something the app supports.
 
@@ -198,7 +222,12 @@ Every page but `Home.md` has a `parent` property that links to the page above it
 
 The navigation box in `Guide.md` is the kind a script writes and keeps up to date (a breadcrumb and the page's headings). The app doesn't make it; with **Vault rules** on, it only protects it. Leave it out if you don't use such a script.
 
+</details>
+
 ## Works with other Markdown editors
+
+<details>
+<summary>What the app understands, and what it doesn't</summary>
 
 The notes are plain Markdown files, so the same folder opens in any Markdown editor, and desktop note apps that use `[[wikilinks]]` read it as it is. What the app supports:
 
@@ -222,7 +251,12 @@ What it doesn't do:
 
 Folders and files starting with a dot (like `.trash/`) are left out of the tree.
 
+</details>
+
 ## Sharing
+
+<details>
+<summary>Give people access, send an invite link, read-only mode</summary>
 
 Notes are shared the GitHub way: whoever can open the repo on GitHub can open it in the app.
 
@@ -240,7 +274,12 @@ Notes are shared the GitHub way: whoever can open the repo on GitHub can open it
 - **Read only:** when GitHub says a person can't push to a repo, the app hides Edit, Save and New note there and shows *Read only*.
 - **Organizations:** the token's **Resource owner** must be the organization, and the organization may need to approve the token before it works (see step 3 of the Quick start).
 
+</details>
+
 ## Inboxes
+
+<details>
+<summary>How the Inbox button finds your own inbox</summary>
 
 An inbox is a note for things to sort later: new tasks, notes, questions.
 
@@ -256,7 +295,12 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
 
+</details>
+
 ## Working with AI agents (optional)
+
+<details>
+<summary>What agents do with your notes, how to set them up, and a day with them</summary>
 
 AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code. With them, an agent:
 
@@ -289,7 +333,12 @@ Read AGENTS.md and follow it: pull, read the current goals and my inbox, and sor
 task notes. Then tell me which task you'd pick next and why, and wait for my go-ahead before you start it.
 ```
 
+</details>
+
 ## Privacy and security
+
+<details>
+<summary>Where your token lives, and what the app talks to</summary>
 
 - The token is kept in this browser's storage (`localStorage`) on this device, and is sent only to `api.github.com`. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
@@ -297,7 +346,12 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
 - Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**).
 
+</details>
+
 ## Running locally
+
+<details>
+<summary>Serve the folder and open it</summary>
 
 There's no build step. Serve the folder over HTTP and open it:
 
@@ -306,7 +360,12 @@ python -m http.server 8765 --bind 127.0.0.1
 # then open http://localhost:8765/
 ```
 
+</details>
+
 ## Tests
+
+<details>
+<summary>The unit tests and the browser check</summary>
 
 ```sh
 npm test            # the logic: vault rules, templates, storage, Markdown, CSV, bases (Node 20+)
@@ -314,7 +373,12 @@ npm test            # the logic: vault rules, templates, storage, Markdown, CSV,
 
 `tests/e2e/` has a browser check that runs the app in Chrome against the example vault on GitHub. It only reads from GitHub. See its [README](tests/e2e/README.md).
 
+</details>
+
 ## Updating the third-party code
+
+<details>
+<summary>How <code>vendor/</code> is built</summary>
 
 `vendor/vendor.js` bundles CodeMirror, markdown-it, DOMPurify, js-yaml and the Lucide icons; `vendor/LICENSES.md` lists their licenses. The app imports them from there, so the page needs no build.
 
@@ -330,7 +394,12 @@ npm run build
 
 Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 
+</details>
+
 ## Code layout
+
+<details>
+<summary>Which file does what</summary>
 
 | Path | What it holds |
 |---|---|
@@ -349,6 +418,8 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `vendor/mermaid.min.js` | Mermaid, copied by `tools/vendor`; loaded only when a page has a diagram |
 | `example-vault/` | The example vault to copy into a notes repo |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
+
+</details>
 
 ## License
 
