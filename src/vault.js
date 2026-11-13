@@ -199,7 +199,7 @@ export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
     .slice(0, count);
 }
 
-/** A person's name for comparing: any case, accents and spacing (`Paweł` matches `Pawel`). */
+/** A person's name for comparing: any case, accents and spacing (`Zoë` matches `Zoe`, `Łukasz` matches `Lukasz`). */
 export const foldName = (s) => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "")
   .replace(/[łŁ]/g, "l").replace(/[øØ]/g, "o").replace(/[đĐ]/g, "d").replace(/ß/g, "ss")
   .toLowerCase().replace(/\s+/g, " ").trim();
