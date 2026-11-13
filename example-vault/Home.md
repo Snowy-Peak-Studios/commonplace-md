@@ -13,7 +13,7 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 | [[Task Board]] | The tasks in `Tasks/`, shown as a table from [[Tasks.base]] |
 | [[Inbox]] | Quick notes, new tasks and questions; each person can have their own in `Notes/Inboxes/` |
 | [[Reading list.csv\|Reading list]] | A CSV file, opened as a table you can edit |
-| [[AGENTS\|Rules for AI agents]] | Optional: how AI agents work in these notes (`AGENTS.md`, loaded by `CLAUDE.md`) |
+| [[AGENTS\|Rules for AI agents]] | Optional: how AI agents work in these notes (`AGENTS.md`, loaded by `CLAUDE.md`); the prompt to start one is [[#Working with an AI agent\|below]] |
 
 ## This week's goals
 
@@ -29,6 +29,15 @@ flowchart LR
   B --> C[GitHub API]
   C --> D[(A commit in your repo)]
   D --> E[Any other device sees it]
+```
+
+## Working with an AI agent
+
+Optional. An agent that can run git (Claude Code, Codex and others) follows [[AGENTS|the rules for AI agents]]: it reads the goals and your inbox, turns your notes into tasks, and asks you under *Needs attention* when it needs you. Set its git `user.name` to the `owner` of your inbox, open it in this repo and paste:
+
+```text
+Read AGENTS.md and follow it: pull, read the current goals and my inbox, and sort my new tasks into
+task notes. Then tell me which task you'd pick next and why, and wait for my go-ahead before you start it.
 ```
 
 ![[commonplace.svg|160]]

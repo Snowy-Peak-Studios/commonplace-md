@@ -31,6 +31,38 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 
 ## Quick start
 
+Five steps, about ten minutes. Or let your AI agent do most of them:
+
+<details>
+<summary><b>🤖 Let your AI agent do it</b>: copy this prompt into an agent that can run git (Claude Code, Codex and others)</summary>
+
+```text
+Set up Commonplace.md for me: a notes app that reads and edits Markdown notes kept in a GitHub repo,
+at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.com/Snowy-Peak-Studios/commonplace-md).
+
+1. Ask me for: the GitHub owner of the notes repo (my user name or an organization), the repo's name
+   (default "notes"), my name, and my GitHub login.
+2. Make the repo, private: with the GitHub CLI if it's installed and signed in
+   (gh repo create <owner>/<repo> --private), otherwise ask me to make an empty private repo
+   at https://github.com/new and wait for me.
+3. Fill it with the example vault:
+   git clone --depth 1 --filter=blob:none --sparse https://github.com/Snowy-Peak-Studios/commonplace-md.git
+   git -C commonplace-md sparse-checkout set example-vault
+   Copy everything inside commonplace-md/example-vault/ (folders and the AGENTS.md and CLAUDE.md files too)
+   to the top of my notes repo.
+4. Make the inbox mine: in Notes/Inbox.md set owner to my name and github to my GitHub login, and rename
+   Notes/Inboxes/Your name.md to my name with the same two properties. Then commit everything as
+   "Start from the Commonplace.md example vault" and push to main. Delete the commonplace-md clone.
+5. Tell me to make a token myself (you can't, and I must never paste it to you): at
+   https://github.com/settings/personal-access-tokens/new, Resource owner: <owner>,
+   Repository access: Only select repositories: <repo>, Repository permissions: Contents: Read and write.
+6. Give me this link with <owner> and <repo> filled in, to open and paste the token into:
+   https://snowy-peak-studios.github.io/commonplace-md/#/join?owner=<owner>&repo=<repo>&branch=main&label=My+notes&vault=1&inbox=Notes%2FInbox.md&inboxes=Notes%2FInboxes&home=Home.md&notes=Notes&template=Templates%2FNote.md
+7. From now on, when you work in that repo, follow its AGENTS.md, with git user.name set to my name.
+```
+
+</details>
+
 ### 1. Open the app
 
 Either:
@@ -249,6 +281,13 @@ This is how the makers of Commonplace.md use it with their own agents. Change th
 2. The agent pulls, sorts the inbox into tasks, claims one and works on it.
 3. When it needs you, it leaves a question under **Needs attention**. You answer under the item, and the agent picks it up next time.
 4. The agent pushes after every commit, so the app shows its changes on your phone at once.
+
+To start a session, open the agent in the notes repo and paste:
+
+```text
+Read AGENTS.md and follow it: pull, read the current goals and my inbox, and sort my new tasks into
+task notes. Then tell me which task you'd pick next and why, and wait for my go-ahead before you start it.
+```
 
 ## Privacy and security
 
