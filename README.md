@@ -42,6 +42,8 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 
 </details>
 
+**What's next:** the [roadmap](ROADMAP.md) shows what we're working on now and what comes after.
+
 ## Quick start
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
@@ -452,6 +454,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `vendor/vendor.js` | Third-party code in one bundled file, made by `tools/vendor` |
 | `vendor/mermaid.min.js` | Mermaid, copied by `tools/vendor`; loaded only when a page has a diagram |
 | `example-vault/` | The example vault to copy into a notes repo |
+| `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
 
 </details>

@@ -1,0 +1,45 @@
+filters:
+  and:
+    - file.inFolder("Tasks")
+properties:
+  file.name:
+    displayName: Task
+  status:
+    displayName: Where
+views:
+  - type: table
+    name: All
+    groupBy:
+      property: status
+      direction: DESC
+    order:
+      - file.name
+      - status
+  - type: table
+    name: Working on now
+    filters:
+      and:
+        - status == "Working on now"
+    order:
+      - file.name
+  - type: table
+    name: Next
+    filters:
+      and:
+        - status == "Next"
+    order:
+      - file.name
+  - type: table
+    name: Exploring
+    filters:
+      and:
+        - status == "Exploring"
+    order:
+      - file.name
+  - type: table
+    name: Recently done
+    filters:
+      and:
+        - status == "Recently done"
+    order:
+      - file.name
