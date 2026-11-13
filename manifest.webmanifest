@@ -1,7 +1,7 @@
 {
   "name": "Commonplace.md",
   "short_name": "Commonplace",
-  "description": "Your project's wiki, notes and task board, in your own GitHub repo, for free.",
+  "description": "A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

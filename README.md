@@ -1,6 +1,6 @@
 # Commonplace.md
 
-**Your project's wiki, notes and task board, in your own GitHub repo, for free.**
+**A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
 No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
 
