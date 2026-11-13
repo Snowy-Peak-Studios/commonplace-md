@@ -6,6 +6,20 @@ parent: "[[Home]]"
 
 The rules for any AI agent (and any person) working in these notes. Your person (the one you work for) decides what gets built and answers the questions. Paths below are from the vault's top folder.
 
+## 🚦 First run: set these rules up with your person
+
+**While this section is here, do this before anything else.** The rules below are suggestions. Go through them with your person so they become theirs:
+
+1. **One rule at a time.** Take each rule below (each bullet or numbered step), section by section. Show it, say in one line why it's there, and ask: **keep, change or drop?** Wait for the answer before the next one; never batch them.
+2. **Write the answers back as you go**: reword a changed rule, delete a dropped one. Commit and push after each section, so nothing is lost if you stop halfway.
+3. **Ask what's missing**: their own habits, such as how they name things, when you must ask before acting, and what you must never touch. Add those as rules too.
+4. **Local or global?** For every rule they keep or add, suggest where it belongs, and move it where they say:
+   - **Local**, in this file: rules about these notes (the paths, the Task Board, the areas, the inboxes).
+   - **Global**, in your own user-level rules, for all their vaults and projects: how they like to work, their language and tone, when to ask first, commit habits. For Claude Code that's `~/.claude/CLAUDE.md`, for Codex `~/.codex/AGENTS.md`, for others their user-level instructions. Ask before you write anything outside this repo.
+5. **Finish**: delete this whole section, commit as `Rules set up with <your person's name>`, and push.
+
+If your person says the rules are already set up, just delete this section.
+
 ## The vault is the hub
 
 - Everything about the work lives here: plain Markdown with `[[wikilinks]]` and front matter properties. Edit the files directly.

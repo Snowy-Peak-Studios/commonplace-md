@@ -70,6 +70,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 6. Give me this link with <owner> and <repo> filled in, to open and paste the token into:
    https://snowy-peak-studios.github.io/commonplace-md/#/join?owner=<owner>&repo=<repo>&branch=main&label=My+notes&vault=1&inbox=Notes%2FInbox.md&inboxes=Notes%2FInboxes&home=Home.md&notes=Notes&template=Templates%2FNote.md
 7. From now on, when you work in that repo, follow its AGENTS.md, with git user.name set to my name.
+   Start with its "First run" section: go through the rules with me one by one.
 ```
 
 </details>
@@ -318,6 +319,7 @@ This is how the makers of Commonplace.md use it with their own agents. Change th
 2. Give each person an inbox in `Notes/Inboxes/` (or use the shared `Notes/Inbox.md`), with `owner` their name and `github` their GitHub login.
 3. Set the agent's git `user.name` (`git config user.name`) to the inbox's `owner`, so the agent finds its person's inbox.
 4. Optional: fill in the **Areas** table on the Task Board, so each person's agents pick only their own tasks.
+5. **The first time** an agent works in the vault, it goes through the rules with you one by one: keep, change or drop each, add your own, and decide which stay **local** (this vault) and which go **global** (your agent's own user-level rules, for all your projects). Then it removes that first-run section from `AGENTS.md`.
 
 ### Every day
 
