@@ -1,8 +1,10 @@
 # Commonplace.md
 
-Markdown notes in your own GitHub repo, read and edited in the browser or on a phone. Every save is a commit. Free, no server, and compatible with Obsidian vaults.
+**Your project's wiki, notes and task board, in your own GitHub repo, for free.**
 
-It's a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. Your notes stay in your repo; the app's repo holds no notes.
+No more paying for Notion, Jira, Azure DevOps or Obsidian Sync. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
+
+Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The same folder opens in Obsidian too.
 
 ## What it does
 

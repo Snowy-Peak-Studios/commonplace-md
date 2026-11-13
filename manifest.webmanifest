@@ -1,7 +1,7 @@
 {
   "name": "Commonplace.md",
   "short_name": "Commonplace",
-  "description": "Markdown and CSV notes in your own GitHub repo, read and edited in the browser. Every save is a commit.",
+  "description": "Your project's wiki, notes and task board, in your own GitHub repo, for free.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
