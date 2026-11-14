@@ -794,6 +794,11 @@ const dPhone = await diagramFacts();
 check(dPhone.pageFits && dPhone.boxesFit && dPhone.scrolls, "phone width: the diagrams stay inside the page, a wide one scrolling in its box: " + JSON.stringify(dPhone));
 await showDiagram(diagramCount - 1);
 await shot("16c-diagrams-phone-light");
+// The fold arrows on a phone: a bullet's in the bullet's place, a numbered or task item's at the start of its line.
+await page.evaluate(() => document.querySelector(".note-body li.has-fold")?.scrollIntoView({ block: "start" }));
+check(await page.evaluate(() => [...document.querySelectorAll(".note-body .fold")].every((b) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.width >= 18; })),
+  "phone width: every fold arrow is on the page and big enough to tap");
+await shot("16e-lists-phone-light");
 await markOld();
 await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "dark" }]);
 await diagramsDrawn();

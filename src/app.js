@@ -1630,6 +1630,8 @@ function fillFolds(root, fromPath) {
     // In a loose list the line is a paragraph: the arrow goes inside it, so it stays on the same line.
     const line = li.firstElementChild?.tagName === "P" ? li.firstElementChild : li;
     const box = line.querySelector(":scope > input.task");
+    // A checkbox sits in the margin, so the arrow goes after it, in place of the space before the text.
+    if (box?.nextSibling?.nodeType === Node.TEXT_NODE) box.nextSibling.textContent = box.nextSibling.textContent.replace(/^\s+/, "");
     if (box) box.after(button); else line.prepend(button);
   }
 }
