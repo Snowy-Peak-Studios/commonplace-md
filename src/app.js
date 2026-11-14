@@ -7,7 +7,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
-  taskCommitLinks,
+  sprintSuggestions, taskCommitLinks,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -1337,9 +1337,13 @@ function loadSuggestions(repo, areas, who) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
       .then(async (notes) => {
+        const sprint = await suggestSprints(repo, tree).catch(() => null);
+        const fromSprint = sprint && sprintSuggestions(notes, { areas, prop: sprint.prop, now: sprint.now?.path, next: sprint.next?.path,
+          resolve: (t, from) => tree.index.resolve(t, from) });
         const shown = {
-          mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }),
+          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas }),
           waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
+          sprint: fromSprint ? sprint : null,
         };
         // Only the tasks shown are read whole, to tell whether each can be started now.
         const paths = [...shown.mine, ...shown.free, ...shown.waiting].map((n) => n.path);
@@ -1350,6 +1354,20 @@ function loadSuggestions(repo, areas, who) {
     load.catch(() => suggestLoads.delete(key));
   }
   return suggestLoads.get(key);
+}
+
+/**
+ * When sprints are on: the sprint property and the current and next sprints ({ path, name }, either may be
+ * missing); null when sprints are off or there are no sprint notes.
+ */
+async function suggestSprints(repo, tree) {
+  const setup = await loadTaskSetup(repo);
+  const field = sprintField(setup);
+  if (!field) return null;
+  const paths = [...tree.files.keys()].filter((p) => isSprintNote(setup, p));
+  if (!paths.length) return null;
+  const list = sprints(await baseNotes(repo, tree, paths), isoDate());
+  return { prop: field.prop, now: list.find((s) => s.when === "now") ?? null, next: list.find((s) => s.when === "next") ?? null };
 }
 
 /**
@@ -1404,9 +1422,22 @@ function suggestBox(f) {
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
-  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found, states: told }) => {
+  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found, states: told, sprint }) => {
     allAreas = found;
     states = told;
+    // With sprints, the free tasks are the current sprint's, or the next one's when it has none left.
+    const sprintName = sprint ? (sprint.now ?? sprint.next).name : "";
+    if (sprint) box.querySelector(".suggest-head").append(h("span", { class: "chip sprint-chip", title: sprint.now
+      ? `The free tasks in the current sprint, ${sprint.now.name}${free.some((n) => n.nextSprint) ? `, which has none left, so ${sprint.next.name}'s` : ""}`
+      : `No sprint is running, so the free tasks in the next one, ${sprint.next.name}` }, sprintName));
+    /** Claiming a task from the next sprint moves it into the current one, in the same commit. */
+    const moveTo = (n) => (n.nextSprint && sprint?.now ? { prop: sprint.prop, name: sprint.now.name } : null);
+    const nextChip = (n) => (n.nextSprint ? h("span", { class: "chip next-sprint",
+      title: sprint.now ? `From ${sprint.next.name}: ${sprint.now.name} has no free tasks left. Claiming it moves it into ${sprint.now.name}.`
+        : `From ${sprint.next.name}, which starts on ${sprint.next.start}` }, "Next sprint") : null);
+    const none = sprint
+      ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
+      : "No free tasks right now.";
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
@@ -1415,28 +1446,33 @@ function suggestBox(f) {
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
         statusButton(n.path, "Bring back", "To Do", "Take it off the waiting list: its status goes back to To Do"))))) : null;
-    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."), waitingList);
+    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, none), waitingList);
     fill(list, claimed, free.map((n) => row(n, [
+      nextChip(n),
       editable && who
-        ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
-          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget) }, icon("check"), "Claim")
+        ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}${
+          moveTo(n) ? `, and move it into ${moveTo(n).name}` : ""}`,
+          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n)) }, icon("check"), "Claim")
         : null,
       notNow(n.path)])),
-    !free.length ? h("li", { class: "muted" }, "No free tasks right now.") : null, waitingList);
+    !free.length ? h("li", { class: "muted" }, none) : null, waitingList);
   }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
   return box;
 }
 
-/** Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first. */
-async function claimSuggested(repo, path, who, button) {
+/**
+ * Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first.
+ * `move` ({ prop, name }) also puts it in that sprint, in the same commit.
+ */
+async function claimSuggested(repo, path, who, button, move = null) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
-    `Its status becomes In Progress and its assignee ${who}. This saves the task to GitHub.`, "Claim")) return;
+    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to GitHub.`, "Claim")) return;
   button.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const taken = String(now.assignee ?? "").trim();
-    const next = taken ? null : claimTask(text, who);
+    const next = taken ? null : claimTask(text, who, move ? [[move.prop, `[[${move.name}]]`]] : []);
     // What was just read or written is known, so the list needn't read the task again.
     const known = baseCache("baseProps", repo);
     if (!next) {
@@ -1445,7 +1481,7 @@ async function claimSuggested(repo, path, who, button) {
       toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} has no properties to change.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
-      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who} from ${APP_NAME}`);
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who}${move ? `, moved into ${move.name}` : ""} from ${APP_NAME}`);
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);

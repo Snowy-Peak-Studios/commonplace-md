@@ -673,6 +673,8 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
 .chip { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
 .chip.claimed { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); font-weight: 600; }
 .chip.claimed.working { color: var(--ok); border-color: transparent; background: var(--bg-soft); }
+.chip.sprint-chip { color: var(--accent); cursor: help; }
+.chip.next-sprint { color: var(--warn); background: var(--warn-soft); border-color: transparent; cursor: help; }
 .suggest-waiting { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
 .suggest-waiting > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px 0; }
 .suggest-waiting > summary::-webkit-details-marker { display: none; }

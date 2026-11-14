@@ -2,7 +2,7 @@
 // Every PUT to GitHub is intercepted and answered here, so nothing is written.
 // See tests/e2e/README.md for how to run it.
 import puppeteer from "puppeteer-core";
-import { fillTemplate, isoDate, sprints, sprintChoices } from "../../src/vault.js";
+import { fillTemplate, isoDate, sprints, sprintChoices, sprintSuggestions, suggestTasks, LinkIndex } from "../../src/vault.js";
 import { parseCsv } from "../../src/csv.js";
 import { blobSha } from "../../src/github.js";
 import { parseBase, candidatePaths, runView, noteProps } from "../../src/bases.js";
@@ -208,7 +208,26 @@ check(mine0.length === 1 && mine0[0].name === "T-3 Try the app on a phone" && mi
   "the owner's claimed task stays in the box, marked Claimed, with no Claim button: " + JSON.stringify(mine0));
 check(rows0.findIndex((r) => r.claimed) === 0, "claimed tasks come before the free ones");
 check(free0.length >= 1 && free0.length <= 3, "the inbox suggests one to three free tasks: " + free0.length);
-check(free0[0]?.name === "T-4 Invite a friend", "the High one comes first: " + free0[0]?.name);
+// With sprints, the free tasks are the current sprint's (else the next one's, marked): worked out here from the real notes and today.
+const realNotes = async (folder) => Promise.all(realFiles.filter((e) => e.path.startsWith(PRE + folder + "/") && e.path.endsWith(".md"))
+  .map(async (e) => ({ path: e.path.slice(PRE.length), props: noteProps((await realFile(e.path.slice(PRE.length))).text) })));
+const inboxTasks = await realNotes("Tasks");
+const inboxSprints = sprints(await realNotes("Sprints"), isoDate());
+const sprintIndex = new LinkIndex([...inboxTasks, ...inboxSprints].map((n) => n.path));
+const expectFree = (notes) => {
+  const s = { now: inboxSprints.find((x) => x.when === "now"), next: inboxSprints.find((x) => x.when === "next") };
+  return (sprintSuggestions(notes, { now: s.now?.path, next: s.next?.path, resolve: (t) => sprintIndex.resolve(t) }) ?? suggestTasks(notes))
+    .map((n) => `${n.props.id} ${n.path.slice(6, -3)}${n.nextSprint ? " (next sprint)" : ""}`);
+};
+const freeNames = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name") && !x.querySelector(".chip.claimed"))
+  .map((x) => x.querySelector(".suggest-name").textContent + (x.querySelector(".chip.next-sprint") ? " (next sprint)" : "")));
+const want0 = expectFree(inboxTasks);
+check(JSON.stringify(await freeNames()) === JSON.stringify(want0), "the free tasks are the current sprint's (else the next one's, marked), by priority: "
+  + JSON.stringify(await freeNames()) + " expected " + JSON.stringify(want0));
+const sprintChip = await page.$eval(".suggest-head .sprint-chip", (c) => c.textContent).catch(() => null);
+const sprintShown = inboxSprints.find((x) => x.when === "now") ?? inboxSprints.find((x) => x.when === "next");
+check(sprintChip === (sprintShown?.name ?? null), "the box's head names the sprint they come from: " + sprintChip);
+check(free0[0]?.name === want0[0]?.replace(" (next sprint)", ""), "the High one comes first: " + free0[0]?.name);
 check(!free0.some((s) => /Try the app|Write the welcome|Make a note/.test(s.name)), "no taken or done task is suggested as free: " + JSON.stringify(free0.map((s) => s.name)));
 check(free0.every((s) => s.claim), "each free one has a Claim button");
 // Whether each task can be started now: a chip, its reason in the tooltip and on a tap.
@@ -222,19 +241,25 @@ await page.click(".suggest > .suggest-list > li .chip.state");
 await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("Ready to start"), { timeout: 5000 }).catch(() => {});
 check(await page.$eval("#toast", (t) => t.classList.contains("show") && t.textContent.includes("Ready to start")), "tapping it says why (for phones, which have no tooltips)");
 const putsBefore = puts.length;
-await page.evaluate(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes("Invite a friend"))
-  ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }));
+const first = free0[0]?.name ?? "";
+const firstId = first.split(" ")[0];
+const firstTitle = first.slice(firstId.length + 1);
+await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), firstTitle);
 await page.waitForSelector("dialog.modal[open] .btn.primary");
 await page.click("dialog.modal .btn.primary");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
 const claim = puts.length > putsBefore ? puts.at(-1) : null;
-check(claim?.url === contentsUrl("Tasks/Invite a friend.md"), "Claim saves the task: " + claim?.url);
+check(claim?.url === contentsUrl(`Tasks/${firstTitle}.md`), "Claim saves the task: " + claim?.url);
 check(/^status: In Progress$/m.test(claim?.text ?? "") && /^assignee: Your name$/m.test(claim?.text ?? ""), "its status is In Progress and its assignee the inbox's owner");
-check(claim?.body.message?.startsWith("T-4: claimed by Your name"), "the commit says who claimed it: " + claim?.body.message);
-await page.waitForFunction(() => [...document.querySelectorAll(".suggest-list li")].some((li) => li.querySelector(".chip.claimed") && li.textContent.includes("Invite a friend")), { timeout: 10000 }).catch(() => {});
+check(claim?.body.message?.startsWith(`${firstId}: claimed by Your name`), "the commit says who claimed it: " + claim?.body.message);
+await page.waitForFunction((t) => [...document.querySelectorAll(".suggest-list li")].some((li) => li.querySelector(".chip.claimed") && li.textContent.includes(t)), { timeout: 10000 }, firstTitle).catch(() => {});
 const rows1 = await boxRows();
-check(rows1.find((r) => r.name === "T-4 Invite a friend")?.claimed === "Claimed" && rows1[0].name === "T-4 Invite a friend",
-  "the claimed task stays, at the top (High), marked Claimed: " + JSON.stringify(rows1));
+check(rows1.find((r) => r.name === first)?.claimed === "Claimed" && rows1.filter((r) => r.claimed).some((r) => r.name === first),
+  "the claimed task stays, marked Claimed: " + JSON.stringify(rows1));
+const claimedNotes = inboxTasks.map((n) => (n.path === `Tasks/${firstTitle}.md` ? { ...n, props: { ...n.props, status: "In Progress", assignee: "Your name" } } : n));
+const want1 = expectFree(claimedNotes);
+check(JSON.stringify(await freeNames()) === JSON.stringify(want1), "the free ones after the claim: " + JSON.stringify(await freeNames()) + " expected " + JSON.stringify(want1));
 // The box's pickers: a task's priority and area, each change one commit of one line.
 const pickers = await page.$$eval(".suggest-list select.pick", (s) => s.map((x) => x.getAttribute("aria-label")));
 check(pickers.includes("Priority of Add a reading list") && pickers.includes("Area of Add a reading list"), "each task has a priority and an area picker: " + JSON.stringify(pickers));
@@ -275,7 +300,27 @@ const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
 // commits nothing. Any commit it does make must say To Do.
 check((!backPut || /^status: To Do$/m.test(backPut.text)) && !(await page.$(".suggest-waiting"))
   && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
-// The claim was never saved, so read the real tree again for the checks below.
+// Claiming a task from the next sprint moves it into the current one, in the same commit.
+const sprintNow = inboxSprints.find((x) => x.when === "now");
+const fromNext = want1.find((n) => n.endsWith(" (next sprint)"))?.replace(" (next sprint)", "");
+if (sprintNow && fromNext) {
+  const nextTitle = fromNext.slice(fromNext.indexOf(" ") + 1);
+  const putsBeforeNext = puts.length;
+  await shot("2d-from-the-next-sprint");
+  await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
+    ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), nextTitle);
+  await page.waitForSelector("dialog.modal[open] .btn.primary");
+  const askNext = await page.$eval("dialog.modal[open]", (d) => d.textContent);
+  check(askNext.includes(`moves into ${sprintNow.name}`), "claiming one from the next sprint says it moves into the current one: " + askNext);
+  await page.click("dialog.modal .btn.primary");
+  await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
+  const nextPut = puts.length > putsBeforeNext ? puts.at(-1) : null;
+  check(nextPut?.url === contentsUrl(`Tasks/${nextTitle}.md`) && /^status: In Progress$/m.test(nextPut.text ?? "")
+    && new RegExp(`^sprint: "\\[\\[${sprintNow.name}\\]\\]"$`, "m").test(nextPut.text ?? ""),
+  `its claim moves it into ${sprintNow.name}, in the same commit: ` + JSON.stringify(nextPut?.text?.match(/^sprint:.*$/m)?.[0]));
+  check(nextPut?.body.message?.includes(`moved into ${sprintNow.name}`), "the commit says so: " + nextPut?.body.message);
+} else check(true, `no task from the next sprint to claim today (${isoDate()}), so the move isn't checked`);
+// The claims were never saved, so read the real tree again for the checks below.
 await page.reload({ waitUntil: "networkidle0" });
 
 // 3. Following a wikilink.

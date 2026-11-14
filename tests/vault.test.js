@@ -6,7 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
-  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, taskCommitLinks,
+  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -471,6 +471,36 @@ test("a sprint's tasks by status in the setup's order, with how many are done an
   assert.deepEqual(s.points, { done: 3, total: 9, unit: "points" });
   assert.deepEqual(s.open.map((t) => t.id), ["T-1", "T-3", "T-5"]);
   assert.equal(sprintTasks(notes.slice(2, 3), "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) }).points, null);
+});
+
+test("top tasks with sprints: the current sprint's free ones, else the next sprint's, marked", () => {
+  const t = (path, props) => ({ path, props: { status: "To Do", assignee: "", priority: "Medium", area: "Docs", ...props } });
+  const notes = [
+    t("Tasks/Now high.md", { id: "T-1", sprint: "[[Sprint 1]]", priority: "High" }),
+    t("Tasks/Now taken.md", { id: "T-2", sprint: "[[Sprint 1]]", assignee: "Ann Example" }),
+    t("Tasks/Now art.md", { id: "T-3", sprint: "[[Sprint 1]]", area: "Art" }),
+    t("Tasks/Next.md", { id: "T-4", sprint: "[[Sprint 2]]" }),
+    t("Tasks/No sprint.md", { id: "T-5", priority: "High" }),
+  ];
+  const idx = new LinkIndex([...notes.map((n) => n.path), ...SPRINTS.map((n) => n.path)]);
+  const opts = { resolve: (x) => idx.resolve(x), now: "Sprints/Sprint 1.md", next: "Sprints/Sprint 2.md" };
+  const paths = (list) => list.map((n) => `${n.path}${n.nextSprint ? " (next)" : ""}`);
+  assert.deepEqual(paths(sprintSuggestions(notes, opts)), ["Tasks/Now high.md", "Tasks/Now art.md"]);
+  assert.deepEqual(paths(sprintSuggestions(notes, { ...opts, areas: ["Docs"] })), ["Tasks/Now high.md"]);
+  assert.deepEqual(paths(sprintSuggestions(notes, { ...opts, areas: ["Features"] })), [], "the next sprint has none in the area either");
+  const used = notes.map((n) => (n.props.sprint === "[[Sprint 1]]" ? { ...n, props: { ...n.props, status: "In Progress" } } : n));
+  assert.deepEqual(paths(sprintSuggestions(used, opts)), ["Tasks/Next.md (next)"], "none left now: the next sprint's");
+  assert.deepEqual(paths(sprintSuggestions(used, { ...opts, now: null })), ["Tasks/Next.md (next)"], "no sprint running: the next one's");
+  assert.deepEqual(sprintSuggestions(used, { ...opts, next: null }), [], "none left and no next sprint");
+  assert.equal(sprintSuggestions(notes, { ...opts, now: null, next: null }), null, "no sprints: picked as before");
+  const custom = notes.map((n) => ({ ...n, props: { ...n.props, iteration: n.props.sprint, sprint: "" } }));
+  assert.deepEqual(paths(sprintSuggestions(custom, { ...opts, prop: "iteration" })), ["Tasks/Now high.md", "Tasks/Now art.md"]);
+});
+
+test("claiming a task from the next sprint moves it into the current one, in the same change", async () => {
+  const { claimTask } = await import("../src/vault.js");
+  assert.equal(claimTask('---\nid: T-4\nstatus: To Do\nassignee: ""\nsprint: "[[Sprint 2]]"\n---\n', "Ann Example", [["sprint", "[[Sprint 1]]"]]),
+    '---\nid: T-4\nstatus: In Progress\nassignee: Ann Example\nsprint: "[[Sprint 1]]"\n---\n');
 });
 
 test("a task's commits, from its commits property, the newest first", () => {

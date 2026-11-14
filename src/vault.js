@@ -301,9 +301,10 @@ const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/
 
 /**
  * A task note claimed by `who`: its front matter's `status` becomes "In Progress" and its `assignee` `who`,
- * each line changed in place (or added at the end of the front matter). Null when the note has no front matter.
+ * each line changed in place (or added at the end of the front matter); `more` sets other properties in the
+ * same change (e.g. its sprint). Null when the note has no front matter.
  */
-export const claimTask = (text, who) => setProps(text, [["status", "In Progress"], ["assignee", who]]);
+export const claimTask = (text, who, more = []) => setProps(text, [["status", "In Progress"], ["assignee", who], ...more]);
 
 /**
  * A note with some front matter properties set, each `key: value` line changed in place (or added at the
@@ -660,6 +661,20 @@ export function nextSprint(last, days, today) {
   const after = last?.end ? addDays(last.end, 1) : "";
   const start = after > today ? after : today;
   return { name, start, end: addDays(start, Math.max(1, days) - 1) };
+}
+
+/**
+ * The top tasks to start when sprints are in use, from [{ path, props }]: the free tasks (as `suggestTasks`
+ * picks them) whose sprint property (`prop`) links to the current sprint's note (`now`, a path); when it has
+ * none left, a few from the next sprint's (`next`), each with `nextSprint: true`. Null when there's neither
+ * a current nor a next sprint, so the top tasks are picked from all tasks, as without sprints.
+ */
+export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve }) {
+  if (!now && !next) return null;
+  const inSprint = (path) => (n) => !!linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path;
+  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count }) : [];
+  if (current.length || !next) return current;
+  return suggestTasks(notes.filter(inSprint(next)), { areas, count }).map((n) => ({ ...n, nextSprint: true }));
 }
 
 /**
