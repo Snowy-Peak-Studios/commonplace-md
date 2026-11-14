@@ -11,7 +11,7 @@ Every task is a note in `Tasks/`, and its fields (status, priority, who it's for
 
 ## What you can change
 
-- **Turn fields on and off.** The app knows Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. **Reviewer** is who checks and approves the work: a new task's reviewer is who asked for it, else whoever makes it.
+- **Turn fields on and off.** The app knows Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, the four relations (Blocked by, Related, Comes after, Comes before), Sprint, Estimate and Due date. **Reviewer** is who checks and approves the work: a new task's reviewer is who asked for it, else whoever makes it.
 - **Change the lists:** the statuses, the priorities, the types. Type them split by commas.
 - **Rename a property:** each field is kept in a property of the same name (`status`, `priority`, ...). The parent task is kept in `part_of`, since `parent` places a page in the tree of pages.
 - **Sprints:** the folder the sprint notes go in, and how many days a sprint lasts.
@@ -29,6 +29,10 @@ A new note in `Tasks/` starts with every field that's on.
 ## Subtasks
 
 A task can sit under another one: its **Parent task** (`part_of`) links to it. [[Get set up]] is an epic with three tasks under it: its page lists them with their status and a bar of how many are done, and **Add subtask** makes a new one, with the same area and sprint. Pick a parent by its ID or its name. The [[Task Board]]'s *By parent* view groups the tasks by their parent.
+
+## Relations
+
+A task can be **blocked by** other tasks, **related** to them, or **come after** or **before** them. [[Invite a friend]] is blocked by [[Write the welcome note]], and [[Add a reading list]] comes after it. A task's **Relations** box shows them both ways: open [[Write the welcome note]] and it *blocks* Invite a friend. **Add relation** links another task, and the x takes one of the task's own links out. A task blocked by one that isn't done waits: it isn't in the top tasks to start.
 
 ## Commits
 
