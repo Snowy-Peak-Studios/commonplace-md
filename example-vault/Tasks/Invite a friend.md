@@ -6,6 +6,8 @@ assignee: ""
 requested_by: Your name
 area: Sharing
 priority: High
+sprint: "[[Sprint 1]]"
+estimate: 1
 ---
 
 # Invite a friend

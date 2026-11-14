@@ -6,6 +6,8 @@ assignee: ""
 requested_by: Your name
 area: Notes
 priority: Medium
+sprint: "[[Sprint 2]]"
+estimate: 2
 ---
 
 # Add a reading list

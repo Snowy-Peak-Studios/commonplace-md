@@ -22,6 +22,17 @@ export function encodeBase64(text) {
   return btoa(bin);
 }
 
+/** The sha git gives a file's text: SHA-1 of "blob <bytes>\0" and the bytes, as the tree lists it. */
+export async function blobSha(text) {
+  const body = new TextEncoder().encode(text);
+  const head = new TextEncoder().encode(`blob ${body.length}\0`);
+  const all = new Uint8Array(head.length + body.length);
+  all.set(head);
+  all.set(body, head.length);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", all));
+  return [...hash].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function decodeBase64(b64) {
   const bin = atob(b64.replace(/\s/g, ""));
   const bytes = new Uint8Array(bin.length);
@@ -146,6 +157,27 @@ export class GitHub {
     if (sha) body.sha = sha;
     const data = await this.request("PUT", `/repos/${r.owner}/${r.repo}/contents/${encodePath(path)}`, { body });
     return { sha: data.content.sha, commit: data.commit.sha, parent: data.commit.parents?.[0]?.sha ?? null };
+  }
+
+  /**
+   * Several text files in one commit, through the Git data API: a tree on top of the branch's latest commit,
+   * a commit, and the branch moved to it. If someone pushed in the meantime, GitHub refuses to move the
+   * branch (it isn't a fast-forward), so nothing is overwritten. Resolves to { commit, parent, shas } with
+   * each file's new blob sha.
+   */
+  async commitFiles(r, files, message) {
+    const base = `/repos/${r.owner}/${r.repo}/git`;
+    const ref = await this.request("GET", `${base}/ref/heads/${encodePath(r.branch)}`);
+    const parent = ref.object.sha;
+    const head = await this.request("GET", `${base}/commits/${parent}`);
+    const tree = await this.request("POST", `${base}/trees`, {
+      body: { base_tree: head.tree.sha, tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.text })) },
+    });
+    const made = await this.request("POST", `${base}/commits`, { body: { message, tree: tree.sha, parents: [parent] } });
+    await this.request("PATCH", `${base}/refs/heads/${encodePath(r.branch)}`, { body: { sha: made.sha } });
+    const shas = {};
+    for (const f of files) shas[f.path] = await blobSha(f.text);
+    return { commit: made.sha, parent, shas };
   }
 
   /** GitHub's code search; it only covers the repo's default branch and lags a little behind. */

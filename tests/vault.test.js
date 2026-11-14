@@ -6,6 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
+  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -417,4 +418,57 @@ test("the parent picker takes an ID, a name, or the ID and name its list shows",
   assert.equal(findTask(TASKS, "T-10 Write the docs")?.path, "Tasks/Write the docs.md");
   assert.equal(findTask(TASKS, "Nothing like it"), null);
   assert.equal(findTask(TASKS, " "), null);
+});
+
+// ---- sprints ----
+
+const SPRINTS = [
+  { path: "Sprints/Sprint 1.md", props: { start: new Date("2026-11-02T00:00:00Z"), end: new Date("2026-11-15T00:00:00Z"), goal: "Get going" } },
+  { path: "Sprints/Sprint 3.md", props: { start: "2026-11-30", end: "2026-12-13" } },
+  { path: "Sprints/Sprint 2.md", props: { start: "2026-11-16", end: "2026-11-29" } },
+  { path: "Sprints/Sprint 0.md", props: { start: "2026-10-19", end: "2026-11-01" } },
+];
+
+test("dates as days, whether YAML made them dates or JSON strings", () => {
+  assert.equal(isoDay(new Date("2026-11-02T00:00:00Z")), "2026-11-02");
+  assert.equal(isoDay("2026-11-02"), "2026-11-02");
+  assert.equal(isoDay("soon"), "");
+  assert.equal(addDays("2026-11-30", 1), "2026-12-01");
+  assert.equal(addDays("2026-12-31", 14), "2027-01-14");
+});
+
+test("sprints: the latest first, and which is now and next", () => {
+  const list = sprints(SPRINTS, "2026-11-14");
+  assert.deepEqual(list.map((s) => `${s.name} ${s.when}`), ["Sprint 3 later", "Sprint 2 next", "Sprint 1 now", "Sprint 0 past"]);
+  assert.equal(list[2].goal, "Get going");
+  assert.equal(list[2].end, "2026-11-15");
+  assert.deepEqual(sprintChoices(list).map((s) => s.name), ["Sprint 1", "Sprint 2", "Sprint 3", "Sprint 0"]);
+  assert.equal(sprints(SPRINTS, "2026-11-15").find((s) => s.when === "now").name, "Sprint 1");
+  assert.equal(sprints(SPRINTS, "2026-11-16").find((s) => s.when === "now").name, "Sprint 2");
+});
+
+test("the next sprint counts on, starts after the last ends (or today), and lasts the setup's length", () => {
+  const last = sprints(SPRINTS, "2026-11-14")[0];
+  assert.deepEqual(nextSprint(last, 14, "2026-11-14"), { name: "Sprint 4", start: "2026-12-14", end: "2026-12-27" });
+  assert.deepEqual(nextSprint(last, 7, "2027-01-05"), { name: "Sprint 4", start: "2027-01-05", end: "2027-01-11" });
+  assert.deepEqual(nextSprint({ name: "Autumn", end: "" }, 14, "2026-11-14"), { name: "Autumn 2", start: "2026-11-14", end: "2026-11-27" });
+  assert.equal(nextSprint(null, 14, "2026-11-14").name, "Sprint 1");
+});
+
+test("a sprint's tasks by status in the setup's order, with how many are done and how many points", () => {
+  const notes = [
+    { path: "Tasks/A.md", props: { id: "T-2", sprint: "[[Sprint 1]]", status: "Done", estimate: 3 } },
+    { path: "Tasks/B.md", props: { id: "T-1", sprint: "[[Sprint 1]]", status: "In Progress", estimate: "5" } },
+    { path: "Tasks/C.md", props: { id: "T-3", sprint: "[[Sprint 1]]", status: "To Do" } },
+    { path: "Tasks/D.md", props: { id: "T-4", sprint: "[[Sprint 2]]", status: "To Do", estimate: 8 } },
+    { path: "Tasks/E.md", props: { id: "T-5", sprint: "[[Sprint 1]]", status: "Blocked", estimate: 1 } },
+  ];
+  const idx = new LinkIndex([...notes.map((n) => n.path), ...SPRINTS.map((n) => n.path)]);
+  const setup = taskSetup({});
+  const s = sprintTasks(notes, "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) });
+  assert.deepEqual(s.groups.map((g) => `${g.status}: ${g.tasks.map((t) => t.id).join(" ")}`), ["To Do: T-3", "In Progress: T-1", "Done: T-2", "Blocked: T-5"]);
+  assert.deepEqual([s.done, s.total], [1, 4]);
+  assert.deepEqual(s.points, { done: 3, total: 9, unit: "points" });
+  assert.deepEqual(s.open.map((t) => t.id), ["T-1", "T-3", "T-5"]);
+  assert.equal(sprintTasks(notes.slice(2, 3), "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) }).points, null);
 });

@@ -11,6 +11,7 @@
 - a new note: only a title, in `Notes/`, started from `Templates/Note.md`;
 - CSV tables: the reading list, and editing and saving a test table;
 - parent tasks and subtasks: the example epic's list and progress bar, the parent picker refusing a loop, and Add subtask;
+- sprints: a sprint's page, the sprint picker's order, Start the next sprint (one commit through the Git data API, answered by the script) and the board's Current sprint view;
 - other kinds of files: a TSV as a table, JSON and Python with colours, a PDF (in the page, or Open and Download on a phone), and a Download for a file the app can't show;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;
@@ -28,6 +29,8 @@ GH_TOKEN=<a token that can read the repo> node run.mjs <folder for screenshots>
 
 With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The one console error
 expected is the `409 (Conflict)` the script fakes.
+
+Every write is answered by the script: PUTs, and the Git data API's trees, commits and refs (Start the next sprint). Any other write is refused, so the check never changes the repo.
 
 Settings, all optional:
 

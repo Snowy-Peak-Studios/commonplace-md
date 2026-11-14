@@ -20,6 +20,12 @@ Which fields a task has is set up per project: **[Set up task fields](#/settings
 
 New tasks start from [[Templates/Task|the task template]]: give each one the next `id`, and fill in who asked for it in `requested_by`.
 
+## Sprints
+
+Each sprint is a note in `Sprints/` with its dates and goal; a task joins one in its `sprint` property. *Current sprint* shows the one going on today: open it to see its tasks by status. [[Sprints.base]] has them all.
+
+![[Sprints.base]]
+
 ## Areas
 
 Optional: who looks after which tasks. AI agents following the [[AGENTS|agent rules]] pick only tasks in their own person's areas.

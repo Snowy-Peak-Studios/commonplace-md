@@ -6,7 +6,7 @@ import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -794,7 +794,8 @@ function renderPreview() {
   const isTask = setup && isSetupTask(setup, f.path);
   const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
   const inForm = form ? new Set(setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase())) : null;
-  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
+  const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
+  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, sprint, frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
     isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
 }
 
@@ -823,19 +824,36 @@ function useTaskSetup(repo, setup) {
   setups.set(repo.id, { setup, load: Promise.resolve(setup) });
 }
 
-/** Every task's properties, read once per tree version: repo id -> { version, notes, load }. */
-const taskNoteLoads = new Map();
-function taskNotes(repo, setup) {
+/**
+ * Some notes' properties (every task, or every sprint), read once per tree version from the bases' cache:
+ * `${repo id}:${what}` -> { version, notes, load }. Until a new version is read, the last one's notes are
+ * shown; the open note is drawn again when it's in.
+ */
+const propLoads = new Map();
+function notesWithProps(repo, what, wanted) {
   const tree = app.trees.get(repo.id);
-  const known = taskNoteLoads.get(repo.id);
-  if (!tree) return { notes: null, settled: true };
+  const key = `${repo.id}:${what}`;
+  const known = propLoads.get(key);
+  if (!tree) return { notes: null };
   if (known?.version === tree.version) return known;
-  // Until the new version is read, the last one's notes are shown; the note is drawn again when it's in.
-  const entry = { version: tree.version, notes: known?.notes ?? null, settled: false };
-  entry.load = baseNotes(repo, tree, [...tree.files.keys()].filter((p) => isSetupTask(setup, p)))
-    .then((notes) => { entry.notes = notes; entry.settled = true; redrawNote(); }, () => { taskNoteLoads.delete(repo.id); });
-  taskNoteLoads.set(repo.id, entry);
+  const entry = { version: tree.version, notes: known?.notes ?? null };
+  entry.load = baseNotes(repo, tree, [...tree.files.keys()].filter(wanted))
+    .then((notes) => { entry.notes = notes; redrawNote(); }, () => { propLoads.delete(key); });
+  propLoads.set(key, entry);
   return entry;
+}
+const taskNotes = (repo, setup) => notesWithProps(repo, "tasks", (p) => isSetupTask(setup, p));
+const sprintNotes = (repo, setup) => notesWithProps(repo, "sprints", (p) => isSprintNote(setup, p));
+
+/** The setup's sprint field, when sprints are on (or there's no setup, and the folder is `Sprints`). */
+function sprintField(setup) {
+  const field = setup?.fields.find((f) => f.key === "sprint");
+  return field && (field.on || !setup.configured) ? field : null;
+}
+/** A sprint note: a Markdown note in the setup's sprints folder. */
+function isSprintNote(setup, path) {
+  const field = sprintField(setup);
+  return !!field && /\.md$/i.test(path) && path.toLowerCase().startsWith(`${field.folder.toLowerCase()}/`);
 }
 
 /** Draws the open note's preview again, where it was scrolled to. */
@@ -930,6 +948,149 @@ async function addSubtask(parent, setup) {
   toast(`Added ${shownName(created)} under ${shownName(parent.path)}`, "ok");
 }
 
+// ---- sprints ----
+
+const shortDay = (day, year = false) => (day
+  ? new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: year ? "numeric" : undefined, timeZone: "UTC" })
+  : "");
+const WHEN = { now: "Now", next: "Next", later: "Later", past: "Ended" };
+
+/**
+ * A sprint's page: its dates and where it stands, its tasks by status, how many are done (and how much of
+ * the estimate), and on the latest sprint, Start the next sprint.
+ */
+function sprintBox(f, setup) {
+  const tasks = taskNotes(f.repo, setup).notes;
+  const all = sprintNotes(f.repo, setup).notes;
+  if (!tasks || !all) return null;
+  const tree = app.trees.get(f.repo.id);
+  const list = sprints(all, isoDate());
+  const me = list.find((s) => s.path === f.path);
+  if (!me) return null;
+  const s = sprintTasks(tasks, f.path, { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  const start = canWrite(f.repo) && list[0]?.path === f.path
+    ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
+  const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
+  const done = `${s.done} of ${s.total} task${s.total === 1 ? "" : "s"} done`
+    + (s.points ? ` · ${s.points.done} of ${s.points.total} ${s.points.unit}` : "");
+  return h("section", { class: "sprint-box", "aria-label": "Sprint" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"), h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
+      h("span", { class: "st-count" }, dates), start),
+    me.goal ? h("p", { class: "sprint-goal" }, h("strong", {}, "Goal: "), me.goal) : null,
+    s.total ? [
+      h("div", { class: "st-count sprint-done" }, done),
+      h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(s.total), "aria-valuenow": String(s.done),
+        "aria-label": done }, h("span", { style: `width: ${Math.round((s.done / s.total) * 100)}%` })),
+      s.groups.map((g) => h("div", { class: "sprint-group" },
+        h("div", { class: "sprint-status" }, g.status || "No status", h("span", { class: "muted" }, ` ${g.tasks.length}`)),
+        h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
+          h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
+          t.points != null ? h("span", { class: "st-status" }, `${t.points} ${s.points?.unit ?? ""}`.trim()) : null))))),
+    ] : h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field."));
+}
+
+/**
+ * Makes the sprint after this one (its name counted on, its dates from the setup's length) and moves the
+ * unfinished tasks the person keeps ticked into it: all in one commit.
+ */
+async function startNextSprint(f, setup, current, open) {
+  const { repo } = f;
+  const field = sprintField(setup);
+  const tree = await loadTree(repo);
+  const plan = nextSprint(current, field.length_days, isoDate());
+  const name = h("input", { class: "input", value: plan.name, autocomplete: "off" });
+  const start = h("input", { class: "input", type: "date", value: plan.start });
+  const end = h("input", { class: "input", type: "date", value: plan.end });
+  const goal = h("input", { class: "input", autocomplete: "off", placeholder: "What should this sprint get done?" });
+  const hint = h("small", {});
+  const boxes = open.map((t) => h("input", { type: "checkbox", checked: true, value: t.path }));
+  let createBtn;
+  const pathOf = () => `${field.folder}/${name.value.trim()}.md`;
+  const problem = () => {
+    const title = name.value.trim();
+    if (!title) return "Give it a name.";
+    if (titleProblem(title)) return titleProblem(title);
+    if (tree.index.has(pathOf())) return `${pathOf()} already exists.`;
+    if (repo.vault && tree.index.resolve(title)) return `A page called “${title}” already exists.`;
+    if (!start.value || !end.value || end.value < start.value) return "The end has to be on or after the start.";
+    return "";
+  };
+  const update = () => {
+    const p = problem();
+    hint.textContent = p || `It will be ${pathOf()}, ${shortDay(start.value)} – ${shortDay(end.value, true)}`;
+    hint.classList.toggle("bad", !!p);
+    if (createBtn) createBtn.disabled = !!p;
+  };
+  for (const el of [name, start, end]) el.addEventListener("input", update);
+  const body = [
+    h("label", { class: "field" }, h("span", {}, "Name"), name),
+    h("div", { class: "sprint-dates" }, h("label", { class: "field" }, h("span", {}, "Start"), start), h("label", { class: "field" }, h("span", {}, "End"), end)),
+    h("label", { class: "field" }, h("span", {}, "Goal"), goal),
+    h("div", { class: "field" }, hint),
+  ];
+  if (open.length) {
+    body.push(h("div", { class: "field" }, h("span", {}, `Move the unfinished tasks from ${current.name}`),
+      h("div", { class: "sprint-move" }, open.map((t, i) => h("label", { class: "check-line" }, boxes[i],
+        t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path), t.status ? h("span", { class: "muted" }, ` · ${t.status}`) : null)))));
+  }
+  const created = await modal({
+    title: "Start the next sprint",
+    text: `It starts after ${current.name} and lasts ${field.length_days} days, the task setup's sprint length. Change anything before you start it.`,
+    body,
+    buttons: [
+      { label: "Cancel", value: null },
+      { label: "Start sprint", kind: "primary", icon: "plus", onclick: async () => {
+        if (problem()) return false;
+        createBtn.disabled = true;
+        try {
+          const title = name.value.trim();
+          const parent = noteProps(f.text).parent;
+          const props = [...(typeof parent === "string" && parent.trim() ? [["parent", parent.trim()]] : []),
+            ["start", start.value], ["end", end.value], ["goal", goal.value.trim()]];
+          const files = [{ path: pathOf(), text: withProps(defaultNote(title), props) }];
+          for (const box of boxes.filter((b) => b.checked)) {
+            const { text } = await gh.readText(repo, fullPath(repo, box.value));
+            files.push({ path: box.value, text: withProps(text, [[field.prop, `[[${title}]]`]]) });
+          }
+          const moved = files.length - 1;
+          const res = await gh.commitFiles(repo, files.map((x) => ({ path: fullPath(repo, x.path), text: x.text })),
+            `Start ${title}${moved ? `, with ${moved} unfinished task${moved === 1 ? "" : "s"} from ${current.name}` : ""} from ${APP_NAME}`);
+          wroteCommit(repo, res);
+          for (const x of files) {
+            const sha = res.shas[fullPath(repo, x.path)];
+            baseCache("baseProps", repo)[sha] = noteProps(x.text);
+            treeChanged(repo, x.path, sha);
+          }
+          return pathOf();
+        } catch (e) {
+          hint.textContent = e.status === 422 || e.status === 409
+            ? "Not started: GitHub has newer changes. Reload from GitHub and try again."
+            : `Not started: ${e.message}`;
+          hint.classList.add("bad");
+          createBtn.disabled = false;
+          return false;
+        }
+      } },
+    ],
+    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); name.focus(); },
+  });
+  if (!created) return;
+  location.hash = hrefFor(repo, created);
+  toast(`Started ${shownName(created)}`, "ok");
+}
+
+/** The sprint picker's list: the current sprint first, then the next, then the rest, the latest first. */
+function sprintList(f, field, setup, paths, lists) {
+  const id = `tf-list-${field.prop}`;
+  const known = sprintNotes(f.repo, setup).notes;
+  const options = known
+    ? sprintChoices(sprints(known, isoDate())).map((s) => h("option", { value: s.name, label: s.when === "now" || s.when === "next"
+      ? `${WHEN[s.when]}${s.start ? `: ${shortDay(s.start)} – ${shortDay(s.end)}` : ""}` : s.start ? shortDay(s.start, true) : "" }))
+    : paths.filter((p) => isSprintNote(setup, p)).map((p) => h("option", { value: shownName(p) }));
+  lists.push(h("datalist", { id }, options));
+  return id;
+}
+
 /** The value of a property as a control shows it. */
 function shownValue(raw) {
   if (raw instanceof Date) return raw.toISOString().slice(0, 10);
@@ -942,7 +1103,6 @@ function taskForm(f, setup) {
   const props = noteProps(f.text);
   const tree = app.trees.get(f.repo.id);
   const notes = tree ? [...tree.files.keys()].filter((p) => /\.md$/i.test(p) && p !== f.path) : [];
-  const inFolder = (dir) => (p) => p.toLowerCase().startsWith(`${dir.toLowerCase()}/`);
   const login = store.get("user")?.login || "";
   const lists = [];
   const listFor = (field, values) => {
@@ -964,7 +1124,7 @@ function taskForm(f, setup) {
       const link = ["task", "sprint", "link"].includes(field.kind);
       let list = null;
       if (field.kind === "task") list = parentList(f, field, setup, notes, lists);
-      else if (field.kind === "sprint") list = listFor(field, notes.filter(inFolder(field.folder)).map(shownName));
+      else if (field.kind === "sprint") list = sprintList(f, field, setup, notes, lists);
       else if (field.kind === "link") list = listFor(field, notes.map(shownName));
       else if (field.kind === "person") list = listFor(field, [login, cur]);
       control = h("input", {

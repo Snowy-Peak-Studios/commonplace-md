@@ -2,8 +2,9 @@
 // Every PUT to GitHub is intercepted and answered here, so nothing is written.
 // See tests/e2e/README.md for how to run it.
 import puppeteer from "puppeteer-core";
-import { fillTemplate, isoDate } from "../../src/vault.js";
+import { fillTemplate, isoDate, sprints, sprintChoices } from "../../src/vault.js";
 import { parseCsv } from "../../src/csv.js";
+import { blobSha } from "../../src/github.js";
 import { parseBase, candidatePaths, runView, noteProps } from "../../src/bases.js";
 
 const BASE = process.env.BASE || "http://localhost:8765/";
@@ -33,6 +34,8 @@ const hashPath = (url) => decodeURIComponent(url.split("#")[1] || "");
 const log = (...a) => console.log(...a);
 const errors = [];
 const puts = [];
+// One commit of several files (Start the next sprint) goes through the Git data API: its writes are answered here.
+const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
 let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
@@ -71,6 +74,20 @@ page.on("request", async (req) => {
     if (putMode === "conflict") return req.respond(json(409, { message: "is at abc but expected def" }));
     return req.respond(json(200, { content: { sha: "fake" + puts.length }, commit: { sha: "c" + puts.length } }));
   }
+  if (req.method() === "POST" && url === `${REPO_API}/git/trees`) {
+    treeWrites.push(JSON.parse(req.postData()));
+    return req.respond(json(201, { sha: "faketree" + treeWrites.length, tree: [] }));
+  }
+  if (req.method() === "POST" && url === `${REPO_API}/git/commits`) {
+    commitWrites.push(JSON.parse(req.postData()));
+    return req.respond(json(201, { sha: "fakecommit" + commitWrites.length }));
+  }
+  if (req.method() === "PATCH" && url.startsWith(`${REPO_API}/git/refs/`)) {
+    refWrites.push({ url, body: JSON.parse(req.postData()) });
+    return req.respond(json(200, { object: { sha: refWrites.at(-1).body.sha } }));
+  }
+  // Any other write is refused here, so the check never changes the repo (GraphQL's POST only reads).
+  if (!["GET", "HEAD"].includes(req.method()) && url !== `${API}/graphql`) return req.respond(json(403, { message: "Blocked by the browser check." }));
   // No vaults found by themselves: the check sees only the example vault, whatever else the token can open.
   if (req.method() === "GET" && url.startsWith(`${API}/user/repos`)) return req.respond(json(200, []));
   if (fakeHead && req.method() === "GET" && url.startsWith(`${REPO_API}/commits/`)) {
@@ -93,6 +110,8 @@ page.on("request", async (req) => {
   // A note "created" by the New note check: its PUT was answered here, so its GET is too.
   const created = puts.find((p) => !p.body.sha && p.url === url.split("?")[0]);
   if (created && req.method() === "GET") return req.respond(json(200, { sha: "fake-new", size: created.text.length, content: b64(created.text) }));
+  const committed = treeWrites.flatMap((t) => t.tree).findLast((e) => `${REPO_API}/contents/${encPath(e.path)}` === url.split("?")[0]);
+  if (committed && req.method() === "GET") return req.respond(json(200, { sha: await blobSha(committed.content), size: committed.content.length, content: b64(committed.content) }));
   if (url.split("?")[0] === contentsUrl(CSV_PATH)) return req.respond(json(200, { sha: "csvsha", size: CSV_TEXT.length, content: b64(CSV_TEXT) }));
   req.continue();
 });
@@ -488,9 +507,10 @@ const folderNotes = async (folder) => {
   return d.repository.object.entries.filter((e) => e.type === "blob" && e.name.endsWith(".md"))
     .map((e) => ({ path: `${folder}/${e.name}`, props: noteProps(e.object.text) }));
 };
-const tabNamesNow = () => page.$$eval(".base-view .base-tab", (b) => b.map((x) => x.textContent));
+// The Task Board has two bases: the tasks' one first, then the sprints'. These look at the first.
+const tabNamesNow = () => page.$eval(".base-view", (v) => [...v.querySelectorAll(".base-tab")].map((x) => x.textContent));
 const pickTab = async (name) => {
-  await page.evaluate((n) => [...document.querySelectorAll(".base-view .base-tab")].find((b) => b.textContent === n).click(), name);
+  await page.evaluate((n) => [...document.querySelector(".base-view").querySelectorAll(".base-tab")].find((b) => b.textContent === n).click(), name);
   await wait(100);
   return page.$eval(".base-view .base-count", (c) => parseInt(c.textContent, 10));
 };
@@ -514,7 +534,7 @@ for (const v of expected) {
 }
 check(await page.$eval('.base-view .base-tab[aria-selected="true"]', (b) => b.textContent) === expected.at(-1).name, "the chosen tab is marked selected");
 await pickTab(expected[0].name);
-const groupLabels = await page.$$eval(".base-table tr.base-group .base-group-label", (g) => g.map((x) => x.firstChild.textContent));
+const groupLabels = await page.$eval(".base-view", (v) => [...v.querySelectorAll(".base-table tr.base-group .base-group-label")].map((x) => x.firstChild.textContent));
 check(JSON.stringify(groupLabels) === JSON.stringify(expected[0].groups.map((g) => g.label)), `${expected[0].name} groups in the base's order: ` + JSON.stringify(groupLabels));
 check(await datesShown(), "Last modified fills in with the notes' last commit dates");
 await page.evaluate(() => { document.querySelector(".base-view").scrollIntoView(); });
@@ -534,7 +554,7 @@ await until(() => !!document.querySelector(".base-view .base-table"), 40000);
 await datesShown();
 const phone = await page.evaluate(() => {
   const scroller = document.querySelector(".base-scroll");
-  const tabs = [...document.querySelectorAll(".base-tab")];
+  const tabs = [...document.querySelector(".base-view").querySelectorAll(".base-tab")];
   const name = document.querySelector(".base-table td.base-name");
   return {
     pageFits: document.documentElement.scrollWidth <= innerWidth && document.querySelector("main").scrollWidth <= innerWidth,
@@ -736,6 +756,66 @@ check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\n
 check(subPut?.body.message === "T-6: add Tasks/Set up a second device.md as a subtask of Get set up from Commonplace.md", "the commit says so: " + subPut?.body.message);
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelector(".subtasks .st-count")?.textContent === "2 of 4 done", 15000), "the epic now has four subtasks");
+
+// 8g. Sprints: a sprint's page lists its tasks by status with how much is done; the picker puts the current sprint
+// first; Start the next sprint makes the next one and moves what's left, in one commit; the board shows the current one.
+const realSprints = await Promise.all(["Sprints/Sprint 1.md", "Sprints/Sprint 2.md"].map(async (p) => ({ path: p, props: noteProps((await realFile(p)).text) })));
+await page.goto(at("Sprints/Sprint 1.md"), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelectorAll(".sprint-box .sprint-group").length === 3, 15000), "a sprint's page lists its tasks by status");
+const sprint1 = await page.evaluate(() => ({
+  groups: [...document.querySelectorAll(".sprint-box .sprint-status")].map((g) => g.firstChild.textContent),
+  done: document.querySelector(".sprint-box .sprint-done")?.textContent,
+  goal: document.querySelector(".sprint-box .sprint-goal")?.textContent,
+  start: !!document.querySelector(".sprint-box .st-head button"),
+}));
+check(JSON.stringify(sprint1.groups) === '["To Do","In Progress","Done"]', "in the setup's order of statuses: " + JSON.stringify(sprint1.groups));
+check(sprint1.done === "1 of 3 tasks done · 2 of 6 points" && sprint1.goal === "Goal: The notes on every device", "with how much is done, in tasks and points, and its goal: " + JSON.stringify(sprint1));
+check(!sprint1.start, "only the latest sprint offers Start the next sprint");
+await shot("8g-sprint");
+await page.setViewport({ width: 375, height: 812 });
+await wait(300);
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth
+  && document.querySelector(".sprint-box").getBoundingClientRect().right <= innerWidth + 0.5), "the sprint's page fits at phone width");
+await shot("8g-sprint-phone");
+await page.setViewport({ width: 1280, height: 860 });
+await page.goto(at("Tasks/Add a reading list.md"), { waitUntil: "networkidle0" });
+await until(() => document.querySelectorAll("#tf-list-sprint option").length === 2, 15000);
+const sprintOptions = await page.$$eval("#tf-list-sprint option", (o) => o.map((x) => x.value));
+const sprintOrder = sprintChoices(sprints(realSprints, isoDate())).map((x) => x.name);
+check(JSON.stringify(sprintOptions) === JSON.stringify(sprintOrder), "the sprint picker puts the current sprint first, then the next: " + JSON.stringify(sprintOptions));
+await page.goto(at("Sprints/Sprint 2.md"), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector(".sprint-box .st-head button"), 15000), "the latest sprint offers Start the next sprint");
+await page.evaluate(() => document.querySelector(".sprint-box .st-head button").click());
+await page.waitForSelector("dialog[open] input");
+const startDialog = await page.evaluate(() => ({
+  name: document.querySelector("dialog[open] input").value,
+  dates: [...document.querySelectorAll('dialog[open] input[type="date"]')].map((d) => d.value),
+  move: [...document.querySelectorAll('dialog[open] input[type="checkbox"]')].map((b) => b.checked && b.value),
+}));
+check(startDialog.name === "Sprint 3" && startDialog.dates[0] >= "2026-11-30" && startDialog.move.join() === "Tasks/Add a reading list.md",
+  "it suggests Sprint 3 after Sprint 2, with Sprint 2's unfinished task ticked: " + JSON.stringify(startDialog));
+await shot("8g-start-sprint");
+const putsBeforeSprint = puts.length;
+await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Start sprint").click());
+check(await until(() => location.hash.endsWith("/Sprints/Sprint%203.md"), 15000), "Start sprint opens the new sprint");
+const sprintTree = treeWrites.at(-1)?.tree ?? [];
+check(sprintTree.length === 2 && sprintTree[0].path === PRE + "Sprints/Sprint 3.md" && /\nstart: "?\d{4}-\d\d-\d\d"?\nend: "?\d{4}-\d\d-\d\d"?\n/.test(sprintTree[0].content)
+  && sprintTree[1].path === PRE + "Tasks/Add a reading list.md" && /\nsprint: "\[\[Sprint 3\]\]"\n/.test(sprintTree[1].content),
+  "one tree with the new sprint note and the moved task: " + JSON.stringify(sprintTree.map((e) => e.path)));
+check(commitWrites.at(-1)?.message === "Start Sprint 3, with 1 unfinished task from Sprint 2 from Commonplace.md" && refWrites.length === 1
+  && refWrites[0].url === `${REPO_API}/git/refs/heads/${encPath(BRANCH)}` && puts.length === putsBeforeSprint,
+  "one commit, the branch moved to it, and nothing else saved: " + commitWrites.at(-1)?.message);
+check(await until(() => document.querySelector(".sprint-box .sprint-done")?.textContent === "0 of 1 tasks done · 0 of 2 points", 15000),
+  "the new sprint has the moved task");
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelectorAll(".base-view").length === 2 && !!document.querySelectorAll(".base-view")[1].querySelector(".base-count"), 40000),
+  "the Task Board shows the sprints' base too");
+const currentView = runView(parseBase((await realFile("Bases/Sprints.base")).text), 0, realSprints);
+const currentShown = await page.evaluate(() => {
+  const v = document.querySelectorAll(".base-view")[1];
+  return { tab: v.querySelector('.base-tab[aria-selected="true"]')?.textContent, count: parseInt(v.querySelector(".base-count").textContent, 10) };
+});
+check(currentShown.tab === "Current sprint" && currentShown.count === currentView.count, "its Current sprint view shows the sprint going on today: " + JSON.stringify(currentShown));
 
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();

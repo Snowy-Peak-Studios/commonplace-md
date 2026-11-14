@@ -613,3 +613,85 @@ export function findTask(notes, input) {
     || notes.find((n) => { const id = String(n.props.id ?? "").trim().toLowerCase(); return id && s.startsWith(id + " ") && name(n.path) === s.slice(id.length + 1); })
     || null;
 }
+
+// ---- sprints ----
+
+/** A date property as `YYYY-MM-DD`: YAML gives a Date, JSON a string; "" when it isn't one. */
+export function isoDay(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
+  return /^\d{4}-\d\d-\d\d/.exec(String(v ?? "").trim())?.[0] ?? "";
+}
+
+/** `YYYY-MM-DD` plus some days. */
+export function addDays(day, n) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const noteName = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+
+/**
+ * The sprint notes, from [{ path, props }] with `start`, `end` and `goal`, the latest start first,
+ * each with where it stands on `today`: "now", "next" (the first one after today), "later" or "past".
+ */
+export function sprints(notes, today) {
+  const list = notes.map((n) => ({ path: n.path, name: noteName(n.path), start: isoDay(n.props.start), end: isoDay(n.props.end),
+    goal: String(n.props.goal ?? "").trim() }))
+    .sort((a, b) => (b.start || "").localeCompare(a.start || "") || b.name.localeCompare(a.name, undefined, { numeric: true }));
+  const now = (s) => s.start && s.start <= today && (!s.end || s.end >= today);
+  const next = list.filter((s) => s.start > today).at(-1);
+  return list.map((s) => ({ ...s, when: now(s) ? "now" : s === next ? "next" : s.start > today ? "later" : "past" }));
+}
+
+/** The sprint picker's order: the current sprint, the next one, then the rest, the latest first. */
+export function sprintChoices(list) {
+  const rank = { now: 0, next: 1 };
+  return [...list].sort((a, b) => (rank[a.when] ?? 2) - (rank[b.when] ?? 2));
+}
+
+/**
+ * The sprint after `last` (the latest one): its name counts on ("Sprint 12" -> "Sprint 13"), it starts the
+ * day after `last` ends (or today, if that's later) and lasts `days`.
+ */
+export function nextSprint(last, days, today) {
+  const m = /^(.*?)(\d+)$/.exec(last?.name ?? "");
+  const name = m ? `${m[1]}${Number(m[2]) + 1}` : last ? `${last.name} 2` : "Sprint 1";
+  const after = last?.end ? addDays(last.end, 1) : "";
+  const start = after > today ? after : today;
+  return { name, start, end: addDays(start, Math.max(1, days) - 1) };
+}
+
+/**
+ * A sprint's tasks: those whose sprint property links to it, grouped by status in the setup's order (others
+ * after), with how many are done and, when estimates are on, how much of the estimate.
+ */
+export function sprintTasks(notes, path, { setup = null, resolve }) {
+  const prop = fieldProp(setup, "sprint");
+  const statusProp = fieldProp(setup, "status");
+  const estimate = setup?.fields.find((f) => f.key === "estimate");
+  const order = (setup?.fields.find((f) => f.key === "status")?.values ?? []).map((v) => v.toLowerCase());
+  const tasks = notes
+    .filter((n) => linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path)
+    .map((n) => {
+      const points = Number(n.props[estimate?.prop ?? "estimate"]);
+      return { path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[statusProp] ?? "").trim(),
+        done: isDoneStatus(n.props[statusProp], setup), points: Number.isFinite(points) && !blank(n.props[estimate?.prop ?? "estimate"]) ? points : null };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
+  const groups = [];
+  for (const t of tasks) {
+    let g = groups.find((x) => x.status.toLowerCase() === t.status.toLowerCase());
+    if (!g) groups.push(g = { status: t.status, tasks: [] });
+    g.tasks.push(t);
+  }
+  const at = (s) => { const i = order.indexOf(s.toLowerCase()); return i < 0 ? order.length + (s ? 0 : 1) : i; };
+  groups.sort((a, b) => at(a.status) - at(b.status));
+  const sum = (list) => list.reduce((n, t) => n + (t.points ?? 0), 0);
+  const hasPoints = tasks.some((t) => t.points != null);
+  return {
+    groups, total: tasks.length, done: tasks.filter((t) => t.done).length,
+    points: hasPoints ? { done: sum(tasks.filter((t) => t.done)), total: sum(tasks), unit: estimate?.unit ?? "points" } : null,
+    open: tasks.filter((t) => !t.done),
+  };
+}

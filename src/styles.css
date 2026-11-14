@@ -1014,6 +1014,19 @@ select.input { padding-right: 8px; }
 .st-id { margin-right: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
 .st-status { flex: none; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; color: var(--text-2); background: var(--bg-soft); white-space: nowrap; }
 
+/* A sprint's page: its dates, its tasks by status, how many are done */
+.sprint-box { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.sprint-when { padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--bg-soft); }
+.sprint-when.now { color: var(--accent-text); background: var(--accent); }
+.sprint-goal { margin: 10px 0 0; color: var(--text-2); }
+.sprint-done { margin-top: 10px; }
+.sprint-group { margin-top: 10px; }
+.sprint-status { font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.sprint-empty { margin: 10px 0 0; }
+.sprint-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.sprint-move { max-height: 220px; overflow: auto; padding: 8px 10px 0; border: 1px solid var(--line); border-radius: var(--radius); }
+.sprint-move .check-line { margin-bottom: 8px; }
+
 /* Task fields: one row per field, in the repo's task setup */
 .task-fields { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
 .task-field { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(110px, 0.8fr) minmax(160px, 2fr) 34px; gap: 8px; align-items: center; }

@@ -6,6 +6,8 @@ assignee: Your name
 requested_by: Your name
 area: Setup
 priority: Medium
+sprint: "[[Sprint 1]]"
+estimate: 3
 part_of: "[[Get set up]]"
 ---
 

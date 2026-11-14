@@ -28,7 +28,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
-- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas; "Last modified" is the date of the note's last commit.
+- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
 - **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
 - **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
@@ -40,6 +40,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
 - **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
+- **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
@@ -251,7 +252,12 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 - The parent picker lists the tasks by ID and name (type either). A task can't be its own parent, or sit under one of its own subtasks.
 - On the board, a base can group by the parent: the example vault's *By parent* view does (`groupBy: part_of`).
 
-Coming next: sprints.
+**Sprints:** a sprint is a note in the sprints folder (`Sprints/` unless the setup says otherwise) with `start`, `end` and `goal`; a task joins it with `sprint: "[[Sprint 12]]"`.
+
+- A sprint's page lists its tasks by status, with how many are done and, when estimates are on, how much of the estimate.
+- The sprint picker on a task offers the current sprint first, then the next one.
+- **Start the next sprint** (on the latest sprint) makes the next note, its name counted on and its dates from the setup's length, and moves the unfinished tasks you keep ticked: one commit for all of it.
+- A base can show the sprint going on today with `start <= today()` and `end >= today()`: the example vault's *Current sprint* view.
 
 </details>
 
@@ -266,7 +272,7 @@ Coming next: sprints.
 example-vault/
 ├── Home.md                      start page: links, a table, a callout, an embedded section, a Mermaid diagram, an image
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
-├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
+├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], the sprints, and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
 ├── Other kinds of files.md      what opens how: tables, text with colours, PDFs, pictures, and downloads for the rest
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
@@ -274,9 +280,13 @@ example-vault/
 ├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)
 ├── .claude/skills/              optional: pointers to those skills, so Claude Code finds them
 ├── Bases/
-│   └── Tasks.base               a base with four views (By status, By parent, Open, Done), a formula, groups, sorts and filters
+│   ├── Tasks.base               a base with four views (By status, By parent, Open, Done), a formula, groups, sorts and filters
+│   └── Sprints.base             the sprints, with a Current sprint view (start <= today() and end >= today())
 ├── Tasks/                       six task notes with id, status, priority, area, assignee and requested_by properties, and checklists;
-│                                an epic, Get set up, with three of them under it (part_of)
+│                                an epic, Get set up, with three of them under it (part_of); sprints and estimates
+├── Sprints/
+│   ├── Sprint 1.md              a sprint: start, end and goal; its page lists its tasks by status
+│   └── Sprint 2.md              the next one
 ├── Notes/
 │   ├── Inbox.md                 the shared inbox: owner and github properties, New tasks, Notes and Needs attention sections
 │   └── Inboxes/
