@@ -208,6 +208,10 @@ const inboxBoxes = await page.evaluate(() => ({
   all: document.querySelectorAll(".preview .suggest").length, inText: document.querySelectorAll(".note-body .suggest").length,
 }));
 check(inboxBoxes.all === 1 && inboxBoxes.inText === 1, "the inbox's box comes from the ```top-tasks block in its text, and only once: " + JSON.stringify(inboxBoxes));
+// The box's head says every option the block writes out: range, areas, sprint and owner.
+const inboxHead = await page.$eval(".note-body .suggest .suggest-head small", (s) => s.textContent).catch(() => "");
+check(["All areas", "Top 3", "Current sprint, then the next", "For Your name"].every((t) => inboxHead.includes(t)) && !inboxHead.includes("no range"),
+  "the inbox's box says its block's options: " + inboxHead);
 await shot("2-inbox-desktop");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.

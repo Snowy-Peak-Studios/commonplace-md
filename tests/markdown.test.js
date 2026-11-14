@@ -65,19 +65,30 @@ test("a mermaid block becomes a diagram placeholder holding its source; other fe
   assert.equal(render("```js\nconst a = 1 < 2;\n```\n"), '<pre><code class="language-js">const a = 1 &lt; 2;\n</code></pre>\n');
 });
 
-test("a top-tasks block becomes a placeholder with its areas and count, holding its source", () => {
-  assert.equal(render("```top-tasks\nareas: Features, Docs\ncount: 5\n```\n"),
-    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5"><pre><code>areas: Features, Docs\ncount: 5\n</code></pre></div>\n');
-  assert.equal(render("```top-tasks\n```\n"), '<div class="top-tasks-block" data-areas="" data-count="3"><pre><code></code></pre></div>\n');
-  assert.match(render('```Top-Tasks\nareas: ["A&B"]\n```\n'), /data-areas="A&amp;B"/);
+test("a top-tasks block becomes a placeholder with all its options, holding its source", () => {
+  const src = "range: 5\nareas: Features, Docs\nsprint: current-only\nowner: Ana Lee\n";
+  assert.equal(render("```top-tasks\n" + src + "```\n"),
+    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5" data-sprint="current-only" data-owner="Ana Lee">'
+    + `<pre><code>${src}</code></pre></div>\n`);
+  assert.equal(render("```top-tasks\n```\n"),
+    '<div class="top-tasks-block" data-areas="" data-count="3" data-count-default="1" data-sprint="off" data-owner=""><pre><code></code></pre></div>\n');
+  assert.match(render('```Top-Tasks\nareas: ["A&B"]\nowner: "<b>"\n```\n'), /data-areas="A&amp;B".*data-owner="&lt;b&gt;"/);
 });
 
-test("a top-tasks block's options: areas as a list or in brackets, a count from 1 to 20, other lines ignored", () => {
-  assert.deepEqual(topTasksOptions(""), { areas: [], count: 3 });
-  assert.deepEqual(topTasksOptions("Areas: [Features, 'Docs']\nCOUNT: 7"), { areas: ["Features", "Docs"], count: 7 });
-  assert.deepEqual(topTasksOptions("count: 0\nnote: hi"), { areas: [], count: 1 });
-  assert.deepEqual(topTasksOptions("count: 99"), { areas: [], count: 20 });
-  assert.deepEqual(topTasksOptions("count: five\nareas:"), { areas: [], count: 3 });
+test("a top-tasks block's options: range (or count) from 1 to 20, areas, sprint and owner; other lines ignored", () => {
+  const none = { areas: [], count: 3, countSet: false, sprint: "off", owner: "" };
+  assert.deepEqual(topTasksOptions(""), none);
+  assert.deepEqual(topTasksOptions("Areas: [Features, 'Docs']\nRANGE: 7"), { ...none, areas: ["Features", "Docs"], count: 7, countSet: true });
+  assert.deepEqual(topTasksOptions("count: 7"), { ...none, count: 7, countSet: true }, "older blocks say count");
+  assert.deepEqual(topTasksOptions("range: 0\nnote: hi"), { ...none, count: 1, countSet: true });
+  assert.deepEqual(topTasksOptions("range: 99"), { ...none, count: 20, countSet: true });
+  assert.deepEqual(topTasksOptions("range: five\nareas:"), none);
+  for (const [said, mode] of [["current-only", "current-only"], ["Current only", "current-only"], ["current", "current-only"],
+    ["current-then-next", "current-then-next"], ["current and next", "current-then-next"], ["off", "off"], ["none", "off"], ["soon", "off"]]) {
+    assert.equal(topTasksOptions(`sprint: ${said}`).sprint, mode, said);
+  }
+  assert.equal(topTasksOptions("owner: 'Zoë Ng'").owner, "Zoë Ng");
+  assert.equal(topTasksOptions("owner:").owner, "");
 });
 
 test("a task's and a sprint's blocks become placeholders that keep their code", () => {

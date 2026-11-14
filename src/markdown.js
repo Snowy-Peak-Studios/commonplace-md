@@ -143,8 +143,9 @@ export function createMarkdown() {
     const token = tokens[idx];
     const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
     if (lang === "top-tasks") {
-      const { areas, count } = topTasksOptions(token.content);
-      return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}">`
+      const { areas, count, countSet, sprint, owner } = topTasksOptions(token.content);
+      return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
+        + `${countSet ? "" : ' data-count-default="1"'} data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
@@ -160,23 +161,40 @@ export function createMarkdown() {
   return md;
 }
 
-/** How many tasks a ```top-tasks block shows when it doesn't say, and the most it can ask for. */
+/** How many tasks a ```top-tasks block shows when it doesn't say (and the box says so), and the most it can ask for. */
 export const TOP_TASKS_COUNT = 3;
 const TOP_TASKS_MAX = 20;
 
 /**
- * The options of a ```top-tasks block, one per line: `areas: Features, Docs` (or `[Features, Docs]`) and
- * `count: 5`. Other lines are ignored; a missing or odd count is the default three.
+ * Which sprint a ```top-tasks block takes its tasks from: only the current one, the current one and then the
+ * next when it has none left, or every task (`off`, also when the line is left out or not known).
+ */
+export const TOP_TASKS_SPRINTS = ["current-only", "current-then-next", "off"];
+const SPRINT_WORDS = { current: "current-only", "current-and-next": "current-then-next", next: "current-then-next", none: "off", no: "off", all: "off" };
+
+/**
+ * The options of a ```top-tasks block, one per line, all written in the block, nothing taken from elsewhere:
+ * `range: 3` (how many tasks; `count` in older blocks), `areas: Features, Docs` (or `[Features, Docs]`),
+ * `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and `owner: Your Name` (whom Claim claims for).
+ * Other lines are ignored. A missing or odd range is three, with `countSet` false so the box can say so.
  */
 export function topTasksOptions(src) {
-  const out = { areas: [], count: TOP_TASKS_COUNT };
+  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, sprint: "off", owner: "" };
+  const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(areas|count)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(areas|count|range|sprint|owner)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
-    if (m[1].toLowerCase() === "areas") {
-      out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map((a) => a.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    const key = m[1].toLowerCase();
+    if (key === "areas") {
+      out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+    } else if (key === "sprint") {
+      const v = unquote(m[2]).toLowerCase().replace(/[\s_]+/g, "-");
+      out.sprint = TOP_TASKS_SPRINTS.includes(v) ? v : SPRINT_WORDS[v] ?? "off";
+    } else if (key === "owner") {
+      out.owner = unquote(m[2]);
     } else if (/^\d+$/.test(m[2])) {
       out.count = Math.min(TOP_TASKS_MAX, Math.max(1, Number(m[2])));
+      out.countSet = true;
     }
   }
   return out;

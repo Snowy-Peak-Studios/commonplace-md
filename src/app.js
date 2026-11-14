@@ -860,8 +860,7 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
-  // An inbox holds its box as a ```top-tasks block; an older inbox without one still shows it on top.
-  const ownBox = !!body.querySelector(".top-tasks-block");
+  // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
@@ -882,9 +881,7 @@ function renderPreview() {
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && (() => sprintBox(f, setup)),
   });
-  fill(f.dom.preview, form,
-    frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
-    isInbox(f.repo, f.path) && !ownBox ? inboxBox(f) : "", body);
+  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
 }
 
 /**
@@ -1429,30 +1426,31 @@ async function setTaskField(f, field, input, control) {
   }
 }
 
-// ---- the top tasks to start: over an inbox, and in a ```top-tasks block on any page ----
+// ---- the top tasks to start: in a ```top-tasks block, on an inbox or any other page ----
 
-/** The repo's Inbox page and the notes in its inboxes folder. */
-const isInbox = (repo, path) => inboxCandidates([path], repo.inbox, repo.inboxes || "").length > 0;
-
-/** One look-up per tree version and areas, so typing in the inbox doesn't redo it. */
+/** One look-up per tree version and options, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who, count) {
+function loadSuggestions(repo, areas, who, count, sprintMode) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}`;
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
       .then(async (notes) => {
-        const sprint = await suggestSprints(repo, tree).catch(() => null);
+        // `sprint: off` (or no sprint line) takes from every task, sprints or not.
+        const sprint = sprintMode === "off" ? null : await suggestSprints(repo, tree).catch(() => null);
         const resolve = (t, from) => tree.index.resolve(t, from);
         // A task blocked by an open task waits for it: it isn't suggested.
         const blocked = blockedTasks(notes, { setup: await loadTaskSetup(repo).catch(() => null), resolve });
-        const fromSprint = sprint && sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: sprint.next?.path,
-          resolve, blocked });
+        // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
+        const only = sprintMode === "current-only";
+        const fromSprint = !sprint ? null : only && !sprint.now ? []
+          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked });
         const shown = {
           mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked }),
           waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
-          sprint: fromSprint ? sprint : null,
+          sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
+          noSprintNow: !!fromSprint && only && !sprint.now,
         };
         // Only the tasks shown are read whole, to tell whether each can be started now.
         const paths = [...shown.mine, ...shown.free, ...shown.waiting].map((n) => n.path);
@@ -1479,49 +1477,40 @@ async function suggestSprints(repo, tree) {
   return { prop: field.prop, now: list.find((s) => s.when === "now") ?? null, next: list.find((s) => s.when === "next") ?? null };
 }
 
-/** Who the page's box claims tasks for: its `owner` property, else the signed-in GitHub user. */
-const boxOwner = (props) => String(props.owner ?? "").trim() || store.get("user")?.login || "";
-
-/** A page's `areas` property, as it's written. */
-const pageAreas = (props) => Array.isArray(props.areas) ? props.areas.map(String) : listProp(props.areas).length ? [String(props.areas)] : [];
-
-/** The box over an inbox that has no ```top-tasks block: its `areas` property limits the tasks, its `owner` is who Claim claims them for. */
-function inboxBox(f) {
-  const props = noteProps(f.text);
-  const shown = pageAreas(props);
-  return suggestBox(f.repo, { areas: listProp(shown), shown, who: boxOwner(props) });
-}
-
 /**
- * Each ```top-tasks block on the page becomes the same box, with its own `areas` and `count` lines (without an
- * `areas` line, the page's `areas` property); the page's `owner` property (or the signed-in user) is who it claims
- * for. In a repo without tasks, the block's code stays.
+ * Each ```top-tasks block on the page becomes the box, with only the options written in it: `range`, `areas`,
+ * `sprint` and `owner` (whom Claim claims for). Nothing comes from the page's properties or the device; a page
+ * without the block has no box, an inbox too. In a repo without tasks, the block's code stays.
  */
 function fillTopTasks(root, f) {
-  const blocks = root.querySelectorAll(".top-tasks-block");
-  if (!blocks.length) return;
-  const props = noteProps(f.text);
-  const who = boxOwner(props);
-  for (const el of blocks) {
-    const own = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
-    const shown = own.length ? own : pageAreas(props);
-    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who, count: Number(el.dataset.count) || TOP_TASKS_COUNT });
+  for (const el of root.querySelectorAll(".top-tasks-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
+    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
+      count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault, sprintMode: el.dataset.sprint || "off" });
     if (box) el.replaceWith(box);
   }
 }
 
+/** How the box's head says each sprint choice. */
+const SPRINT_SAID = { "current-only": "Current sprint only", "current-then-next": "Current sprint, then the next", off: "" };
+
 /**
- * The top free tasks (three unless `count` says): the notes in a `Tasks` folder with no assignee, highest
- * priority first, only in `areas` (lower case) when given; `shown` is how the areas are written, for the head.
- * Above them, the tasks `who` has claimed and not finished: waiting for their agent, or with an agent on it.
+ * The top free tasks (`count` of them): the notes in a `Tasks` folder with no assignee, highest priority first,
+ * only in `areas` (lower case) when given; `shown` is how the areas are written, for the head. With `sprintMode`
+ * (`current-only`, `current-then-next`), from the sprints. Above them, the tasks `who` has claimed and not
+ * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
+ * says to add an owner. The head says every option in use, and when the range is the default.
  */
-function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT }) {
+function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, sprintMode = "off" }) {
   const tree = app.trees.get(repo.id);
   if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
   const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
+  const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
+    SPRINT_SAID[sprintMode], who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
   const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
-      h("small", { class: "muted" }, areas.length ? `Areas: ${shown.join(", ")}` : "All areas")),
+      h("small", { class: "muted" }, said.join(" · "))),
     list);
   const editable = canWrite(repo) && !!app.token;
   let allAreas = [];
@@ -1558,7 +1547,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
-  loadSuggestions(repo, areas, who, count).then(({ mine, free, waiting, allAreas: found, states: told, sprint }) => {
+  loadSuggestions(repo, areas, who, count, sprintMode).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow }) => {
     allAreas = found;
     states = told;
     /**
@@ -1594,8 +1583,8 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const nextChip = (n) => (n.nextSprint ? h("span", { class: "chip next-sprint",
       title: sprint.now ? `From ${sprint.next.name}: ${sprint.now.name} has no free tasks left. Claiming it moves it into ${sprint.now.name}.`
         : `From ${sprint.next.name}, which starts on ${sprint.next.start}` }, "Next sprint") : null);
-    const none = sprint
-      ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
+    const none = noSprintNow ? "No sprint is running now, and this box shows the current sprint only."
+      : sprint ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
       : "No free tasks right now.";
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
