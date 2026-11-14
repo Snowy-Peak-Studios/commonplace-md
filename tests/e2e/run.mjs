@@ -204,6 +204,10 @@ const inbox = await page.evaluate(() => ({
 check(inbox.props?.includes("owner") && inbox.props.includes("github"), "Inbox shows its properties");
 check(inbox.missing === 0, "no missing links on the Inbox: " + inbox.missing);
 await page.waitForSelector(".suggest-list a.suggest-name", { timeout: 15000 }).catch(() => {});
+const inboxBoxes = await page.evaluate(() => ({
+  all: document.querySelectorAll(".preview .suggest").length, inText: document.querySelectorAll(".note-body .suggest").length,
+}));
+check(inboxBoxes.all === 1 && inboxBoxes.inText === 1, "the inbox's box comes from the ```top-tasks block in its text, and only once: " + JSON.stringify(inboxBoxes));
 await shot("2-inbox-desktop");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.

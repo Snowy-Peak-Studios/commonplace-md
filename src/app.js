@@ -859,6 +859,8 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
+  // An inbox holds its box as a ```top-tasks block; an older inbox without one still shows it on top.
+  const ownBox = !!body.querySelector(".top-tasks-block");
   fillTopTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
@@ -874,7 +876,7 @@ function renderPreview() {
   const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
   fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? commitsBox(f, props) : null, sprint,
     frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
-    isInbox(f.repo, f.path) ? inboxBox(f) : "", body);
+    isInbox(f.repo, f.path) && !ownBox ? inboxBox(f) : "", body);
 }
 
 // ---- a task's fields as a form (the project's task setup) ----
@@ -1374,23 +1376,29 @@ async function suggestSprints(repo, tree) {
 /** Who the page's box claims tasks for: its `owner` property, else the signed-in GitHub user. */
 const boxOwner = (props) => String(props.owner ?? "").trim() || store.get("user")?.login || "";
 
-/** The inbox's box, over its text: its `areas` property limits the tasks, its `owner` is who Claim claims them for. */
+/** A page's `areas` property, as it's written. */
+const pageAreas = (props) => Array.isArray(props.areas) ? props.areas.map(String) : listProp(props.areas).length ? [String(props.areas)] : [];
+
+/** The box over an inbox that has no ```top-tasks block: its `areas` property limits the tasks, its `owner` is who Claim claims them for. */
 function inboxBox(f) {
   const props = noteProps(f.text);
-  const shown = Array.isArray(props.areas) ? props.areas.map(String) : listProp(props.areas).length ? [String(props.areas)] : [];
-  return suggestBox(f.repo, { areas: listProp(props.areas), shown, who: boxOwner(props) });
+  const shown = pageAreas(props);
+  return suggestBox(f.repo, { areas: listProp(shown), shown, who: boxOwner(props) });
 }
 
 /**
- * Each ```top-tasks block on the page becomes the same box, with its own `areas` and `count` lines; the page's
- * `owner` property (or the signed-in user) is who it claims for. In a repo without tasks, the block's code stays.
+ * Each ```top-tasks block on the page becomes the same box, with its own `areas` and `count` lines (without an
+ * `areas` line, the page's `areas` property); the page's `owner` property (or the signed-in user) is who it claims
+ * for. In a repo without tasks, the block's code stays.
  */
 function fillTopTasks(root, f) {
   const blocks = root.querySelectorAll(".top-tasks-block");
   if (!blocks.length) return;
-  const who = boxOwner(noteProps(f.text));
+  const props = noteProps(f.text);
+  const who = boxOwner(props);
   for (const el of blocks) {
-    const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
+    const own = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
+    const shown = own.length ? own : pageAreas(props);
     const box = suggestBox(f.repo, { areas: listProp(shown), shown, who, count: Number(el.dataset.count) || TOP_TASKS_COUNT });
     if (box) el.replaceWith(box);
   }

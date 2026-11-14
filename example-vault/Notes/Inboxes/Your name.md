@@ -9,7 +9,10 @@ areas: [Sharing, Notes]
 
 One inbox per person: copy this note, name it after yourself, and put your GitHub login in `github`. When you're signed in with that login, the Inbox button opens this note instead of the shared [[Inbox]].
 
-Above this text are the top three free tasks to start, from `Tasks/`. The `areas` property above keeps only the tasks in those areas; take it out to see every area.
+The box below (the ` ```top-tasks ` block) shows the top three free tasks to start, from `Tasks/`. The `areas` property above keeps only the tasks in those areas; take it out to see every area.
+
+```top-tasks
+```
 
 ## New tasks
 
