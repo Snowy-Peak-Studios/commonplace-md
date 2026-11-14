@@ -40,7 +40,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
 - **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
-- **Commits:** a task lists the commits whose message starts with its ID, from its repo and any others it names, each linking to GitHub ([more](#task-fields)).
+- **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](#task-fields)).
 - **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
@@ -253,11 +253,16 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 - The parent picker lists the tasks by ID and name (type either). A task can't be its own parent, or sit under one of its own subtasks.
 - On the board, a base can group by the parent: the example vault's *By parent* view does (`groupBy: part_of`).
 
-**Commits:** a task with an `id` lists the commits whose message starts with it (`T-6: ...`, or `T-5, T-6: ...` for several tasks), the newest first, each linking to GitHub.
+**Commits:** a task lists the commits in its `commits` property, the newest first, each linking to GitHub. The example vault's *Get set up* has two. The app reads them from the note, so it asks GitHub for nothing.
 
-- They're found with GitHub's commit search in the vault's repo. To look in other repos too, name them on the task: `commits_in: [you/your-app]`.
-- The search covers each repo's default branch only, and can lag a little behind a push.
-- It's one search when the task is opened, kept until the vault's branch has a new commit, so it costs little. GitHub allows 30 searches a minute, apart from the other calls.
+A GitHub Action fills them in by itself. After each push, it adds every commit whose message starts with a task's ID (`T-6: ...`, or `T-5, T-6: ...` for several tasks) to that task, as one line: `"[abc1234](https://github.com/you/notes/commit/...) T-6: the first line"`. To set it up in the repo that holds your vault:
+
+1. Copy [`tools/task-commits/task-commits.yml`](tools/task-commits/task-commits.yml) to `.github/workflows/task-commits.yml`, with your vault's branch in it, and [`tools/task-commits/task_commits.py`](tools/task-commits/task_commits.py) to `.github/task_commits.py`.
+2. To fill in the tasks you already have, run `python .github/task_commits.py --all` once at the repo's root, then commit.
+
+- It adds its own commit after each push that has a task's ID, so pull before your next push.
+- Commits made from the app (a save, a claim, a field change) are left out, and so is a push made only of them: those cost no Actions minutes.
+- It sees the repo it runs in. Commits in other repos can still go in by hand, as a line like the ones above or a bare commit address.
 
 **Sprints:** a sprint is a note in the sprints folder (`Sprints/` unless the setup says otherwise) with `start`, `end` and `goal`; a task joins it with `sprint: "[[Sprint 12]]"`.
 
@@ -541,6 +546,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `vendor/vendor.js` | Third-party code in one bundled file, made by `tools/vendor` |
 | `vendor/mermaid.min.js` | Mermaid, copied by `tools/vendor`; loaded only when a page has a diagram |
 | `example-vault/` | The example vault to copy into a notes repo |
+| `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
 

@@ -1,0 +1,39 @@
+# Adds each pushed commit whose message starts with a task's ID (`T-12: ...`) to that task's `commits`
+# property, so Commonplace.md shows it on the task's page. Copy this file to `.github/workflows/` and
+# `task_commits.py` to `.github/task_commits.py` in the repo that holds your vault.
+#
+# Its own commit is pushed with the workflow's token, which doesn't start another run. A push made from the
+# app (a save, a claim) is skipped before the job starts, so it costs no Actions minutes.
+name: Task commits
+
+on:
+  push:
+    branches: [main] # your vault's branch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: task-commits
+  cancel-in-progress: false
+
+jobs:
+  add:
+    if: ${{ !endsWith(github.event.head_commit.message, 'from Commonplace.md') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add the commits to their tasks
+        run: python3 .github/task_commits.py --event "$GITHUB_EVENT_PATH"
+      - name: Commit and push
+        run: |
+          if git diff --quiet; then echo "No task to update."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898341+github-actions[bot]@users.noreply.github.com"
+          git commit -qam "Task commits: add the commits just pushed to their tasks"
+          for i in 1 2 3; do
+            git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep 5
+          done
+          exit 1

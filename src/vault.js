@@ -698,44 +698,24 @@ export function sprintTasks(notes, path, { setup = null, resolve }) {
 
 // ---- a task's commits ----
 
-/** The property a task names other repos in, whose commits carry its ID: `commits_in: [owner/repo]`. */
-export const COMMITS_PROP = "commits_in";
-const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
+const COMMIT_LINK = /^\[([^\]]*)\]\((https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/commit\/([0-9a-f]{7,40}))\)\s*(.*)$/i;
+const COMMIT_URL = /^(https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/commit\/([0-9a-f]{7,40}))\s*(.*)$/i;
 
 /**
- * The repos a task's commits are looked for in: the vault's own ("owner/repo"), then those the task names
- * in `commits_in` (as "owner/repo" or a github.com address), each once, in lower case.
+ * A task's `commits` property as a list, the newest first: each line is
+ * `[abc1234](https://github.com/owner/repo/commit/<sha>) the first line of the message` (as the Task
+ * commits Action writes them, oldest first), or a bare commit address. Anything else is left out.
+ * Resolves to [{ short, url, repo, title }], with `repo` in lower case.
  */
-export function commitRepos(own, value) {
-  const out = [String(own).toLowerCase()];
-  for (const v of listProp(value)) {
-    const name = v.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$|\/+$/g, "");
-    if (REPO_NAME.test(name) && !out.includes(name)) out.push(name);
+export function taskCommitLinks(value) {
+  const list = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
+  const out = [];
+  for (const v of list) {
+    const s = String(v ?? "").trim();
+    let m = COMMIT_LINK.exec(s);
+    if (m) { out.push({ short: m[4].slice(0, 7), url: m[2], repo: m[3].toLowerCase(), title: m[5].trim() }); continue; }
+    m = COMMIT_URL.exec(s);
+    if (m) out.push({ short: m[3].slice(0, 7), url: m[1], repo: m[2].toLowerCase(), title: m[4].trim() });
   }
-  return out;
-}
-
-const ID_RUN = /^\s*([A-Za-z][A-Za-z0-9]*-\d+(?:(?:\s*[,&/]\s*|\s+and\s+)[A-Za-z][A-Za-z0-9]*-\d+)*)(?![\w-])/;
-
-/** Whether a commit's message starts with the task's ID: `C-12: ...`, or `C-11, C-12: ...` for several tasks. */
-export function commitIsFor(message, id) {
-  const want = String(id ?? "").trim().toLowerCase();
-  const m = want && ID_RUN.exec(String(message ?? "").split("\n")[0]);
-  return !!m && m[1].toLowerCase().split(/\s*[,&/]\s*|\s+and\s+/).includes(want);
-}
-
-/**
- * A commit search's items as a task's commit list: only the commits whose message starts with `id`, each
- * once, the newest first, as { sha, short, title, date, url, repo }.
- */
-export function taskCommits(items, id) {
-  const seen = new Set();
-  return (items ?? [])
-    .filter((c) => c?.sha && commitIsFor(c.commit?.message, id) && !seen.has(c.sha) && seen.add(c.sha))
-    .map((c) => ({
-      sha: c.sha, short: c.sha.slice(0, 7), title: String(c.commit.message).split("\n")[0].trim(),
-      date: c.commit.committer?.date || c.commit.author?.date || "", url: c.html_url || "",
-      repo: String(c.repository?.full_name ?? "").toLowerCase(),
-    }))
-    .sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+  return out.reverse();
 }

@@ -32,7 +32,7 @@ A task can sit under another one: its **Parent task** (`part_of`) links to it. [
 
 ## Commits
 
-A task lists the commits whose message starts with its ID, like `T-6: the welcome note says how to get set up`, each linking to GitHub. They're found in this repo; to look in another one too, add `commits_in: [you/your-app]` to the task. This example's commits don't carry its tasks' IDs, so its tasks show none.
+A task lists the commits in its `commits` property, each linking to GitHub: [[Get set up]] has two. With the Task commits GitHub Action in your notes repo (the README says how), every commit whose message starts with a task's ID, like `T-6: the welcome note says how to get set up`, is added to that task by itself after each push.
 
 ## Sprints
 

@@ -6,7 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
-  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, commitRepos, commitIsFor, taskCommits,
+  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, taskCommitLinks,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -473,29 +473,21 @@ test("a sprint's tasks by status in the setup's order, with how many are done an
   assert.equal(sprintTasks(notes.slice(2, 3), "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) }).points, null);
 });
 
-test("a task's commits: the repos to search, and the messages that start with its ID", () => {
-  assert.deepEqual(commitRepos("Me/Vault", undefined), ["me/vault"]);
-  assert.deepEqual(commitRepos("me/vault", ["Me/App", "https://github.com/me/site.git", "me/vault", "not a repo", ""]),
-    ["me/vault", "me/app", "me/site"]);
-  assert.deepEqual(commitRepos("me/vault", "me/app, me/docs"), ["me/vault", "me/app", "me/docs"]);
-  assert.equal(commitIsFor("C-12: the README folds", "C-12"), true);
-  assert.equal(commitIsFor("c-12: lower case", "C-12"), true);
-  assert.equal(commitIsFor("C-11, C-12: two new tasks", "C-12"), true);
-  assert.equal(commitIsFor("C-11 and C-12: two", "C-12"), true);
-  assert.equal(commitIsFor("C-12: another task", "C-1"), false);
-  assert.equal(commitIsFor("C-12x: not an ID", "C-12"), false);
-  assert.equal(commitIsFor("Fix C-12 later", "C-12"), false);
-  assert.equal(commitIsFor("Merge\n\nC-12: in the body", "C-12"), false);
-  assert.equal(commitIsFor("C-12: anything", ""), false);
-  const items = [
-    { sha: "a".repeat(40), html_url: "u1", commit: { message: "C-5: older\n\nbody", committer: { date: "2026-11-13T10:00:00.000+01:00" } }, repository: { full_name: "Me/Vault" } },
-    { sha: "b".repeat(40), html_url: "u2", commit: { message: "C-5: newer", committer: { date: "2026-11-14T08:30:00.000+00:00" } }, repository: { full_name: "me/app" } },
-    { sha: "a".repeat(40), html_url: "u1", commit: { message: "C-5: older", committer: { date: "2026-11-13T10:00:00.000+01:00" } } },
-    { sha: "c".repeat(40), html_url: "u3", commit: { message: "C-50: another task", committer: { date: "2026-11-15T00:00:00Z" } } },
-  ];
-  assert.deepEqual(taskCommits(items, "C-5"), [
-    { sha: "b".repeat(40), short: "bbbbbbb", title: "C-5: newer", date: "2026-11-14T08:30:00.000+00:00", url: "u2", repo: "me/app" },
-    { sha: "a".repeat(40), short: "aaaaaaa", title: "C-5: older", date: "2026-11-13T10:00:00.000+01:00", url: "u1", repo: "me/vault" },
+test("a task's commits, from its commits property, the newest first", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  assert.deepEqual(taskCommitLinks([
+    `[aaaaaaa](https://github.com/Me/Vault/commit/${a}) T-5: older`,
+    `https://github.com/me/app/commit/${b}`,
+    "not a commit",
+    "[x](https://example.com/commit/abcdef1) elsewhere",
+    null,
+  ]), [
+    { short: "bbbbbbb", url: `https://github.com/me/app/commit/${b}`, repo: "me/app", title: "" },
+    { short: "aaaaaaa", url: `https://github.com/Me/Vault/commit/${a}`, repo: "me/vault", title: "T-5: older" },
   ]);
-  assert.deepEqual(taskCommits(undefined, "C-5"), []);
+  assert.deepEqual(taskCommitLinks(`[aaaaaaa](https://github.com/me/vault/commit/${a}) one (with brackets) [and more]`).map((c) => c.title),
+    ["one (with brackets) [and more]"]);
+  assert.deepEqual(taskCommitLinks(undefined), []);
+  assert.deepEqual(taskCommitLinks(""), []);
 });

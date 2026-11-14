@@ -60,13 +60,8 @@ const browser = await puppeteer.launch({
   userDataDir: OUT + "/profile",
   args: ["--no-first-run", "--no-default-browser-check"],
 });
-/** The commit search's answer: two commits for T-6 (one in another repo), and one for T-60 that isn't. */
+/** GitHub searches the app makes: a task's commits come from its own `commits` property, never a search. */
 const searches = [];
-const FAKE_COMMITS = [
-  { sha: "1".repeat(40), html_url: "https://github.com/x/1", commit: { message: "T-6: the welcome note says how to get set up", committer: { date: "2026-03-02T10:00:00Z" } }, repository: { full_name: `${OWNER}/${REPO}` } },
-  { sha: "2".repeat(40), html_url: "https://github.com/x/2", commit: { message: "T-60: another task", committer: { date: "2026-03-05T10:00:00Z" } }, repository: { full_name: `${OWNER}/${REPO}` } },
-  { sha: "3".repeat(40), html_url: "https://github.com/x/3", commit: { message: "T-5, T-6: an app the tasks need\n\nMore words.", committer: { date: "2026-03-04T10:00:00Z" } }, repository: { full_name: "someone/the-app" } },
-];
 const page = await browser.newPage();
 page.on("dialog", (d) => d.accept());
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
@@ -95,11 +90,7 @@ page.on("request", async (req) => {
   }
   // Any other write is refused here, so the check never changes the repo (GraphQL's POST only reads).
   if (!["GET", "HEAD"].includes(req.method()) && url !== `${API}/graphql`) return req.respond(json(403, { message: "Blocked by the browser check." }));
-  // GitHub's commit search, answered here: the example vault's commits carry no task IDs.
-  if (req.method() === "GET" && url.startsWith(`${API}/search/commits`)) {
-    searches.push(new URL(url).searchParams.get("q"));
-    return req.respond(json(200, { total_count: FAKE_COMMITS.length, items: FAKE_COMMITS }));
-  }
+  if (req.method() === "GET" && url.startsWith(`${API}/search/commits`)) searches.push(url);
   // No vaults found by themselves: the check sees only the example vault, whatever else the token can open.
   if (req.method() === "GET" && url.startsWith(`${API}/user/repos`)) return req.respond(json(200, []));
   if (fakeHead && req.method() === "GET" && url.startsWith(`${REPO_API}/commits/`)) {
@@ -791,18 +782,19 @@ const subs = await page.evaluate(() => ({
 }));
 check(subs.count === "2 of 3 done" && subs.done === "2" && subs.width === "67%", "with a bar of how many are done: " + JSON.stringify(subs));
 check(/^T-3.*Try the app on a phone.*In Progress$/.test(subs.rows[0] ?? ""), "the open one first, with its ID and status: " + subs.rows[0]);
-check(await until(() => document.querySelectorAll(".commits .st-list li").length === 2, 15000), "the task lists its two commits, found by its ID");
+check(await until(() => document.querySelectorAll(".commits .st-list li").length === 2, 15000), "the task lists the two commits in its commits property");
 const commits = await page.evaluate(() => ({
   count: document.querySelector(".commits .st-count")?.textContent,
   rows: [...document.querySelectorAll(".commits .st-list li")].map((li) => li.textContent),
   href: document.querySelector(".commits .st-list a")?.getAttribute("href"),
   below: !!document.querySelector(".subtasks + .commits"),
+  inProps: [...document.querySelectorAll(".props, .properties")].some((p) => /\bcommits\b/.test(p.textContent)),
 }));
-check(commits.count === "2 commits" && commits.href === "https://github.com/x/3" && commits.below
-  && /^3333333T-5, T-6: an app the tasks needthe-app/.test(commits.rows[0]) && /^1111111T-6: the welcome note/.test(commits.rows[1]),
-  "the newest first, linking to GitHub, another repo's named, below the subtasks: " + JSON.stringify(commits));
-const t6 = searches.filter((q) => q.startsWith('"T-6"'));
-check(t6.length === 1 && t6[0] === `"T-6" repo:${`${OWNER}/${REPO}`.toLowerCase()}`, "one search, in the vault's repo: " + JSON.stringify(t6));
+check(commits.count === "2 commits" && commits.below && !commits.inProps
+  && commits.href === `https://github.com/${OWNER}/${REPO}/commit/1b98fa34d64a84c025611233b13b3996b5cd168e`
+  && /^1b98fa3Sprints:/.test(commits.rows[0]) && /^ae4a0adParent tasks and subtasks:/.test(commits.rows[1]),
+  "the newest first, linking to GitHub, below the subtasks and not again in the properties: " + JSON.stringify(commits));
+check(searches.length === 0, "with no search on GitHub: " + JSON.stringify(searches));
 await shot("8f-subtasks");
 await page.setViewport({ width: 375, height: 812 });
 await wait(300);
