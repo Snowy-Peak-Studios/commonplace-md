@@ -1817,10 +1817,10 @@ function discoverVaults(now = false) {
 }
 
 /**
- * Looks for new vaults and says which were added. Quiet when there's none, and when GitHub can't be
- * reached unless asked (`now`): then it says why and resolves to null.
+ * Looks for new vaults (at once when `now`) and says which were added. Quiet when there's none. When
+ * GitHub can't be reached it's quiet too, unless `loud`: then it says why and resolves to null.
  */
-async function lookForVaults(now = false) {
+async function lookForVaults(now = false, loud = now) {
   try {
     const added = await discoverVaults(now);
     if (added.length) {
@@ -1828,7 +1828,7 @@ async function lookForVaults(now = false) {
     }
     return added;
   } catch (e) {
-    if (!now) return [];
+    if (!loud) return [];
     toast(e.message, "error");
     return null;
   }
@@ -1892,7 +1892,7 @@ function showWelcome(joining = null) {
     // The welcome page takes no place in the history: Back must not lead to it once connected.
     // A new device without an invite has no repos yet: the next step is adding one.
     if (!joining) {
-      await lookForVaults(true);
+      await lookForVaults(true, false);
       return void redirect(app.repos.length ? "#/" : "#/settings?add=1");
     }
     const r = addRepo(joining);

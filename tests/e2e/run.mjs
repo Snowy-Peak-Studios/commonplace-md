@@ -632,6 +632,8 @@ other.on("request", (req) => {
   const url = req.url();
   if (url.startsWith(API + "/") && req.method() !== "OPTIONS") otherAsked.push(url);
   if (url === `${API}/user` && req.method() === "GET") return req.respond(json(200, { login: "someone", avatar_url: "" }));
+  if (url.startsWith(`${API}/user/repos`) && req.method() === "GET") return req.respond(json(200, [{ owner: { login: "someone" }, name: "plain", pushed_at: "t", permissions: { push: true } }]));
+  if (url === `${API}/graphql` && req.method() === "POST") return req.respond(json(200, { data: { r0: { object: null } } }));
   if (url.startsWith(`${API}/repos/`) && req.method() === "GET") return req.respond(json(404, { message: "Not Found" }));
   req.continue();
 });
@@ -643,12 +645,42 @@ check(await until(() => location.hash === "#/settings?add=1" && !!document.query
   "with no invite, connecting leads to Settings with a new repo to fill in");
 check(await other.$eval(".repo-card[open] [name=owner]", (i) => i.value).catch(() => null) === "someone", "its owner starts as the signed-in login");
 check(!otherAsked.some((u) => u.startsWith(`${API}/repos/`)), "the app asked GitHub about no repos: " + JSON.stringify(otherAsked));
+check(otherAsked.some((u) => u.startsWith(`${API}/user/repos`)) && otherAsked.includes(`${API}/graphql`), "it looked for vaults on GitHub (one listing, one GraphQL request)");
+check(!(await other.$eval("#toast", (t) => t.classList.contains("error")).catch(() => false)), "with no error shown");
 await other.screenshot({ path: `${OUT}/12-new-device-settings.png` });
 await other.goto(BASE + "#/", { waitUntil: "networkidle0" });
 check(await other.$eval(".empty h2", (e) => e.textContent === "No notes repo yet").catch(() => false), "and the start page says how to add one");
 check(await storedRepos(other).then((r) => r == null || (Array.isArray(r) && r.length === 0)), "the device has no repos");
 await other.screenshot({ path: `${OUT}/12b-new-device-empty.png` });
 await otherContext.close();
+
+// 10d2. A new device without an invite, with a vault on GitHub: a repo with a .commonplace.json is added by itself.
+const foundContext = await browser.createBrowserContext();
+const found = await foundContext.newPage();
+await found.setRequestInterception(true);
+found.on("request", (req) => {
+  const url = req.url();
+  if (url === `${API}/user` && req.method() === "GET") return req.respond(json(200, { login: "someone", avatar_url: "" }));
+  if (url.startsWith(`${API}/user/repos`) && req.method() === "GET") {
+    return req.respond(json(200, [{ owner: { login: OWNER }, name: REPO, default_branch: BRANCH, pushed_at: "t", permissions: { push: true } }]));
+  }
+  if (url === `${API}/graphql` && req.method() === "POST") {
+    const marker = { label: "Found vault", folder: FOLDER, home: "Home.md", inbox: "Notes/Inbox.md", vault: true };
+    return req.respond(json(200, { data: { r0: { object: { text: JSON.stringify(marker) } } } }));
+  }
+  req.continue();
+});
+await found.setViewport({ width: 1280, height: 860 });
+await found.goto(BASE, { waitUntil: "networkidle0" });
+await found.type(".welcome input", "not-a-real-token");
+await found.click(".welcome .btn.primary");
+check(await until(() => !location.hash.startsWith("#/settings") && (localStorage.getItem("commonplace:repos") || "").includes("Found vault"), 10000, found),
+  "a vault with a .commonplace.json is found and added when a new device connects");
+const foundRepos = await storedRepos(found);
+check(foundRepos?.length === 1 && foundRepos[0].label === "Found vault" && foundRepos[0].folder === FOLDER && foundRepos[0].branch === BRANCH && foundRepos[0].vault === true,
+  "with the settings in the file: " + JSON.stringify(foundRepos));
+await found.screenshot({ path: `${OUT}/12c-new-device-found-vault.png` });
+await foundContext.close();
 
 // 10e. A device set up by an older version: its notes-app: settings move to commonplace:, vault settings get notes and template.
 const oldContext = await browser.createBrowserContext();

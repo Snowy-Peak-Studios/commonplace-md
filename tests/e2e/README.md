@@ -12,7 +12,7 @@
 - CSV tables: the reading list, and editing and saving a test table;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;
-- a new device without an invite (sent to add a repo), and an older device whose `notes-app:` settings move to `commonplace:`.
+- a new device without an invite (it looks for vaults on GitHub quietly, then is sent to add a repo), one that finds a vault through a `.commonplace.json` and gets it added, and an older device whose `notes-app:` settings move to `commonplace:`.
 
 It only reads from GitHub: every save (`PUT`) is caught and answered by the script, and a fake
 `Data/Test table.csv` is added to the tree for the CSV checks.
