@@ -8,7 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
-import { createEditor, setEditorText, createMergeView } from "./editor.js";
+import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
 import { store, upgradeRepo } from "./store.js";
@@ -60,16 +60,23 @@ const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const isPhone = () => !matchMedia("(min-width: 861px)").matches;
 const isWide = () => matchMedia("(min-width: 1180px)").matches;
 
-const TEXT_KINDS = { md: "md", markdown: "md", csv: "csv", tsv: "csv", base: "base" };
-const BINARY = /\.(pdf|zip|7z|gz|tar|mp3|mp4|wav|ogg|mov|webm|ttf|otf|woff2?|exe|dll|psd|blend|ico)$/i;
+const TEXT_KINDS = { md: "md", markdown: "md", csv: "csv", tsv: "csv", base: "base", pdf: "pdf" };
+// Files that aren't text: offered as a download. Anything else opens as text (and turns out binary if it holds a NUL).
+const BINARY = new RegExp("\\.(zip|7z|rar|gz|tgz|bz2|xz|tar|jar|apk|dmg|iso|msi|exe|dll|so|dylib|bin|wasm|class|pyc"
+  + "|mp3|m4a|aac|flac|wav|ogg|opus|mid|mp4|m4v|mov|webm|mkv|avi|wmv|ttf|otf|woff2?|eot"
+  + "|doc|docx|xls|xlsx|xlsm|ppt|pptx|odt|ods|odp|epub|psd|ai|sketch|fig|xcf|kra|blend|fbx|glb|ico|sqlite|db|pck)$", "i");
 function kindOf(path) {
   if (isImagePath(path)) return "image";
   if (BINARY.test(path)) return "binary";
   return TEXT_KINDS[(/\.(\w+)$/.exec(path)?.[1] || "").toLowerCase()] || "text";
 }
-const iconFor = (path) => ({ md: "file", csv: "table", base: "table", image: "image" })[kindOf(path)] || "blank";
+function iconFor(path) {
+  const kind = kindOf(path);
+  if (kind === "text") return hasLanguage(path) ? "code" : "file";
+  return { md: "file", csv: "table", base: "table", image: "image", pdf: "file" }[kind] || "blank";
+}
 /** Files the app shows but never edits. */
-const viewOnly = (kind) => kind === "image" || kind === "binary" || kind === "base";
+const viewOnly = (kind) => kind === "image" || kind === "binary" || kind === "pdf" || kind === "base";
 
 function emptyState(iconName, title, text, ...actions) {
   return h("div", { class: "empty" }, icon(iconName, "big"), h("h2", {}, title), text ? h("p", {}, text) : null, ...actions);
@@ -631,10 +638,10 @@ async function openFile(repo, tree, path, heading, nav) {
   if (!tree.files.has(path)) return showProblem("No such file", `There's no ${path} in ${repo.label}.`);
   const kind = kindOf(path);
   markActive(path);
-  if (kind === "image" || kind === "binary") {
+  if (kind === "image" || kind === "binary" || kind === "pdf") {
     app.file = { repo, path, kind, sha: tree.files.get(path) };
     renderHeader();
-    if (kind === "binary") return showMain(emptyState("blank", baseName(path), "The app can't show this kind of file."));
+    if (kind !== "image") return showMain(fileView(repo, path, tree.files.get(path), kind));
     const img = h("img", { class: "image-view", alt: path });
     showMain(h("div", { class: "image-wrap" }, img));
     blobUrl(repo, tree.files.get(path), path).then((url) => { img.src = url; }, (e) => toast(e.message, "error"));
@@ -648,6 +655,12 @@ async function openFile(repo, tree, path, heading, nav) {
     return;
   }
   if (nav !== app.nav) return;
+  // A file with an unknown name that turns out not to be text: offer it as a download instead.
+  if (kind === "text" && data.text.includes("\u0000")) {
+    app.file = { repo, path, kind: "binary", sha: data.sha };
+    renderHeader();
+    return showMain(fileView(repo, path, data.sha, "binary"));
+  }
   app.file = { repo, path, kind, sha: data.sha, saved: data.text, text: data.text, dirty: false };
   if (tree.files.get(path) !== data.sha) {
     tree.files.set(path, data.sha);
@@ -658,6 +671,28 @@ async function openFile(repo, tree, path, heading, nav) {
   renderFile();
   checkDraft();
   if (heading) scrollToHeading(heading);
+}
+
+/**
+ * A PDF shows in the browser's own viewer where it has one in a page (not on phones, whose browsers
+ * only open or download it); any other file the app can't show is offered as a download.
+ */
+function fileView(repo, path, sha, kind) {
+  const name = baseName(path);
+  const download = h("a", { class: "btn primary", download: name, "aria-disabled": "true" }, icon("download"), "Download");
+  const open = kind === "pdf"
+    ? h("a", { class: "btn", target: "_blank", rel: "noopener", "aria-disabled": "true" }, icon("external"), "Open in a new tab")
+    : null;
+  const frame = kind === "pdf" && navigator.pdfViewerEnabled && !isPhone() ? h("iframe", { class: "pdf-view", title: name }) : null;
+  blobUrl(repo, sha, path).then((url) => {
+    for (const a of [download, open]) if (a) { a.href = url; a.removeAttribute("aria-disabled"); }
+    if (frame) frame.src = url;
+  }, (e) => toast(`Couldn't load ${name}: ${e.message}`, "error"));
+  if (frame) return h("div", { class: "pdf-wrap" }, h("div", { class: "file-actions" }, open, download), frame);
+  const text = kind === "pdf"
+    ? "This browser can't show a PDF inside the page. Open it in a new tab, or download it."
+    : "The app can't show this kind of file. Download it to open it on this device.";
+  return emptyState(kind === "pdf" ? "file" : "blank", name, text, h("div", { class: "file-actions" }, open, download));
 }
 
 function renderFile() {
@@ -692,6 +727,7 @@ function applyMode(focus = false) {
       onChange: onTextChanged,
       resolve: (target) => tree.index.resolve(target, f.path),
       isMarkdown: f.kind === "md",
+      language: f.kind === "text" ? languageFor(f.path) : null,
       vault: f.repo.vault && f.kind === "md",
       readOnly: !canWrite(f.repo),
     });
@@ -1137,8 +1173,9 @@ function propertiesBox(raw, env, skip = null) {
 const blobUrls = new Map();
 function blobUrl(repo, sha, path = "") {
   const key = `${repo.id}:${sha}`;
-  // GitHub sends the bytes untyped; browsers guess PNG or JPEG, but draw an SVG only when it says it is one.
-  const typed = (b) => (/\.svg$/i.test(path) ? new Blob([b], { type: "image/svg+xml" }) : b);
+  // GitHub sends the bytes untyped; browsers guess PNG or JPEG, but draw an SVG (or show a PDF) only when it says it is one.
+  const type = /\.svg$/i.test(path) ? "image/svg+xml" : /\.pdf$/i.test(path) ? "application/pdf" : "";
+  const typed = (b) => (type ? new Blob([b], { type }) : b);
   if (!blobUrls.has(key)) {
     blobUrls.set(key, gh.readBlob(repo, sha).then((b) => URL.createObjectURL(typed(b)), (e) => { blobUrls.delete(key); throw e; }));
   }
@@ -1559,12 +1596,18 @@ const columnName = (c) => {
   return s;
 };
 
+/** A big table shows this many rows at first, and as many more at each press of Show more. */
+const TABLE_ROWS = 500;
+
 function renderTable() {
   const f = app.file;
-  f.csv ??= parseCsv(f.text);
+  f.csv ??= parseCsv(f.text, /\.tsv$/i.test(f.path) ? "\t" : null);
   const data = f.csv;
   if (!data.rows.length) data.rows.push(["Column 1"]);
-  const width = Math.max(1, ...data.rows.map((r) => r.length));
+  f.tableRows ??= TABLE_ROWS;
+  const shown = Math.min(data.rows.length, f.tableRows);
+  const showMore = () => { f.tableRows += TABLE_ROWS; renderTable(); };
+  const width = data.rows.reduce((w, r) => Math.max(w, r.length), 1);
   const pane = f.dom.preview;
   const keepScroll = pane.querySelector(".table-scroll");
   const scroll = keepScroll ? [keepScroll.scrollLeft, keepScroll.scrollTop] : null;
@@ -1590,14 +1633,19 @@ function renderTable() {
     td.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" || e.shiftKey) return;
       e.preventDefault();
-      const below = pane.querySelector(`td[data-r="${r + 1}"][data-c="${c}"]`);
-      below ? below.focus() : addRow(true);
+      if (r + 1 >= data.rows.length) return addRow(true);
+      if (r + 1 >= f.tableRows) showMore();
+      pane.querySelector(`td[data-r="${r + 1}"][data-c="${c}"]`)?.focus();
     });
     return td;
   };
   const addRow = (focus) => {
+    const allShown = shown === data.rows.length;
     data.rows.push(Array(width).fill(""));
+    // The new row is at the end: shown at once when the whole table is, else with a note.
+    if (allShown) f.tableRows = Math.max(f.tableRows, data.rows.length);
     rerender();
+    if (!allShown) return toast(`Row ${data.rows.length} added at the end of the table`, "ok");
     if (focus) pane.querySelector(`td[data-r="${data.rows.length - 1}"][data-c="0"]`)?.focus();
   };
   const addColumn = () => {
@@ -1611,7 +1659,7 @@ function renderTable() {
       data.rows.forEach((row) => row.splice(c, 1));
       rerender();
     }) : null))));
-  const body = data.rows.map((_, r) => h("tr", { class: r === 0 ? "header-row" : "" },
+  const body = data.rows.slice(0, shown).map((_, r) => h("tr", { class: r === 0 ? "header-row" : "" },
     h("th", { class: "rownum" }, h("span", { class: "num" }, String(r + 1)), xButton(`Delete row ${r + 1}`, async () => {
       if (!(await confirmDialog(`Delete row ${r + 1}?`, null, "Delete row", true))) return;
       data.rows.splice(r, 1);
@@ -1624,7 +1672,9 @@ function renderTable() {
       ro ? null : h("button", { class: "btn small", onclick: () => addRow(true) }, icon("rows"), "Add row"),
       ro ? null : h("button", { class: "btn small", onclick: addColumn }, icon("columns"), "Add column"),
       h("span", { class: "note" }, `${data.rows.length} rows · ${width} columns`)),
-    scroller);
+    scroller,
+    shown < data.rows.length ? h("button", { class: "btn small more-rows", onclick: showMore },
+      `Show ${Math.min(TABLE_ROWS, data.rows.length - shown)} more rows (${data.rows.length - shown} not shown yet)`) : null);
   if (scroll) [scroller.scrollLeft, scroller.scrollTop] = scroll;
 }
 

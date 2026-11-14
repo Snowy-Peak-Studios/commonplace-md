@@ -1,0 +1,42 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 435 >>
+stream
+BT
+/F1 24 Tf 1 0 0 1 72 720 Tm (An example PDF) Tj
+/F1 12 Tf 1 0 0 1 72 690 Tm (Commonplace.md shows a PDF inside the page where the browser can,) Tj
+/F1 12 Tf 1 0 0 1 72 674 Tm (and offers to open it in a new tab or to download it everywhere.) Tj
+/F1 12 Tf 1 0 0 1 72 646 Tm (Keep PDFs, scripts, data and other files next to your notes:) Tj
+/F1 12 Tf 1 0 0 1 72 630 Tm (text files open with colours, the rest can be downloaded.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Title (An example PDF) /Producer (Commonplace.md example vault) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+0000000797 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+883
+%%EOF

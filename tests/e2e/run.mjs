@@ -39,6 +39,8 @@ let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
 
 const CSV_PATH = "Data/Test table.csv";
 const CSV_TEXT = 'Name,Price,Note\nApples,3,\nPears,5,"the best, by far"\n';
+const MP3_PATH = "Data/Test song.mp3"; // a file the app can't show: offered as a download
+const MP3_BYTES = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
 const json = (status, body) => ({ status, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(body) });
 
@@ -78,12 +80,15 @@ page.on("request", async (req) => {
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
-  // A CSV file added to the example vault's tree, served from here.
+  // A CSV file and an MP3 added to the example vault's tree, served from here.
   if (url.startsWith(`${REPO_API}/git/trees/`)) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" } });
     const data = await res.json();
-    data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" });
+    data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" }, { path: PRE + MP3_PATH, type: "blob", sha: "mp3sha" });
     return req.respond(json(200, data));
+  }
+  if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
+    return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
   }
   // A note "created" by the New note check: its PUT was answered here, so its GET is too.
   const created = puts.find((p) => !p.body.sha && p.url === url.split("?")[0]);
@@ -139,7 +144,7 @@ check(await backHidden(), "no Back button on the first page (the invite link was
 const realTree = await ghGet(`/repos/${OWNER}/${REPO}/git/trees/${encodeURIComponent(BRANCH)}?recursive=1`);
 const realFiles = realTree.tree.filter((e) => e.type === "blob" && e.path.startsWith(PRE) && !e.path.slice(PRE.length).split("/").some((s) => s.startsWith(".")));
 const treeCount = await page.$$eval("#tree a.file", (a) => a.length);
-check(treeCount === realFiles.length + 1, `tree lists the example vault: ${treeCount} files (${realFiles.length} on GitHub, plus the test CSV)`);
+check(treeCount === realFiles.length + 2, `tree lists the example vault: ${treeCount} files (${realFiles.length} on GitHub, plus the test CSV and MP3)`);
 check(!(await page.$("#tree [data-path^='.']")), "no dot-files in the tree");
 await page.waitForFunction(() => document.querySelector(".embed-page .embed-body")?.innerText.trim().length > 20, { timeout: 10000 }).catch(() => {});
 check(await page.$eval(".embed-page .embed-body", (b) => b.innerText.trim().length > 20).catch(() => false), "![[Task Board#Current goals]] shows that section inside Home");
@@ -442,6 +447,36 @@ const p2 = puts.at(-1);
 check(p2?.text === 'Name,Price,Note\nApples,3,crisp\nPears,5,"the best, by far"\nPlums,,\n', "CSV saves back as CSV: " + JSON.stringify(p2?.text));
 await shot("5-csv");
 
+// 9a. Other kinds of files: a TSV as a table, JSON with colours, a PDF, and a download for the rest.
+await page.goto(at("Data/Pantry.tsv"), { waitUntil: "networkidle0" });
+await page.waitForSelector("table.csv");
+const pantry = await page.$$eval("table.csv tbody tr", (rows) => rows.map((r) => [...r.querySelectorAll("td")].map((td) => td.textContent)));
+check(pantry.length === 5 && pantry[0].length === 4 && pantry[3][0] === "Lentils, red", "a TSV is a table split at the tabs, commas kept in cells: " + JSON.stringify(pantry[3]));
+await page.goto(at("Data/settings.json"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".cm-content");
+const jsonColours = await page.$eval(".cm-content", (c) => new Set([...c.querySelectorAll("span")].map((s) => getComputedStyle(s).color)).size).catch(() => 0);
+check(jsonColours >= 3, `JSON opens as text with colours: ${jsonColours} colours`);
+await shot("5b-json");
+await page.goto(at("Data/word_count.py"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".cm-content");
+check(await page.$$eval(".cm-content span", (s) => s.length).catch(() => 0) > 10, "a Python script has colours too");
+await page.goto(at("Attachments/An example PDF.pdf"), { waitUntil: "networkidle0" });
+await until(() => !!document.querySelector(".file-actions a[download]")?.href.startsWith("blob:"));
+const pdf = await page.evaluate(() => ({
+  download: document.querySelector(".file-actions a[download]")?.getAttribute("download"),
+  frame: document.querySelector("iframe.pdf-view")?.src || null,
+  viewer: navigator.pdfViewerEnabled,
+  open: !!document.querySelector('.file-actions a[target="_blank"][href^="blob:"]'),
+}));
+check(pdf?.download === "An example PDF.pdf" && pdf.open, "a PDF has Download and Open in a new tab: " + JSON.stringify(pdf));
+check(pdf && (pdf.viewer ? pdf.frame?.startsWith("blob:") : pdf.frame === null), "and shows in the page where the browser has a PDF viewer: " + JSON.stringify(pdf));
+await shot("5c-pdf");
+await page.goto(at(MP3_PATH), { waitUntil: "networkidle0" });
+await until(() => !!document.querySelector(".empty .file-actions a[download]")?.href.startsWith("blob:"));
+const mp3 = await page.$eval(".empty .file-actions a[download]", (a) => a.getAttribute("download")).catch(() => null);
+check(mp3 === "Test song.mp3", "a file the app can't show offers a Download: " + mp3);
+check(await page.$eval("#save-btn", (b) => b.hidden), "and has no Save button");
+
 // 9b. Base views: the Task Board's table, checked against the real notes and the real Bases/Tasks.base.
 const gql = async (query) => (await (await fetch(`${API}/graphql`, {
   method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ query }),
@@ -595,6 +630,15 @@ await page.click("#scrim");
 await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".embed-page .embed-body li, .embed-page .embed-body p", { timeout: 10000 }).catch(() => {});
 await shot("7b-home-phone");
+// A phone's browser can't show a PDF in the page: Open in a new tab and Download instead.
+await page.goto(at("Attachments/An example PDF.pdf"), { waitUntil: "networkidle0" });
+check(await until(() => !document.querySelector("iframe.pdf-view") && document.querySelectorAll(".empty .file-actions a[href^='blob:']").length === 2
+  && document.documentElement.scrollWidth <= innerWidth), "a PDF on a phone: Open in a new tab and Download, no frame, no sideways scroll");
+await shot("7c-pdf-phone");
+await page.goto(at("Data/settings.json"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".cm-content");
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "JSON fits a phone's width");
+await shot("7d-json-phone");
 await page.goto(BASE + "#/settings", { waitUntil: "networkidle0" });
 check(await page.$$eval(".repo-card [name=notes], .repo-card [name=template]", (i) => i.map((x) => x.value)).then((v) => JSON.stringify(v) === JSON.stringify(["Notes", "Templates/Note.md"])),
   "Settings shows the repo's New notes folder and Note template");

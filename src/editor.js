@@ -4,7 +4,9 @@ import {
   EditorState, EditorView, StateField, keymap, Decoration, ViewPlugin, WidgetType, MatchDecorator,
   drawSelection, highlightActiveLine, defaultKeymap, history, historyKeymap, indentWithTab,
   searchKeymap, highlightSelectionMatches, syntaxHighlighting, HighlightStyle, markdown, markdownLanguage,
-  MergeView, tags as t, yamlFrontmatter,
+  MergeView, tags as t, yamlFrontmatter, yamlLanguage, StreamLanguage, jsonLanguage, javascriptLanguage,
+  typescriptLanguage, jsxLanguage, tsxLanguage, cssLanguage, htmlLanguage, xmlLanguage, pythonLanguage, shell, toml,
+  properties, powerShell, standardSQL, diff, go, rust, lua, ruby, dockerFile, c, cpp, java, csharp, kotlin,
 } from "../vendor/vendor.js";
 import { findNavBlock, parseWikilink } from "./vault.js";
 import { icon } from "./icons.js";
@@ -80,7 +82,62 @@ const highlight = HighlightStyle.define([
   { tag: t.monospace, fontFamily: "var(--mono)", color: "var(--code)" },
   { tag: [t.processingInstruction, t.meta, t.quote], color: "var(--muted)" },
   { tag: t.list, color: "var(--accent)" },
+  // Code and other text files
+  { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword, t.modifier, t.self, t.tagName], color: "var(--syn-keyword)" },
+  { tag: [t.string, t.special(t.string), t.regexp, t.character], color: "var(--syn-string)" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.unit, t.color], color: "var(--syn-number)" },
+  { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "var(--syn-comment)", fontStyle: "italic" },
+  { tag: [t.propertyName, t.attributeName, t.labelName], color: "var(--syn-property)" },
+  { tag: [t.typeName, t.className, t.namespace, t.standard(t.tagName)], color: "var(--syn-type)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: "var(--syn-function)" },
+  { tag: [t.inserted], color: "var(--syn-string)" },
+  { tag: [t.deleted, t.invalid], color: "var(--danger)" },
 ]);
+
+// The older, simpler language modes, each made into a language once, the first time it's needed.
+const streamLanguages = new Map();
+const legacy = (mode) => () => {
+  if (!streamLanguages.has(mode)) streamLanguages.set(mode, StreamLanguage.define(mode));
+  return streamLanguages.get(mode);
+};
+const LANGUAGES = {
+  json: () => jsonLanguage, jsonc: () => jsonLanguage, json5: () => jsonLanguage, geojson: () => jsonLanguage,
+  ipynb: () => jsonLanguage, webmanifest: () => jsonLanguage,
+  js: () => javascriptLanguage, mjs: () => javascriptLanguage, cjs: () => javascriptLanguage,
+  ts: () => typescriptLanguage, mts: () => typescriptLanguage, cts: () => typescriptLanguage,
+  jsx: () => jsxLanguage, tsx: () => tsxLanguage,
+  css: () => cssLanguage, scss: () => cssLanguage, less: () => cssLanguage,
+  html: () => htmlLanguage, htm: () => htmlLanguage, vue: () => htmlLanguage, svelte: () => htmlLanguage,
+  xml: () => xmlLanguage, svg: () => xmlLanguage, plist: () => xmlLanguage, csproj: () => xmlLanguage, xaml: () => xmlLanguage,
+  py: () => pythonLanguage, pyw: () => pythonLanguage,
+  yaml: () => yamlLanguage, yml: () => yamlLanguage,
+  sh: legacy(shell), bash: legacy(shell), zsh: legacy(shell), env: legacy(shell),
+  toml: legacy(toml),
+  ini: legacy(properties), cfg: legacy(properties), conf: legacy(properties), properties: legacy(properties),
+  editorconfig: legacy(properties), gitignore: legacy(shell), gitattributes: legacy(properties),
+  ps1: legacy(powerShell), psm1: legacy(powerShell),
+  sql: legacy(standardSQL), diff: legacy(diff), patch: legacy(diff),
+  go: legacy(go), rs: legacy(rust), lua: legacy(lua), rb: legacy(ruby),
+  c: legacy(c), h: legacy(c), cpp: legacy(cpp), cc: legacy(cpp), hpp: legacy(cpp),
+  java: legacy(java), cs: legacy(csharp), kt: legacy(kotlin), kts: legacy(kotlin),
+};
+const LANGUAGE_NAMES = { dockerfile: legacy(dockerFile), makefile: legacy(shell) };
+
+const own = (table, key) => (Object.hasOwn(table, key) ? table[key] : null);
+
+function languageMaker(path) {
+  const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
+  return own(LANGUAGES, ext) || own(LANGUAGE_NAMES, name) || (name.startsWith(".") ? null : own(LANGUAGE_NAMES, name.split(".")[0]));
+}
+
+/** Whether a text file gets colours, from its name. */
+export const hasLanguage = (path) => !!languageMaker(path);
+
+/** The language whose colours a text file gets, from its name; null for plain text. */
+export function languageFor(path) {
+  return languageMaker(path)?.() ?? null;
+}
 
 /** Colours from the page's own light and dark tokens, so the editor follows the page. */
 const theme = EditorView.theme({
@@ -112,7 +169,7 @@ const baseExtensions = () => [
 ];
 
 /** A Markdown (or plain text) editor. `onChange(text)` runs on every edit. */
-export function createEditor(parent, text, { onChange, resolve, isMarkdown = true, vault = false, readOnly = false, extra = [] } = {}) {
+export function createEditor(parent, text, { onChange, resolve, isMarkdown = true, language = null, vault = false, readOnly = false, extra = [] } = {}) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -120,6 +177,7 @@ export function createEditor(parent, text, { onChange, resolve, isMarkdown = tru
       extensions: [
         baseExtensions(),
         isMarkdown ? [yamlFrontmatter({ content: markdown({ base: markdownLanguage }) }), linkMarks(resolve)] : [],
+        !isMarkdown && language ? [language.extension, EditorView.contentAttributes.of({ spellcheck: "false", autocapitalize: "off" })] : [],
         vault ? protectNavBox : [],
         readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
         EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString()); }),

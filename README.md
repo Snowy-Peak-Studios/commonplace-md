@@ -29,7 +29,8 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
 - **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas; "Last modified" is the date of the note's last commit.
-- **CSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as CSV.
+- **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
+- **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes.
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
@@ -259,6 +260,7 @@ example-vault/
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
+├── Other kinds of files.md      what opens how: tables, text with colours, PDFs, pictures, and downloads for the rest
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
 ├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
 ├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)
@@ -274,9 +276,13 @@ example-vault/
 │   ├── Note.md                  the note template, with {{title}} and {{date}}
 │   └── Task.md                  the task template: a user story, acceptance criteria and the task's properties
 ├── Data/
-│   └── Reading list.csv         a CSV file, opened as a table
+│   ├── Reading list.csv         a CSV file, opened as a table
+│   ├── Pantry.tsv               a TSV file: tabs between the cells, commas inside them
+│   ├── settings.json            JSON, opened as text with colours
+│   └── word_count.py            a Python script, opened as text with colours
 └── Attachments/
-    └── commonplace.svg          an image, embedded with ![[commonplace.svg|160]]
+    ├── commonplace.svg          an image, embedded with ![[commonplace.svg|160]]
+    └── An example PDF.pdf       a PDF, shown in the page, with Open in a new tab and Download
 ```
 
 Every page but `Home.md` has a `parent` property that links to the page above it.
@@ -434,7 +440,7 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 
 - The token is kept in this browser's storage (`localStorage`) on this device, and is sent only to `api.github.com`. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
-- The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site.)
+- The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
 - Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**).
 
@@ -501,8 +507,8 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
-| `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view |
-| `src/csv.js` | CSV parsing and writing |
+| `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view, colours for code and other text files |
+| `src/csv.js` | CSV and TSV parsing and writing |
 | `src/store.js` | This browser's storage, and moving older settings forward |
 | `src/icons.js` | The icons (Lucide), as SVG elements |
 | `sw.js`, `manifest.webmanifest`, `icons/` | The installable app |

@@ -10,13 +10,14 @@
 - ticking a checkbox and saving it, drafts after a reload, and the conflict view when a save is refused;
 - a new note: only a title, in `Notes/`, started from `Templates/Note.md`;
 - CSV tables: the reading list, and editing and saving a test table;
+- other kinds of files: a TSV as a table, JSON and Python with colours, a PDF (in the page, or Open and Download on a phone), and a Download for a file the app can't show;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;
 - Task fields: a repo with no setup opens with a new project's fields, and saving writes them to `.commonplace.json`;
 - a new device without an invite (it looks for vaults on GitHub quietly, then is sent to add a repo), one that finds a vault through a `.commonplace.json` and gets it added, and an older device whose `notes-app:` settings move to `commonplace:`.
 
 It only reads from GitHub: every save (`PUT`) is caught and answered by the script, and a fake
-`Data/Test table.csv` is added to the tree for the CSV checks.
+`Data/Test table.csv` is added to the tree for the CSV checks, and `Data/Test song.mp3` for the download.
 
 ```sh
 python -m http.server 8765 --bind 127.0.0.1      # in the repo root, left running

@@ -14,6 +14,7 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 | [[Set up tasks]] | Which fields your tasks have: [set them up](#/settings?fields) for the whole project |
 | [[Inbox]] | Quick notes, new tasks and questions; each person can have their own in `Notes/Inboxes/` |
 | [[Reading list.csv\|Reading list]] | A CSV file, opened as a table you can edit |
+| [[Other kinds of files]] | Tables, JSON, scripts, PDFs and pictures: what opens how |
 | [[AGENTS\|Rules for AI agents]] | Optional: how AI agents work in these notes (`AGENTS.md`, loaded by `CLAUDE.md`); the prompt to start one is [[#Working with an AI agent\|below]] |
 
 ## This week's goals
