@@ -964,6 +964,29 @@ select.input { padding-right: 8px; }
 .repo-fields .full { grid-column: 1 / -1; }
 .repo-fields .field { margin-bottom: 12px; }
 .check-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text-2); margin-bottom: 12px; }
+
+/* Task fields: one row per field, in the repo's task setup */
+.task-fields { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+.task-field { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(110px, 0.8fr) minmax(160px, 2fr) 34px; gap: 8px; align-items: center; }
+.task-field.head { font-size: 12.5px; font-weight: 550; color: var(--muted); }
+.task-field.off .task-extra, .task-field.off > .input { opacity: 0.5; }
+.task-field .input { min-width: 0; padding-top: 6px; padding-bottom: 6px; }
+.task-field .mono { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+.task-on { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
+.task-on .input { flex: 1; }
+.task-extra { display: flex; gap: 6px; min-width: 0; }
+.task-extra > * { flex: 1 1 0; min-width: 0; }
+.task-days { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.task-days .input { width: 64px; flex: none; }
+.task-problem { color: var(--danger); font-size: 14px; margin: 10px 0 0; min-height: 1em; }
+@media (max-width: 720px) {
+  .task-field { grid-template-columns: 1fr 34px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .task-field.head { display: none; }
+  .task-field > .task-on, .task-field > .input, .task-field > .task-extra { grid-column: 1; }
+  .task-field > :last-child { grid-column: 2; grid-row: 1; }
+  .task-extra { flex-wrap: wrap; }
+  .task-extra > * { flex: 1 1 140px; }
+}
 .check-line input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 

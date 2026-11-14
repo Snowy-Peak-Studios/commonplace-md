@@ -4,7 +4,8 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, markerText, reposToCheck, repoKey, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -1834,22 +1835,128 @@ async function lookForVaults(now = false, loud = now) {
   }
 }
 
+/**
+ * A repo's marker file as it is on GitHub: `at` is where it lives (the default branch, where GitHub's
+ * GraphQL reads it from), `text` and `sha` are null when there's none yet.
+ */
+async function readMarker(r) {
+  const info = await gh.repo(r);
+  const at = { owner: r.owner, repo: r.repo, branch: info.default_branch || r.branch };
+  try {
+    const { text, sha } = await gh.readText(at, MARKER);
+    return { at, text, sha };
+  } catch (e) {
+    if (e.status !== 404) throw e;
+    return { at, text: null, sha: null };
+  }
+}
+
 /** Saves the marker file to a repo, so everyone who can save to it gets it with these settings. */
 async function shareRepoSettings(r) {
   if (!(await confirmDialog("Share these settings with everyone?",
     `This saves ${MARKER} in ${r.owner}/${r.repo} (one commit). Then everyone who can save to the repo gets it in ${APP_NAME} by themselves, with these settings, without an invite link.`,
     "Share"))) return;
   try {
-    // GitHub's GraphQL reads the marker from the default branch, so that's where it goes.
-    const info = await gh.repo(r);
-    const at = { owner: r.owner, repo: r.repo, branch: info.default_branch || r.branch };
-    let sha = null;
-    try { sha = (await gh.readText(at, MARKER)).sha; } catch (e) { if (e.status !== 404) throw e; }
-    await gh.writeText(at, MARKER, markerText(r), sha, `Share settings in ${MARKER} from ${APP_NAME}`);
+    const m = await readMarker(r);
+    await gh.writeText(m.at, MARKER, mergeMarker(m.text, { repo: r }), m.sha, `Share settings in ${MARKER} from ${APP_NAME}`);
     toast(`Shared. Everyone who can save to ${r.repo} gets it in ${APP_NAME} within the hour.`, "ok", 6000);
   } catch (e) {
     toast(e.message, "error");
   }
+}
+
+// ---- Task fields: a project's task setup, kept in its marker file ----
+
+/** The editor for a repo's task setup; saving is one commit to its marker file. */
+async function editTaskFields(r) {
+  let m;
+  let saved = null;
+  try {
+    m = await readMarker(r);
+    if (m.text) saved = JSON.parse(m.text).tasks ?? null;
+  } catch (e) {
+    return toast(e instanceof SyntaxError ? `${MARKER} in ${r.repo} isn't valid JSON. Fix it on GitHub first.` : e.message, "error");
+  }
+  // A repo without a setup starts from a new project's fields, every one on.
+  const setup = taskSetup(saved ?? {});
+  const fields = setup.fields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
+  const list = h("div", { class: "task-fields" });
+  const problem = h("p", { class: "task-problem", role: "alert" });
+  const folder = h("input", { class: "input", value: setup.folder, spellcheck: "false", autocapitalize: "off", "aria-label": "Tasks folder" });
+  const values = (f) => h("input", { class: "input", value: (f.values || []).join(", "), spellcheck: "false",
+    placeholder: "Values, split by commas", "aria-label": `${f.label}: values`,
+    oninput: (e) => { f.values = e.target.value.split(",").map((v) => v.trim()).filter(Boolean); } });
+  const row = (f) => {
+    const extra = [];
+    if (f.custom) {
+      extra.push(h("select", { class: "input", "aria-label": `${f.label}: kind`, onchange: (e) => { f.kind = e.target.value; render(); } },
+        ...CUSTOM_KINDS.map((k) => h("option", { value: k, selected: k === f.kind }, k))));
+    }
+    if (f.kind === "choice") extra.push(values(f));
+    if (f.kind === "sprint") {
+      extra.push(h("input", { class: "input", value: f.folder, "aria-label": "Sprints folder", title: "The folder the sprint notes are in",
+        oninput: (e) => { f.folder = e.target.value.trim().replace(/^\/+|\/+$/g, "") || "Sprints"; } }));
+      extra.push(h("label", { class: "task-days" }, h("input", { class: "input", type: "number", min: "1", max: "90", value: String(f.length_days),
+        "aria-label": "Sprint length in days", oninput: (e) => { f.length_days = Math.min(90, Math.max(1, parseInt(e.target.value, 10) || 14)); } }), "days"));
+    }
+    if (f.kind === "number") {
+      extra.push(h("select", { class: "input", "aria-label": "Estimate unit", onchange: (e) => { f.unit = e.target.value; } },
+        ...ESTIMATE_UNITS.map((u) => h("option", { value: u, selected: u === f.unit }, u))));
+    }
+    return h("div", { class: `task-field${f.on ? "" : " off"}` },
+      h("label", { class: "task-on" }, h("input", { type: "checkbox", checked: f.on, onchange: (e) => { f.on = e.target.checked; render(); } }),
+        f.custom
+          ? h("input", { class: "input", value: f.label, "aria-label": "Field name", oninput: (e) => { f.label = e.target.value.trim(); } })
+          : h("span", {}, f.label)),
+      h("input", { class: "input mono", value: f.prop, spellcheck: "false", autocapitalize: "off", "aria-label": `${f.label}: property`,
+        title: "The property the field is kept in, in each task's front matter", oninput: (e) => { f.prop = e.target.value.trim(); } }),
+      h("div", { class: "task-extra" }, ...extra),
+      f.custom ? h("button", { class: "icon-btn", type: "button", title: "Remove this field", "aria-label": `Remove ${f.label}`,
+        onclick: () => { fields.splice(fields.indexOf(f), 1); render(); } }, icon("trash")) : h("span"));
+  };
+  const render = () => fill(list,
+    h("div", { class: "task-field head" }, h("span", {}, "Field"), h("span", {}, "Property"), h("span", {}, "Choices and options"), h("span")),
+    ...fields.map(row));
+  render();
+  const addField = () => {
+    let n = 1;
+    while (fields.some((f) => f.prop === `field_${n}`)) n++;
+    fields.push({ key: `field_${n}`, label: `Field ${n}`, kind: "text", on: true, prop: `field_${n}`, custom: true });
+    render();
+  };
+  await modal({
+    title: `Task fields: ${r.label || r.repo}`,
+    wide: true,
+    text: saved
+      ? `Every task in ${r.owner}/${r.repo} gets these fields. They're kept in its ${MARKER}, so everyone on the project shares them.`
+      : `${r.repo} has no task setup yet, so its tasks have status, priority, area, assignee and requested by. Saving keeps the fields ticked below in its ${MARKER}, for everyone on the project.`,
+    body: [
+      h("label", { class: "field" }, h("span", {}, "Tasks folder"), folder, h("small", {}, "The folder the tasks are in, inside the repo's folder.")),
+      list,
+      h("button", { class: "btn small", type: "button", onclick: addField }, icon("plus"), "Add a field"),
+      problem,
+    ],
+    buttons: [
+      { label: "Cancel", value: false },
+      { spacer: true },
+      canWrite(r) ? { label: "Save to the repo", kind: "primary", onclick: async () => {
+        const next = { folder: folder.value.trim().replace(/^\/+|\/+$/g, "") || "Tasks", fields: fields.map((f) => ({ ...f, key: f.custom ? f.prop : f.key })) };
+        const wrong = next.fields.find((f) => f.custom && !f.label) ? "Every field of your own needs a name." : taskSetupProblem(next);
+        if (wrong) { problem.textContent = wrong; return false; }
+        problem.textContent = "";
+        try {
+          const latest = await readMarker(r);
+          const text = mergeMarker(latest.text, { repo: latest.text ? null : r, tasks: taskSetupJson(next) });
+          await gh.writeText(latest.at, MARKER, text, latest.sha, `Set up task fields in ${MARKER} from ${APP_NAME}`);
+          toast(`Task fields saved in ${r.repo}.`, "ok");
+          return true;
+        } catch (e) {
+          problem.textContent = e.message;
+          return false;
+        }
+      } } : null,
+    ].filter(Boolean),
+  });
 }
 
 /** Someone opened an invite link. */
@@ -2027,6 +2134,8 @@ function showSettings(adding = false) {
         } }, icon("external"), "Copy invite link") : null,
         r.repo ? h("button", { class: "btn small", type: "button", title: `Saves ${MARKER} in the repo, so everyone who can save to it gets it by themselves`,
           onclick: () => shareRepoSettings(r) }, icon("upload"), "Share with everyone") : null,
+        r.repo ? h("button", { class: "btn small", type: "button", title: "The fields every task in this repo has: type, parent, sprint, estimate, your own",
+          onclick: () => editTaskFields(r) }, icon("todo"), "Task fields") : null,
         h("button", { class: "btn small danger", type: "button", onclick: (e) => e.target.closest("details").remove() }, icon("trash"), "Remove this repo"))));
   const newCard = () => repoCard({ owner: store.get("user")?.login || "", branch: "main", home: "README.md" }, true);
   forms.append(...app.repos.map((r) => repoCard(r)));

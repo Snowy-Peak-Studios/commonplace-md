@@ -601,6 +601,21 @@ await page.setViewport({ width: 1280, height: 860 });
 await page.reload({ waitUntil: "networkidle0" });
 await shot("8b-settings-desktop");
 
+// 8c. Task fields: a repo with no task setup opens with a new project's fields; saving writes them to its .commonplace.json.
+await page.$eval(".repo-card summary", (el) => el.click());
+await page.evaluate(() => [...document.querySelectorAll(".repo-card[open] button")].find((b) => /Task fields/.test(b.textContent)).click());
+check(await until(() => document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 10, 10000),
+  "Task fields opens with the ten fields a new project gets");
+check(await page.$$eval("dialog[open] .task-field:not(.head) input[type=checkbox]", (c) => c.every((x) => x.checked)), "every one of them on");
+await shot("8c-task-fields");
+const putsBeforeFields = puts.length;
+await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => /Save to the repo/.test(b.textContent)).click());
+check(await until(() => !document.querySelector("dialog[open]"), 10000), "saving closes it");
+const markerPut = puts.slice(putsBeforeFields).find((p) => p.url === `${REPO_API}/contents/.commonplace.json`);
+const saved = markerPut ? JSON.parse(markerPut.text) : null;
+check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.folder === FOLDER,
+  "the task setup is saved in .commonplace.json at the repo's top, with the repo's settings: " + (markerPut?.text || "no PUT").replace(/\s+/g, " ").slice(0, 120));
+
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();
 const newcomer = await fresh.newPage();

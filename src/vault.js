@@ -376,3 +376,127 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
     .map((x) => ({ owner: x.owner.login, repo: x.name, branch: x.default_branch || "main", pushed: x.pushed_at || "" }))
     .filter((x) => !skip.has(repoKey(x)) && seen[repoKey(x)] !== x.pushed);
 }
+
+// ---- A project's task setup: `tasks` in the repo's .commonplace.json ----
+
+/**
+ * The task fields the app knows. `kind` says what control a field gets: a choice from `values`, a person,
+ * a link to a task or a sprint note, a date, a number or text. `legacy` fields are the ones a repo
+ * with no setup has had all along.
+ */
+export const TASK_FIELDS = [
+  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Waiting", "Done"], legacy: true },
+  { key: "priority", label: "Priority", kind: "choice", values: ["High", "Medium", "Low"], legacy: true },
+  { key: "assignee", label: "Assignee", kind: "person", legacy: true },
+  { key: "area", label: "Area", kind: "text", legacy: true },
+  { key: "requested_by", label: "Requested by", kind: "person", legacy: true },
+  { key: "type", label: "Type", kind: "choice", values: ["Epic", "Story", "Task", "Bug"] },
+  { key: "part_of", label: "Parent task", kind: "task" },
+  { key: "sprint", label: "Sprint", kind: "sprint", folder: "Sprints", length_days: 14 },
+  { key: "estimate", label: "Estimate", kind: "number", unit: "points" },
+  { key: "due", label: "Due date", kind: "date" },
+];
+/** The kinds a project's own field can have. */
+export const CUSTOM_KINDS = ["text", "number", "date", "choice", "person", "link"];
+export const ESTIMATE_UNITS = ["points", "hours", "days"];
+
+const PROP_NAME = /^[A-Za-z_][\w-]*$/;
+/** A property name a field may use: a plain YAML key, and never `parent`, which places a page in the tree. */
+export const isFieldProp = (name) => PROP_NAME.test(name) && name.toLowerCase() !== "parent";
+const cleanValues = (list) => [...new Set((Array.isArray(list) ? list : []).filter((v) => typeof v === "string").map((v) => v.trim()).filter(Boolean))];
+const whole = (n, min, max, fallback) => (Number.isInteger(n) && n >= min && n <= max ? n : fallback);
+const cleanFolder = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/g, "") : "");
+
+/**
+ * A repo's task setup from the `tasks` part of its marker, with every field filled in. No setup at all
+ * (`null`) keeps the fields repos have always had; a setup starts from a new project's fields (every
+ * one on) and changes what it names. Anything it can't use is left at the default.
+ */
+export function taskSetup(raw) {
+  const given = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
+  const set = given?.fields && typeof given.fields === "object" ? given.fields : {};
+  const fields = TASK_FIELDS.map((f) => {
+    const s = set[f.key] && typeof set[f.key] === "object" ? set[f.key] : {};
+    const field = { key: f.key, label: f.label, kind: f.kind, on: given ? s.on !== false : !!f.legacy, prop: f.key };
+    if (typeof s.prop === "string" && isFieldProp(s.prop.trim())) field.prop = s.prop.trim();
+    if (f.values) field.values = cleanValues(s.values).length ? cleanValues(s.values) : [...f.values];
+    if (f.kind === "sprint") {
+      field.folder = cleanFolder(s.folder) || f.folder;
+      field.length_days = whole(s.length_days, 1, 90, f.length_days);
+    }
+    if (f.kind === "number") field.unit = ESTIMATE_UNITS.includes(s.unit) ? s.unit : f.unit;
+    return field;
+  });
+  const used = new Set(fields.map((f) => f.prop.toLowerCase()));
+  const custom = [];
+  for (const c of Array.isArray(given?.custom) ? given.custom : []) {
+    if (!c || typeof c !== "object" || typeof c.name !== "string" || !c.name.trim()) continue;
+    const prop = typeof c.prop === "string" && c.prop.trim() ? c.prop.trim() : c.name.trim().toLowerCase().replace(/[^\w-]+/g, "_");
+    if (!isFieldProp(prop) || used.has(prop.toLowerCase())) continue;
+    used.add(prop.toLowerCase());
+    const kind = CUSTOM_KINDS.includes(c.kind) ? c.kind : "text";
+    const field = { key: prop, label: c.name.trim(), kind, on: c.on !== false, prop, custom: true };
+    if (kind === "choice") field.values = cleanValues(c.values);
+    custom.push(field);
+  }
+  return { configured: !!given, folder: cleanFolder(given?.folder) || "Tasks", fields: [...fields, ...custom] };
+}
+
+/** What a setup saves as the `tasks` part of the marker: every field, so the file reads on its own. */
+export function taskSetupJson(setup) {
+  const fields = {};
+  const custom = [];
+  for (const f of setup.fields) {
+    if (f.custom) {
+      const c = { name: f.label, prop: f.prop, kind: f.kind };
+      if (!f.on) c.on = false;
+      if (f.kind === "choice") c.values = [...(f.values || [])];
+      custom.push(c);
+      continue;
+    }
+    const s = { on: !!f.on };
+    if (f.prop !== f.key) s.prop = f.prop;
+    if (f.values) s.values = [...f.values];
+    if (f.kind === "sprint") { s.folder = f.folder; s.length_days = f.length_days; }
+    if (f.kind === "number") s.unit = f.unit;
+    fields[f.key] = s;
+  }
+  const out = { folder: setup.folder || "Tasks", fields };
+  if (custom.length) out.custom = custom;
+  return out;
+}
+
+/** What's wrong with a setup, in words, or "" when nothing is: e.g. two fields writing the same property. */
+export function taskSetupProblem(setup) {
+  const seen = new Map();
+  for (const f of setup.fields) {
+    if (!isFieldProp(f.prop)) {
+      return `${f.label}: "${f.prop}" can't be a property name. Use letters, digits, _ and -, not starting with a digit${
+        f.prop.toLowerCase() === "parent" ? ", and not parent, which places a page in the tree" : ""}.`;
+    }
+    const k = f.prop.toLowerCase();
+    if (seen.has(k)) return `${seen.get(k)} and ${f.label} both use the property ${f.prop}.`;
+    seen.set(k, f.label);
+    if (f.on && f.kind === "choice" && !(f.values || []).length) return `${f.label} needs at least one value to choose from.`;
+  }
+  return "";
+}
+
+/**
+ * The marker file's new text, keeping what's already in it: `repo` (when given) replaces the shared repo
+ * settings, `tasks` (when given) the task setup, and anything else in the file stays.
+ */
+export function mergeMarker(existing, { repo = null, tasks } = {}) {
+  let out = {};
+  try {
+    const data = JSON.parse(existing || "");
+    if (data && typeof data === "object" && !Array.isArray(data)) out = data;
+  } catch { /* not there yet, or not JSON: start again */ }
+  if (repo) {
+    for (const k of ["label", "branch", "vault", ...MARKER_PATHS]) delete out[k];
+    const rest = out;
+    out = { ...JSON.parse(markerText(repo)), ...rest };
+  }
+  if (tasks !== undefined) out.tasks = tasks;
+  return JSON.stringify(out, null, 2) + "\n";
+}

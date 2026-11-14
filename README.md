@@ -37,6 +37,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
+- **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
@@ -205,6 +206,39 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 | Vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
 
 Settings live in this browser's storage, so each device has its own. An invite link copies them to another device, and so does a repo's `.commonplace.json` (see [Sharing](#sharing)).
+
+</details>
+
+### Task fields
+
+<details>
+<summary>Set up the fields every task in a project has</summary>
+
+A task is a note in the tasks folder (`Tasks/` unless you change it), and its fields are properties in its front matter. In **Settings**, open the repo and press **Task fields**:
+
+- **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all ten on.
+- **Change the lists** (statuses, priorities, types), the **property** each field is kept in (the parent task is `part_of`, since `parent` places a page in the vault's tree), the sprints folder and length, and the estimate's unit (points, hours or days).
+- **Add a field of your own:** a name, its property, and its kind: text, number, date, a choice from a list, a person or a link to a page.
+- **Save to the repo** writes it into the repo's `.commonplace.json`, under `tasks`, in one commit. Everyone on the project shares it, and **Share with everyone** keeps it:
+
+  ```json
+  {
+    "label": "Our notes",
+    "tasks": {
+      "folder": "Tasks",
+      "fields": {
+        "status": { "on": true, "values": ["To Do", "In Progress", "Waiting", "Done"] },
+        "part_of": { "on": true },
+        "sprint": { "on": true, "folder": "Sprints", "length_days": 14 },
+        "estimate": { "on": true, "unit": "points" },
+        "due": { "on": false }
+      },
+      "custom": [{ "name": "Component", "prop": "component", "kind": "choice", "values": ["App", "Docs"] }]
+    }
+  }
+  ```
+
+Coming next, built on this setup: the fields as pickers on each task's page, parent tasks with their subtasks, and sprints.
 
 </details>
 
@@ -459,7 +493,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
-| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes |
+| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
 | `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view |

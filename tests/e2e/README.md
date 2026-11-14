@@ -12,6 +12,7 @@
 - CSV tables: the reading list, and editing and saving a test table;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;
+- Task fields: a repo with no setup opens with a new project's fields, and saving writes them to `.commonplace.json`;
 - a new device without an invite (it looks for vaults on GitHub quietly, then is sent to add a repo), one that finds a vault through a `.commonplace.json` and gets it added, and an older device whose `notes-app:` settings move to `commonplace:`.
 
 It only reads from GitHub: every save (`PUT`) is caught and answered by the script, and a fake
@@ -23,8 +24,8 @@ cd tests/e2e && npm install
 GH_TOKEN=<a token that can read the repo> node run.mjs <folder for screenshots>
 ```
 
-With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The one console error
-expected is the `409 (Conflict)` the script fakes.
+With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The console errors
+expected are the `409 (Conflict)` the script fakes, and two `404`s from Task fields reading a `.commonplace.json` that isn't there.
 
 Settings, all optional:
 

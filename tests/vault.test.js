@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
+  TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -254,4 +255,69 @@ test("only new or changed repos this person can save to are looked at", () => {
   assert.deepEqual(got.map(repoKey), ["org/changed", "org/new"]);
   assert.deepEqual(got[1], { owner: "Org", repo: "New", branch: "main", pushed: "1" });
   assert.equal(reposToCheck([repo("o", "r", "1", true, { default_branch: "dev" })])[0].branch, "dev");
+});
+
+test("a repo with no task setup keeps the fields it always had", () => {
+  const s = taskSetup(null);
+  assert.equal(s.configured, false);
+  assert.equal(s.folder, "Tasks");
+  assert.deepEqual(s.fields.filter((f) => f.on).map((f) => f.key), ["status", "priority", "assignee", "area", "requested_by"]);
+  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Waiting", "Done"]);
+});
+
+test("a task setup starts from a new project's fields and changes what it names", () => {
+  const s = taskSetup({ folder: "/Work/", fields: {
+    type: { values: ["Feature", " Bug ", "Bug", 3, ""] }, area: { on: false }, part_of: { prop: "epic" },
+    sprint: { folder: "Plan/Sprints/", length_days: 7 }, estimate: { unit: "hours" }, due: { prop: "parent" },
+  }, custom: [{ name: "Component", kind: "choice", values: ["App"] }, { name: "status" }, { name: "" }, { name: "Notes", kind: "bogus", on: false }] });
+  assert.equal(s.configured, true);
+  assert.equal(s.folder, "Work");
+  const f = Object.fromEntries(s.fields.map((x) => [x.key, x]));
+  assert.equal(f.type.on, true);
+  assert.deepEqual(f.type.values, ["Feature", "Bug"]);
+  assert.equal(f.area.on, false);
+  assert.equal(f.part_of.prop, "epic");
+  assert.equal(f.due.prop, "due", "parent is never a field's property");
+  assert.equal(f.sprint.folder, "Plan/Sprints");
+  assert.equal(f.sprint.length_days, 7);
+  assert.equal(f.estimate.unit, "hours");
+  assert.deepEqual([f.component.label, f.component.kind, f.component.values, f.component.custom], ["Component", "choice", ["App"], true]);
+  assert.deepEqual([f.notes.kind, f.notes.on], ["text", false]);
+  assert.equal(s.fields.filter((x) => x.custom).length, 2, "a field named like a built-in one, or with no name, is left out");
+  assert.equal(taskSetup({ fields: { sprint: { length_days: 0 } } }).fields.find((x) => x.key === "sprint").length_days, 14);
+});
+
+test("a task setup round-trips through its JSON, and problems are named", () => {
+  const s = taskSetup({ fields: { part_of: { prop: "epic" }, due: { on: false } }, custom: [{ name: "Component", kind: "choice", values: ["App", "Docs"] }] });
+  const json = taskSetupJson(s);
+  assert.deepEqual(json.fields.part_of, { on: true, prop: "epic" });
+  assert.deepEqual(json.fields.sprint, { on: true, folder: "Sprints", length_days: 14 });
+  assert.deepEqual(json.custom, [{ name: "Component", prop: "component", kind: "choice", values: ["App", "Docs"] }]);
+  assert.deepEqual(taskSetup(JSON.parse(JSON.stringify(json))), s);
+  assert.equal(taskSetupProblem(s), "");
+  const clash = { ...s, fields: s.fields.map((f) => (f.key === "due" ? { ...f, prop: "Epic" } : f)) };
+  assert.match(taskSetupProblem(clash), /Parent task and Due date both use the property Epic/);
+  const parent = { ...s, fields: s.fields.map((f) => (f.key === "part_of" ? { ...f, prop: "parent" } : f)) };
+  assert.match(taskSetupProblem(parent), /not parent/);
+  const empty = { ...s, fields: s.fields.map((f) => (f.key === "type" ? { ...f, values: [] } : f)) };
+  assert.match(taskSetupProblem(empty), /Type needs at least one value/);
+  assert.equal(isFieldProp("part_of"), true);
+  assert.equal(isFieldProp("2x"), false);
+  assert.equal(TASK_FIELDS.length, 10);
+});
+
+test("the marker keeps the task setup when the repo settings are shared again, and the other way round", () => {
+  const r = { owner: "o", repo: "notes", label: "Notes", branch: "main", folder: "Wiki", home: "Home.md", vault: true };
+  const tasks = taskSetupJson(taskSetup({}));
+  const first = mergeMarker(null, { repo: r });
+  assert.deepEqual(JSON.parse(first), JSON.parse(markerText(r)));
+  const withTasks = mergeMarker(first, { tasks });
+  assert.deepEqual(JSON.parse(withTasks).tasks, tasks);
+  assert.equal(JSON.parse(withTasks).folder, "Wiki");
+  const shared = JSON.parse(mergeMarker(withTasks + "", { repo: { ...r, folder: "", label: "New" } }));
+  assert.deepEqual(shared.tasks, tasks, "sharing the repo settings keeps the task setup");
+  assert.equal(shared.label, "New");
+  assert.equal("folder" in shared, false, "a setting cleared on the device is cleared in the file");
+  assert.deepEqual(Object.keys(shared).slice(0, 2), ["label", "branch"]);
+  assert.deepEqual(parseMarker(mergeMarker("{ broken", { tasks }), "o", "r").label, "r");
 });
