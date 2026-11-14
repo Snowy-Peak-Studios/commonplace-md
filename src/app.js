@@ -5,7 +5,7 @@ import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
-  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -251,7 +251,10 @@ function renderNudge() {
 async function reloadFromGitHub() {
   if (app.file?.dirty && !(await confirmDialog("Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
   if (app.file) store.remove(draftKey(app.file));
-  if (app.repo) app.trees.delete(app.repo.id);
+  if (app.repo) {
+    app.trees.delete(app.repo.id);
+    setups.delete(app.repo.id);
+  }
   closeFile();
   app.repo = null;
   $("#nudge").hidden = true;
@@ -532,7 +535,16 @@ async function route() {
   if (parts[0] === "join") return join(params);
   if (!app.token) return showWelcome(store.get("join"));
   document.body.classList.remove("no-token");
-  if (parts[0] === "settings") return showSettings(params.get("add") === "1");
+  if (parts[0] === "settings") {
+    // #/settings?fields opens the Task fields of the repo the person was in (a note can link to it);
+    // #/settings?fields=<repo id> names the repo.
+    const fieldsOf = params.has("fields")
+      ? app.repos.find((r) => r.id === params.get("fields")) || app.repo || app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0]
+      : null;
+    showSettings(params.get("add") === "1");
+    if (fieldsOf) editTaskFields(fieldsOf);
+    return;
+  }
   const repo = app.repos.find((r) => r.id === parts[0]);
   if (!repo) {
     const last = app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0];
@@ -737,7 +749,139 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
-  fill(f.dom.preview, frontMatter ? propertiesBox(frontMatter, env) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+  // A task shows its project's fields as a form, and the other properties in the box below it.
+  const setup = app.token ? taskSetupOf(f.repo) : null;
+  if (app.token && !setup) {
+    loadTaskSetup(f.repo).then(() => { if (app.file === f && f.dom?.preview.isConnected && f.kind === "md") renderPreview(); });
+  }
+  const form = setup && canWrite(f.repo) && isSetupTask(setup, f.path) ? taskForm(f, setup) : null;
+  const inForm = form ? new Set(setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase())) : null;
+  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+}
+
+// ---- a task's fields as a form (the project's task setup, C-044) ----
+
+/** Each repo's task setup, read once from its .commonplace.json: repo id -> { setup, load }. */
+const setups = new Map();
+/** The repo's task setup if it's been read, else null (and `loadTaskSetup` reads it). */
+const taskSetupOf = (repo) => setups.get(repo.id)?.setup ?? null;
+
+/** Reads a repo's task setup; with no file, no `tasks` in it, or no connection, the fields repos always had. */
+function loadTaskSetup(repo, force = false) {
+  const known = setups.get(repo.id);
+  if (known && !force) return known.load;
+  const entry = { setup: known?.setup ?? null, load: null };
+  entry.load = readMarker(repo)
+    .then((m) => taskSetup(m.text ? JSON.parse(m.text).tasks ?? null : null))
+    .catch(() => taskSetup(null))
+    .then((s) => (entry.setup = s));
+  setups.set(repo.id, entry);
+  return entry.load;
+}
+
+/** A setup saved from Task fields is the one to use from now on. */
+function useTaskSetup(repo, setup) {
+  setups.set(repo.id, { setup, load: Promise.resolve(setup) });
+}
+
+/** The value of a property as a control shows it. */
+function shownValue(raw) {
+  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+  if (Array.isArray(raw)) return raw.join(", ");
+  return raw == null ? "" : String(raw);
+}
+
+/** The setup's fields that are on, as pickers and inputs over a task's text. Each change saves that one line. */
+function taskForm(f, setup) {
+  const props = noteProps(f.text);
+  const tree = app.trees.get(f.repo.id);
+  const notes = tree ? [...tree.files.keys()].filter((p) => /\.md$/i.test(p) && p !== f.path) : [];
+  const inFolder = (dir) => (p) => p.toLowerCase().startsWith(`${dir.toLowerCase()}/`);
+  const login = store.get("user")?.login || "";
+  const lists = [];
+  const listFor = (field, values) => {
+    const id = `tf-list-${field.prop}`;
+    lists.push(h("datalist", { id }, [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b)).map((v) => h("option", { value: v }))));
+    return id;
+  };
+  const cells = setup.fields.filter((x) => x.on).flatMap((field) => {
+    const cur = shownValue(props[field.prop]).trim();
+    const id = `tf-${field.prop}`;
+    let control;
+    if (field.kind === "choice") {
+      const known = field.values.some((v) => v.toLowerCase() === cur.toLowerCase());
+      const options = cur && !known ? [cur, ...field.values] : field.values;
+      control = h("select", { class: "input", id },
+        h("option", { value: "", selected: !cur }, "—"),
+        options.map((o) => h("option", { value: o, selected: o.toLowerCase() === cur.toLowerCase() }, o)));
+    } else {
+      const link = ["task", "sprint", "link"].includes(field.kind);
+      let list = null;
+      if (field.kind === "task") list = listFor(field, notes.filter((p) => isSetupTask(setup, p)).map(shownName));
+      else if (field.kind === "sprint") list = listFor(field, notes.filter(inFolder(field.folder)).map(shownName));
+      else if (field.kind === "link") list = listFor(field, notes.map(shownName));
+      else if (field.kind === "person") list = listFor(field, [login, cur]);
+      control = h("input", {
+        class: "input", id, list,
+        type: field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text",
+        step: field.kind === "number" ? "any" : null,
+        value: link ? linkName(cur) : cur,
+        placeholder: link ? "A page's name" : field.kind === "person" ? "Who" : "",
+        autocomplete: "off", spellcheck: "false",
+      });
+    }
+    control.addEventListener("change", () => setTaskField(f, field, control.value, control));
+    const unit = field.kind === "number" && field.unit ? h("small", { class: "muted" }, ` (${field.unit})`) : null;
+    return [h("label", { class: "tf-label", for: id }, field.label, unit), control];
+  });
+  if (!cells.length) return null;
+  return h("section", { class: "task-form", "aria-label": "Task fields" }, h("div", { class: "tf-grid" }, cells), lists);
+}
+
+/**
+ * One field changed on the open task. With no unsaved edits it's one commit of that one line, at once;
+ * with some, the line changes in the text and Save keeps it with the rest.
+ */
+async function setTaskField(f, field, input, control) {
+  const value = fieldValue(field, input);
+  if (value == null) return toast(`${field.label}: that isn't a ${field.kind === "date" ? "date" : "number"}.`, "error");
+  const next = withProps(f.text, [[field.prop, value]]);
+  if (next === toLf(f.text)) return;
+  const redraw = () => {
+    const scroll = $("#main").scrollTop;
+    renderPreview();
+    $("#main").scrollTop = scroll;
+  };
+  if (f.dirty || !f.sha) {
+    f.text = next;
+    if (f.editor) setEditorText(f.editor, next);
+    updateDirty();
+    redraw();
+    return toast(`${field.label} changed. Save keeps it with your other changes.`);
+  }
+  control.disabled = true;
+  try {
+    const id = String(noteProps(f.text).id ?? "").trim();
+    const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), next, f.sha,
+      `${id ? id + ": " : ""}${field.prop} set to ${value ? linkName(value) : "nothing"} from ${APP_NAME}`);
+    wroteCommit(f.repo, res);
+    baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
+    treeChanged(f.repo, f.path, res.sha);
+    if (app.file === f) {
+      f.sha = res.sha;
+      f.saved = next;
+      // Typed into the editor meanwhile: those edits stay, with the field's new line in them.
+      f.text = f.dirty ? withProps(f.text, [[field.prop, value]]) : next;
+      if (f.editor) setEditorText(f.editor, f.text);
+      updateDirty();
+      if (!f.dirty) store.remove(draftKey(f));
+      redraw();
+    }
+    toast(`${field.label}: ${value ? linkName(value) : "cleared"}`, "ok");
+  } catch (e) {
+    toast(e.isConflict ? `Not changed: ${shownName(f.path)} changed on GitHub. Reload it first.` : `Not changed: ${e.message}`, "error");
+    if (control.isConnected) control.disabled = false;
+  }
 }
 
 // ---- an inbox's top tasks to start ----
@@ -970,12 +1114,15 @@ function fillDiagrams(root) {
   }
 }
 
-function propertiesBox(raw, env) {
+/** The front matter as a Properties box; `skip` (lower-case keys) leaves out what a task's form already shows. */
+function propertiesBox(raw, env, skip = null) {
   let data;
   try { data = yamlLoad(raw); } catch { return h("pre", { class: "props-raw" }, raw); }
   if (!data || typeof data !== "object" || Array.isArray(data)) return h("pre", { class: "props-raw" }, raw);
   const show = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v));
-  const cells = Object.entries(data).flatMap(([key, value]) => {
+  const entries = Object.entries(data).filter(([key]) => !skip?.has(key.toLowerCase()));
+  if (!entries.length) return "";
+  const cells = entries.flatMap(([key, value]) => {
     const vals = h("div", { class: "prop-vals" });
     vals.innerHTML = sanitize((Array.isArray(value) ? value : [value]).filter((v) => v !== "" && v != null)
       .map((v) => `<span class="prop-val">${md.renderInline(show(v), env)}</span>`).join(""));
@@ -1614,10 +1761,16 @@ async function startingText(repo, tree, p) {
   const sha = template && tree.files.get(template);
   if (sha) {
     try {
-      return fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() });
+      return asNewTask(repo, p, fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() }));
     } catch { /* the template couldn't be read: start plain */ }
   }
-  return defaultNote(p.title);
+  return asNewTask(repo, p, defaultNote(p.title));
+}
+
+/** A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved). */
+async function asNewTask(repo, p, text) {
+  const setup = await loadTaskSetup(repo);
+  return setup.configured && isSetupTask(setup, p.path) ? withProps(text, newTaskProps(setup), { keep: true }) : text;
 }
 
 async function newNote() {
@@ -1837,18 +1990,16 @@ async function lookForVaults(now = false, loud = now) {
 
 /**
  * A repo's marker file as it is on GitHub: `at` is where it lives (the default branch, where GitHub's
- * GraphQL reads it from), `text` and `sha` are null when there's none yet.
+ * GraphQL reads it from), `text` and `sha` are null when there's none yet. One GraphQL request, which
+ * answers a missing file with null rather than a 404.
  */
 async function readMarker(r) {
-  const info = await gh.repo(r);
-  const at = { owner: r.owner, repo: r.repo, branch: info.default_branch || r.branch };
-  try {
-    const { text, sha } = await gh.readText(at, MARKER);
-    return { at, text, sha };
-  } catch (e) {
-    if (e.status !== 404) throw e;
-    return { at, text: null, sha: null };
-  }
+  const data = await gh.graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+    defaultBranchRef { name } object(expression: "HEAD:${MARKER}") { ... on Blob { text oid } } } }`, { owner: r.owner, name: r.repo });
+  const info = data.repository;
+  if (!info) throw new Error(`${r.owner}/${r.repo} wasn't found, or the token can't see it.`);
+  const at = { owner: r.owner, repo: r.repo, branch: info.defaultBranchRef?.name || r.branch };
+  return { at, text: info.object?.text ?? null, sha: info.object?.oid ?? null };
 }
 
 /** Saves the marker file to a repo, so everyone who can save to it gets it with these settings. */
@@ -1948,6 +2099,7 @@ async function editTaskFields(r) {
           const latest = await readMarker(r);
           const text = mergeMarker(latest.text, { repo: latest.text ? null : r, tasks: taskSetupJson(next) });
           await gh.writeText(latest.at, MARKER, text, latest.sha, `Set up task fields in ${MARKER} from ${APP_NAME}`);
+          useTaskSetup(r, taskSetup(taskSetupJson(next)));
           toast(`Task fields saved in ${r.repo}.`, "ok");
           return true;
         } catch (e) {

@@ -24,8 +24,8 @@ cd tests/e2e && npm install
 GH_TOKEN=<a token that can read the repo> node run.mjs <folder for screenshots>
 ```
 
-With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The console errors
-expected are the `409 (Conflict)` the script fakes, and two `404`s from Task fields reading a `.commonplace.json` that isn't there.
+With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The one console error
+expected is the `409 (Conflict)` the script fakes.
 
 Settings, all optional:
 

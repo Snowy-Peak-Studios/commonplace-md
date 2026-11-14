@@ -500,3 +500,53 @@ export function mergeMarker(existing, { repo = null, tasks } = {}) {
   if (tasks !== undefined) out.tasks = tasks;
   return JSON.stringify(out, null, 2) + "\n";
 }
+
+/**
+ * Whether a note is a task under a setup: a Markdown note in its tasks folder (or deeper). A repo with
+ * no setup keeps the old rule: a note in any `Tasks` folder.
+ */
+export function isSetupTask(setup, path) {
+  if (!/\.md$/i.test(path)) return false;
+  if (!setup?.configured) return isTaskPath(path);
+  return path.toLowerCase().startsWith(`${setup.folder.toLowerCase()}/`);
+}
+
+/** The note's text with these properties set, adding front matter when it has none. `keep` leaves set ones alone. */
+export function withProps(text, entries, { keep = false } = {}) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  if (!fm) return entries.length ? `---\n${entries.map(([k, v]) => `${k}: ${yamlValue(v)}`).join("\n")}\n---\n${src}` : src;
+  const todo = keep ? entries.filter(([k]) => !new RegExp(`^${k}:`, "m").test(fm.raw)) : entries;
+  return todo.length ? setProps(src, todo) : src;
+}
+
+/** A link field's value as a page name: `[[Name|alias]]` -> "Name". */
+export const linkName = (v) => {
+  const s = String(v ?? "").trim();
+  const m = /^\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]$/.exec(s);
+  return (m ? m[1] : s).trim();
+};
+
+/** What a field's control saves: link kinds become `[[Name]]`, numbers stay digits, empty stays empty. */
+export function fieldValue(field, input) {
+  const s = String(input ?? "").trim();
+  if (!s) return "";
+  if (["task", "sprint", "link"].includes(field.kind)) return `[[${linkName(s)}]]`;
+  if (field.kind === "number") return Number.isFinite(Number(s)) ? String(Number(s)) : null;
+  if (field.kind === "date") return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  return s;
+}
+
+/**
+ * The properties a new task starts with: every field that's on, empty, except the choices, which start
+ * at their first value; Priority at its middle one and Type at "Task" when it has one, so a new task
+ * isn't the highest priority or an epic.
+ */
+export function newTaskProps(setup) {
+  return setup.fields.filter((f) => f.on).map((f) => {
+    if (f.kind !== "choice" || !f.values?.length) return [f.prop, ""];
+    if (f.key === "priority") return [f.prop, f.values[Math.floor((f.values.length - 1) / 2)]];
+    if (f.key === "type") return [f.prop, f.values.find((v) => v.toLowerCase() === "task") || f.values[0]];
+    return [f.prop, f.values[0]];
+  });
+}

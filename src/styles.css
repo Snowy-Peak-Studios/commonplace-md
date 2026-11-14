@@ -965,6 +965,14 @@ select.input { padding-right: 8px; }
 .repo-fields .field { margin-bottom: 12px; }
 .check-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text-2); margin-bottom: 12px; }
 
+/* A task's fields as a form, above its other properties */
+.task-form { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.tf-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.tf-label { font-size: 13px; font-weight: 550; color: var(--text-2); white-space: nowrap; }
+.tf-grid .input { min-width: 0; width: 100%; padding-top: 5px; padding-bottom: 5px; font-size: 14px; }
+.tf-grid .input:disabled { opacity: 0.6; cursor: progress; }
+@media (max-width: 860px) { .tf-grid { grid-template-columns: max-content minmax(0, 1fr); } }
+
 /* Task fields: one row per field, in the repo's task setup */
 .task-fields { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
 .task-field { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(110px, 0.8fr) minmax(160px, 2fr) 34px; gap: 8px; align-items: center; }

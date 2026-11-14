@@ -238,7 +238,11 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
   }
   ```
 
-Coming next, built on this setup: the fields as pickers on each task's page, parent tasks with their subtasks, and sprints.
+**On a task's page**, the fields that are on show as pickers and boxes above its other properties (a list for choices, a date picker, a number, a page name for parent task, sprint and links). A change is saved at once: one line in one commit. If the note has unsaved edits, the field changes with them and **Save** keeps both. A new note in the tasks folder starts with every field that's on, once a setup is saved.
+
+**A link to the setup:** any note can link to `#/settings?fields`, which opens Task fields for the repo you're in, e.g. `[Set up task fields](#/settings?fields)`. The example vault's [Set up tasks](example-vault/Set%20up%20tasks.md) page does, and its Task Board links to it.
+
+Coming next: parent tasks with their subtasks, and sprints.
 
 </details>
 
@@ -254,6 +258,7 @@ example-vault/
 ├── Home.md                      start page: links, a table, a callout, an embedded section, a Mermaid diagram, an image
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
+├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
 ├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
 ├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)

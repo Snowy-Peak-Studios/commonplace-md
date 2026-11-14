@@ -6,7 +6,7 @@ parent: "[[Home]]"
 
 Every task is a note in `Tasks/` with properties (`id`, `status`, `priority`, `area`, `assignee`, `requested_by`). The table below is [[Tasks.base]]: its views are tabs.
 
-Which fields a task has is set up per project: in Settings, open the repo and press **Task fields** to turn on a type, a parent task, a sprint, an estimate or a due date, or to add fields of your own. The setup is kept in the repo, so everyone shares it.
+Which fields a task has is set up per project: **[Set up task fields](#/settings?fields)** to turn on a type, a parent task, a sprint, an estimate or a due date, or to add fields of your own. The setup is kept in the repo, so everyone shares it. How it works: [[Set up tasks]].
 
 ## Current goals
 

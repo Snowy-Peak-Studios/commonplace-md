@@ -616,6 +616,35 @@ const saved = markerPut ? JSON.parse(markerPut.text) : null;
 check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.folder === FOLDER,
   "the task setup is saved in .commonplace.json at the repo's top, with the repo's settings: " + (markerPut?.text || "no PUT").replace(/\s+/g, " ").slice(0, 120));
 
+// 8d. A task's fields as a form: with that setup, a task shows its ten fields; a change is one commit of that one line.
+const formTask = "Tasks/Invite a friend.md";
+await page.goto(at(formTask), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelectorAll(".task-form .tf-grid > .input").length === 10, 10000),
+  "a task shows the setup's ten fields as a form");
+check(await page.$eval("#tf-status", (s) => s.value).catch(() => null) === "To Do", "with its status picked");
+check(!(await page.$$eval(".props .prop-key", (k) => k.map((x) => x.textContent))).includes("status"), "and the Properties box leaves out what the form shows");
+await shot("8d-task-form");
+await page.setViewport({ width: 375, height: 812 }); // not isMobile: switching it reloads the page
+await wait(300);
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll(".task-form .input")].every((el) => el.getBoundingClientRect().right <= innerWidth + 0.5)),
+  "the form fits at phone width");
+await shot("8d-task-form-phone");
+await page.setViewport({ width: 1280, height: 860 });
+const putsBeforeForm = puts.length;
+await page.select("#tf-type", "Bug");
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Type: Bug"), 10000), "changing a field saves it at once");
+const formPut = puts.slice(putsBeforeForm).find((p) => p.url === contentsUrl(formTask));
+check(!!formPut && formPut.body.message === "T-4: type set to Bug from Commonplace.md" && /\ntype: Bug\n/.test(formPut.text) && /\nstatus: To Do\n/.test(formPut.text),
+  "one commit that adds that one line: " + formPut?.body.message);
+
+// 8e. A note can link to the setup: #/settings?fields opens Task fields for the repo it's in.
+await page.goto(at("Set up tasks.md"), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector('.note-body a[href="#/settings?fields"]'), 10000), "the Set up tasks page has a link to the setup");
+await page.evaluate(() => document.querySelector('.note-body a[href="#/settings?fields"]')?.click());
+check(await until(() => location.hash === "#/settings?fields" && document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 10, 10000),
+  "the Set up tasks page's link opens Task fields");
+await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Cancel")?.click());
+
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();
 const newcomer = await fresh.newPage();

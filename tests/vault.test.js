@@ -4,6 +4,7 @@ import {
   LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
+  isSetupTask, withProps, linkName, fieldValue, newTaskProps,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -320,4 +321,42 @@ test("the marker keeps the task setup when the repo settings are shared again, a
   assert.equal("folder" in shared, false, "a setting cleared on the device is cleared in the file");
   assert.deepEqual(Object.keys(shared).slice(0, 2), ["label", "branch"]);
   assert.deepEqual(parseMarker(mergeMarker("{ broken", { tasks }), "o", "r").label, "r");
+});
+
+test("a task is a note in the setup's tasks folder, or in any Tasks folder with no setup", () => {
+  const setup = taskSetup({ folder: "Work/Items" });
+  assert.equal(isSetupTask(setup, "Work/Items/Fix it.md"), true);
+  assert.equal(isSetupTask(setup, "work/items/Sub/Fix it.md"), true);
+  assert.equal(isSetupTask(setup, "Work/Items/data.csv"), false);
+  assert.equal(isSetupTask(setup, "Tasks/Fix it.md"), false);
+  assert.equal(isSetupTask(taskSetup(null), "Notes/Tasks/Fix it.md"), true);
+  assert.equal(isSetupTask(null, "Home.md"), false);
+});
+
+test("a field's value is written into the front matter, which is added when missing", () => {
+  assert.equal(withProps("# Hi\n", [["status", "To Do"], ["due", ""]]), '---\nstatus: To Do\ndue: ""\n---\n# Hi\n');
+  const note = "---\nstatus: To Do\n---\n# Hi\n";
+  assert.equal(withProps(note, [["status", "Done"]]), "---\nstatus: Done\n---\n# Hi\n");
+  assert.equal(withProps(note, [["status", "Done"], ["type", "Bug"]], { keep: true }), "---\nstatus: To Do\ntype: Bug\n---\n# Hi\n");
+  assert.equal(withProps(note, [["status", "Done"]], { keep: true }), note);
+  assert.equal(withProps(note, [["part_of", "[[Big one]]"]]), '---\nstatus: To Do\npart_of: "[[Big one]]"\n---\n# Hi\n');
+});
+
+test("each kind of field saves its value its own way", () => {
+  const f = (kind) => ({ kind });
+  assert.equal(fieldValue(f("task"), "Big one"), "[[Big one]]");
+  assert.equal(fieldValue(f("sprint"), "[[Sprint 3|now]]"), "[[Sprint 3]]");
+  assert.equal(fieldValue(f("number"), " 5.0 "), "5");
+  assert.equal(fieldValue(f("number"), "lots"), null);
+  assert.equal(fieldValue(f("date"), "2026-12-01"), "2026-12-01");
+  assert.equal(fieldValue(f("date"), "soon"), null);
+  assert.equal(fieldValue(f("choice"), ""), "");
+  assert.equal(linkName("[[Sprint 3#Goal]]"), "Sprint 3");
+  assert.equal(linkName("plain"), "plain");
+});
+
+test("a new task starts with the fields that are on", () => {
+  const props = newTaskProps(taskSetup({ fields: { due: { on: false } }, custom: [{ name: "Size", kind: "choice", values: ["S", "M"] }] }));
+  assert.deepEqual(props, [["status", "To Do"], ["priority", "Medium"], ["assignee", ""], ["area", ""], ["requested_by", ""],
+    ["type", "Task"], ["part_of", ""], ["sprint", ""], ["estimate", ""], ["size", "S"]]);
 });
