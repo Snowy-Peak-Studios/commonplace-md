@@ -901,7 +901,9 @@ const newcomer = await fresh.newPage();
 await newcomer.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 await newcomer.goto(BASE, { waitUntil: "networkidle0" });
 check(await newcomer.$(".welcome input[type=password]") !== null && !(await newcomer.$eval(".bar", (b) => b.offsetParent !== null)), "without a token: the first-run screen, no toolbar");
-check(await newcomer.title() === APP, "the page is called " + APP);
+// The version in development (served under dev/) says so in its title.
+const shownApp = /\/dev\/$/.test(new URL(BASE).pathname) ? `${APP} (dev)` : APP;
+check(await newcomer.title() === shownApp, "the page is called " + shownApp);
 await newcomer.screenshot({ path: `${OUT}/9-welcome-phone.png` });
 await fresh.close();
 
