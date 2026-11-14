@@ -185,6 +185,9 @@ const homeBox = await page.evaluate(() => ({
   rows: document.querySelectorAll(".note-body .suggest .suggest-list a.suggest-name").length,
 }));
 check(homeBox.box && !homeBox.code && homeBox.rows >= 1, "Home's top-tasks block shows the top tasks box: " + JSON.stringify(homeBox));
+await page.evaluate(() => document.querySelector(".note-body .suggest")?.scrollIntoView({ block: "center" }));
+await shot("1c-home-top-tasks");
+await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));
 await shot("1-home-desktop");
 await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
 await shot("1b-home-light");
@@ -760,6 +763,9 @@ await page.click("#scrim");
 await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".embed-page .embed-body li, .embed-page .embed-body p", { timeout: 10000 }).catch(() => {});
 await shot("7b-home-phone");
+await page.waitForSelector(".note-body .suggest .suggest-name", { timeout: 15000 }).catch(() => {});
+await page.evaluate(() => document.querySelector(".note-body .suggest")?.scrollIntoView({ block: "center" }));
+await shot("7e-home-top-tasks-phone");
 // A phone's browser can't show a PDF in the page: Open in a new tab and Download instead.
 await page.goto(at("Attachments/An example PDF.pdf"), { waitUntil: "networkidle0" });
 check(await until(() => !document.querySelector("iframe.pdf-view") && document.querySelectorAll(".empty .file-actions a[href^='blob:']").length === 2
