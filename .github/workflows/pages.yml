@@ -1,0 +1,55 @@
+# Serves the app on GitHub Pages: the released version (main) at the site's address, and the version in
+# development (dev) under dev/ beside it, both rebuilt when either branch moves. Settings › This device picks
+# which one a device opens. Needs Settings › Pages › Source: GitHub Actions, and the github-pages
+# environment allowing both branches to deploy. The files are served as they are: there's no build step.
+name: Pages
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: site/dev
+      - name: Name the version in development
+        run: |
+          rm -rf site/.git site/dev/.git site/.github site/dev/.github
+          python3 - <<'PY'
+          import json
+          path = "site/dev/manifest.webmanifest"
+          m = json.load(open(path, encoding="utf-8"))
+          m["name"] = m["name"] + " (dev)"
+          m["short_name"] = m["short_name"] + " dev"
+          with open(path, "w", encoding="utf-8", newline="") as f:
+              json.dump(m, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

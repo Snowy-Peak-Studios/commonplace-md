@@ -22,6 +22,18 @@ import { icon, fillIcons } from "./icons.js";
 
 const APP_NAME = "Commonplace.md";
 
+// ---- which version: released (the main branch) or in development (the dev branch, served under dev/) ----
+
+/** This is the development version, served under dev/ beside the released one, on the same origin. */
+const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
+/** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
+const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
+/** The address of the released (`dev` false) or development version, at the same page. */
+const versionHref = (dev) =>
+  new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
+/** Set in this tab just before the released version sends it on to the development one. */
+const TO_DEV = "commonplace:to-dev";
+
 const $ = (sel, root = document) => root.querySelector(sel);
 
 function h(tag, attrs = {}, ...children) {
@@ -499,7 +511,7 @@ function renderHeader() {
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
-  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${APP_NAME}` : app.pageTitle ? `${app.pageTitle} · ${APP_NAME}` : APP_NAME;
+  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
 }
 
 // ================================================================
@@ -2785,8 +2797,20 @@ function showSettings(adding = false) {
   const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(store.prefix + "draft:"));
   let drafts = [];
   try { drafts = draftKeys(); } catch { /* storage blocked */ }
+  const pickVersion = (dev) => {
+    store.set("version", dev ? "dev" : "main");
+    if (dev !== DEV_BUILD) location.assign(versionHref(dev));
+  };
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    h("div", { class: "field" },
+      h("span", {}, "App version"),
+      h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
+        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => pickVersion(false) }, "Released"),
+        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => pickVersion(true) }, "In development")),
+      h("small", { class: "hint" }, DEV_BUILD
+        ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
+        : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
     h("p", {}, drafts.length ? `${drafts.length} unsaved ${drafts.length === 1 ? "draft is" : "drafts are"} kept in this browser.` : "No unsaved drafts are kept in this browser."),
     drafts.length ? h("button", { class: "btn small danger", onclick: async () => {
       if (!(await confirmDialog("Discard every unsaved draft?", "Changes you never saved will be gone.", "Discard all", true))) return;
@@ -2805,7 +2829,33 @@ function showSettings(adding = false) {
 // Start
 // ================================================================
 
+/**
+ * Which version this device follows. The released version sends a device that picked the development one on
+ * to it, once per try: if the development version doesn't open (the device comes back here), it stays.
+ * Resolves to false when the page is leaving.
+ */
+function followVersion() {
+  let session = null;
+  try { session = sessionStorage; } catch { /* storage blocked: no sending on */ }
+  if (DEV_BUILD) {
+    session?.removeItem(TO_DEV);
+    if (store.get("version") !== "dev") store.set("version", "dev");
+    document.body.classList.add("dev-build");
+    return true;
+  }
+  if (store.get("version") !== "dev" || !session) return true;
+  if (session.getItem(TO_DEV)) {
+    session.removeItem(TO_DEV);
+    setTimeout(() => toast("The version in development didn't open, so this is the released one. Settings › This device picks the version.", "error"), 0);
+    return true;
+  }
+  session.setItem(TO_DEV, "1");
+  location.replace(versionHref(true));
+  return false;
+}
+
 function start() {
+  if (!followVersion()) return;
   fillIcons(document.body);
   renderWho();
   renderRepoPicker();

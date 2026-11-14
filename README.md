@@ -103,13 +103,15 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 Either:
 
-- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, and reaches `main` (and the site) at the next release.
+- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, served beside it at <https://snowy-peak-studios.github.io/commonplace-md/dev/>, and reaches `main` at the next release. **Settings › This device › App version** picks which one your device opens: *Released* or *In development* (the newest work, which may break). The choice is kept, so the usual address and the installed app open the one you picked; both use the same token and settings.
 - **B. Host your own copy:**
   1. Fork [github.com/Snowy-Peak-Studios/commonplace-md](https://github.com/Snowy-Peak-Studios/commonplace-md) (keep the name `commonplace-md`, or change the address below to match).
   2. In your fork: **Settings › Pages › Build and deployment**: Source *Deploy from a branch*, branch `main`, folder `/ (root)`. Save.
   3. After a minute or two, open `https://<your-github-name>.github.io/commonplace-md/`.
 
    Free GitHub Pages serves public repos only. That's fine: the app's repo holds code, never notes.
+
+   To serve the version in development too, fork with every branch (untick *Copy the main branch only*), and pick Source *GitHub Actions* in step 2 instead: `.github/workflows/pages.yml` then serves `main` at the address and `dev` under `dev/`, each time either branch moves. In **Settings › Environments › github-pages**, let the `dev` branch deploy too.
 
 ### 2. Make a notes repo
 
@@ -473,7 +475,7 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
 - The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
-- Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**).
+- Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**). The released version and the one in development share this browser's storage (the same token, settings and drafts), and each keeps its own offline copy of the app.
 
 </details>
 
