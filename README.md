@@ -2,11 +2,19 @@
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
-Made for people and AI agents working together: you write and decide, your agent sorts the inbox, works on tasks and keeps the board up to date. Your days get a bit easier and more productive. ([How it works with agents](#working-with-ai-agents-optional))
+## What it is
+
+A tool for your everyday. The big work tools cost a lot and do so much that most people on a team just don't use them. Commonplace.md is the simple alternative: a wiki, notes and a task board that the whole team actually opens.
+
+It's made for a team and AI together. Your notes are plain files, kept local and easy to reach. You set up your project's rules in the vault: AI agents follow their own rules, people follow theirs, and both work on the same pages. ([How it works with agents](#working-with-ai-agents-optional))
 
 No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
 
 Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
+
+## Why
+
+I was frustrated with the work tools I had to use, so I started making this for my own daily use. It grew until it became my main focus. Now I'm sharing it with everyone who has struggled with those tools like I did.
 
 ## What it does
 
