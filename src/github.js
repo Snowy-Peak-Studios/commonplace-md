@@ -65,6 +65,17 @@ export class GitHub {
     return this.request("GET", "/user");
   }
 
+  /** The repos this token can see, the most recently pushed first: up to `pages` requests of 100. */
+  async listRepos(pages = 3) {
+    const all = [];
+    for (let page = 1; page <= pages; page++) {
+      const batch = await this.request("GET", `/user/repos?per_page=100&sort=pushed&page=${page}`);
+      all.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return all;
+  }
+
   repo(r) {
     return this.request("GET", `/repos/${r.owner}/${r.repo}`);
   }

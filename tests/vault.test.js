@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
-  inboxCandidates, ownInboxPath,
+  inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -223,4 +223,35 @@ test("a task's state: ready, needs a decision, or a placeholder", async () => {
   assert.equal(taskState(note("Just an idea.")).state, "placeholder");
   assert.equal(taskState(note("Just an idea.", "id: T-1\nready: yes")).state, "ready");
   assert.equal(taskState(note(story + "- [ ] Built\n", "id: T-1\nready: decision")).state, "decision");
+});
+
+
+test("a vault's marker file round-trips its settings", () => {
+  assert.equal(MARKER, ".commonplace.json");
+  const r = { owner: "Org", repo: "Game", label: "The game", branch: "dev", folder: "Wiki", home: "Home.md",
+    inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", vault: true };
+  const back = parseMarker(markerText(r), "Org", "Game");
+  assert.deepEqual(back, r);
+});
+
+test("a marker keeps only what an invite link can set, with defaults", () => {
+  const r = parseMarker('{"folder": "/Wiki/", "token": "x", "vault": "yes", "home": 3}', "o", "notes");
+  assert.deepEqual(r, { owner: "o", repo: "notes", label: "notes", branch: "", folder: "Wiki", home: "README.md",
+    inbox: "", inboxes: "", notes: "", template: "", vault: false });
+  assert.equal(parseMarker("not json", "o", "r"), null);
+  assert.equal(parseMarker("[1]", "o", "r"), null);
+  assert.equal(parseMarker("null", "o", "r"), null);
+  assert.equal(markerText({ repo: "r", home: "README.md" }), '{\n  "label": "r",\n  "branch": "main"\n}\n');
+});
+
+test("only new or changed repos this person can save to are looked at", () => {
+  const repo = (owner, name, pushed, push = true, extra = {}) => ({ owner: { login: owner }, name, pushed_at: pushed, permissions: { push }, ...extra });
+  const listing = [
+    repo("Org", "Known", "1"), repo("Org", "ReadOnly", "1", false), repo("Org", "Same", "1"), repo("Org", "Changed", "2"),
+    repo("Org", "New", "1"), repo("Org", "Gone", "1"), repo("Org", "Old", "1", true, { archived: true }), null, { name: "x" },
+  ];
+  const got = reposToCheck(listing, { seen: { "org/same": "1", "org/changed": "1" }, known: ["org/known"], removed: ["ORG/gone"] });
+  assert.deepEqual(got.map(repoKey), ["org/changed", "org/new"]);
+  assert.deepEqual(got[1], { owner: "Org", repo: "New", branch: "main", pushed: "1" });
+  assert.equal(reposToCheck([repo("o", "r", "1", true, { default_branch: "dev" })])[0].branch, "dev");
 });

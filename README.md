@@ -39,7 +39,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
-- **Sharing:** invite links that set up a repo on someone else's device; read-only mode for people who can't push.
+- **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
 
 </details>
 
@@ -175,7 +175,7 @@ The installed app is the same page, and it updates by itself when the app does. 
 
 The app opens as many repos as you add, and you switch between them at the top of the file list. Set it up the way your team works:
 
-- **A vault per project:** keep each project's notes next to its code, in a folder of the project's own repo (say `Wiki/`, on the branch you work on). Add each repo in Settings with its **Folder** and **Branch**; each one gets its own invite link. The notes then move with the code, and a commit can change both.
+- **A vault per project:** keep each project's notes next to its code, in a folder of the project's own repo (say `Wiki/`, on the branch you work on). Add each repo in Settings with its **Folder** and **Branch**, then press **Share with everyone** there: every member who can save to the repo gets it by themselves, with no invite link per project ([Sharing](#sharing)). The notes then move with the code, and a commit can change both.
 - **One vault for the organization:** one notes repo for everything: the company wiki, every project's pages and tasks, with a folder per project if you like.
 - **Both:** an organization vault beside the projects' own vaults. Each repo keeps its own settings (start page, inboxes, template, vault rules).
 
@@ -204,7 +204,7 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 | Note template | `template` | A note that new Markdown notes start from. `{{title}}` becomes the title and `{{date}}` today's date (YYYY-MM-DD). Empty, or the file isn't there: a new note starts with `# Title`. | `Templates/Note.md` |
 | Vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
 
-Settings live in this browser's storage, so each device has its own. An invite link copies them to another device.
+Settings live in this browser's storage, so each device has its own. An invite link copies them to another device, and so does a repo's `.commonplace.json` (see [Sharing](#sharing)).
 
 </details>
 
@@ -292,6 +292,21 @@ Notes are shared the GitHub way: whoever can open the repo on GitHub can open it
    `owner` and `repo` are required; the rest are the fields in the [Settings reference](#settings-reference). The link carries no token and no notes.
 
 3. **They make their own token** (the app shows them the steps for that repo) and paste it. The repo is added to their device.
+
+- **Without a link, for a whole team:** in **Settings**, open the repo and press **Share with everyone**. It saves a `.commonplace.json` with the repo's settings at the top of the repo, on its default branch (one commit). From then on, everyone who can save to the repo gets it in the app by themselves, with those settings: the app looks through the repos their token can save to when it opens (at most once an hour, one request to list the repos, then one more only for repos that are new or changed), or at once with **Look for vaults** in Settings. A repo someone removes from their list isn't added back. The file looks like this, every field but `label` optional:
+
+   ```json
+   {
+     "label": "Our notes",
+     "branch": "main",
+     "folder": "notes",
+     "home": "Home.md",
+     "inbox": "Notes/Inbox.md",
+     "notes": "Notes",
+     "template": "Templates/Note.md",
+     "vault": true
+   }
+   ```
 
 - **Read only:** when GitHub says a person can't push to a repo, the app hides Edit, Save and New note there and shows *Read only*.
 - **Organizations:** the token's **Resource owner** must be the organization, and the organization may need to approve the token before it works (see step 3 of the Quick start).

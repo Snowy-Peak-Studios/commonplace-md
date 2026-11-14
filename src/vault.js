@@ -329,3 +329,50 @@ export function parentTarget(text) {
   const m = fm && /^parent:[ \t]*["']?\[\[([^\]\n]+)\]\]/m.exec(fm.raw);
   return m ? parseWikilink(m[1]).target || null : null;
 }
+
+// ---- Vaults found on GitHub: a `.commonplace.json` at a repo's root shares its settings ----
+
+/** The file that marks a repo as holding a vault, with the settings an invite link would carry. */
+export const MARKER = ".commonplace.json";
+
+const MARKER_PATHS = ["folder", "home", "inbox", "inboxes", "notes", "template"];
+const markerDir = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/g, "") : "");
+/** `owner/repo`, the same however it's spelled. */
+export const repoKey = (r) => `${r.owner}/${r.repo}`.toLowerCase();
+
+/**
+ * A repo's settings from its marker file, or null when the text isn't a marker. Paths are cleaned and
+ * anything else is left out, so a marker can only set what an invite link can.
+ */
+export function parseMarker(text, owner, repo) {
+  let data;
+  try { data = JSON.parse(text); } catch { return null; }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const r = { owner, repo, label: (typeof data.label === "string" && data.label.trim()) || repo };
+  r.branch = (typeof data.branch === "string" && data.branch.trim()) || "";
+  for (const k of MARKER_PATHS) r[k] = markerDir(data[k]);
+  r.home ||= "README.md";
+  r.vault = data.vault === true;
+  return r;
+}
+
+/** The marker file's text for a repo's settings (what the owner saves to share them). */
+export function markerText(r) {
+  const out = { label: r.label || r.repo, branch: r.branch || "main" };
+  for (const k of MARKER_PATHS) if (r[k] && !(k === "home" && r[k] === "README.md")) out[k] = r[k];
+  if (r.vault) out.vault = true;
+  return JSON.stringify(out, null, 2) + "\n";
+}
+
+/**
+ * Which repos of a GitHub listing (`GET /user/repos`) are worth looking at for a marker: ones this
+ * person can save to, not on the device yet, not removed from it by hand, and new or changed since
+ * they were last looked at (`seen`: repo key -> its `pushed_at` then).
+ */
+export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = {}) {
+  const skip = new Set([...known, ...removed].map((k) => k.toLowerCase()));
+  return listing
+    .filter((x) => x && x.owner?.login && x.name && x.permissions?.push && !x.archived)
+    .map((x) => ({ owner: x.owner.login, repo: x.name, branch: x.default_branch || "main", pushed: x.pushed_at || "" }))
+    .filter((x) => !skip.has(repoKey(x)) && seen[repoKey(x)] !== x.pushed);
+}

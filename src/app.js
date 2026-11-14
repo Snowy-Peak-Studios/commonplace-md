@@ -4,7 +4,7 @@ import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
-  inboxCandidates, ownInboxPath, isTaskPath, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, markerText, reposToCheck, repoKey, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView } from "./editor.js";
@@ -1775,6 +1775,83 @@ function addRepo(r) {
   return added;
 }
 
+// ---- Vaults found on GitHub: repos with a .commonplace.json show up by themselves ----
+
+const DISCOVER_EVERY = 60 * 60 * 1000;
+let discovering = null;
+
+/**
+ * Looks through the repos this token can save to for a marker file and adds the vaults it finds, so
+ * a member needs no invite link for each one. Cheap: one listing of the repos, then one GraphQL request
+ * per 40 repos that are new or changed since the last look; at most once an hour unless `now`.
+ * Resolves to the repos it added.
+ */
+function discoverVaults(now = false) {
+  if (!app.token) return Promise.resolve([]);
+  return (discovering ||= (async () => {
+    const state = store.get("discovery") || {};
+    if (!now && Date.now() - (state.at || 0) < DISCOVER_EVERY) return [];
+    const seen = { ...(state.seen || {}) };
+    const todo = reposToCheck(await gh.listRepos(), { seen, known: app.repos.map(repoKey), removed: state.removed || [] });
+    const found = [];
+    for (let i = 0; i < todo.length; i += 40) {
+      const part = todo.slice(i, i + 40);
+      const vars = {};
+      const fields = part.map((x, j) => {
+        vars[`o${j}`] = x.owner;
+        vars[`n${j}`] = x.repo;
+        return `r${j}: repository(owner: $o${j}, name: $n${j}) { object(expression: "HEAD:${MARKER}") { ... on Blob { text } } }`;
+      });
+      const args = part.map((_, j) => `$o${j}: String!, $n${j}: String!`).join(", ");
+      const data = await gh.graphql(`query(${args}) {\n${fields.join("\n")}\n}`, vars);
+      part.forEach((x, j) => {
+        seen[repoKey(x)] = x.pushed;
+        const text = data[`r${j}`]?.object?.text;
+        const r = text != null ? parseMarker(text, x.owner, x.repo) : null;
+        if (r) found.push({ ...r, branch: r.branch || x.branch });
+      });
+    }
+    store.set("discovery", { ...(store.get("discovery") || {}), at: Date.now(), seen });
+    return found.map(addRepo);
+  })().finally(() => { discovering = null; }));
+}
+
+/**
+ * Looks for new vaults and says which were added. Quiet when there's none, and when GitHub can't be
+ * reached unless asked (`now`): then it says why and resolves to null.
+ */
+async function lookForVaults(now = false) {
+  try {
+    const added = await discoverVaults(now);
+    if (added.length) {
+      toast(`Found on GitHub: ${added.map((r) => r.label).join(", ")}. ${added.length === 1 ? "It's" : "They're"} in the list of repos now.`, "ok", 6000);
+    }
+    return added;
+  } catch (e) {
+    if (!now) return [];
+    toast(e.message, "error");
+    return null;
+  }
+}
+
+/** Saves the marker file to a repo, so everyone who can save to it gets it with these settings. */
+async function shareRepoSettings(r) {
+  if (!(await confirmDialog("Share these settings with everyone?",
+    `This saves ${MARKER} in ${r.owner}/${r.repo} (one commit). Then everyone who can save to the repo gets it in ${APP_NAME} by themselves, with these settings, without an invite link.`,
+    "Share"))) return;
+  try {
+    // GitHub's GraphQL reads the marker from the default branch, so that's where it goes.
+    const info = await gh.repo(r);
+    const at = { owner: r.owner, repo: r.repo, branch: info.default_branch || r.branch };
+    let sha = null;
+    try { sha = (await gh.readText(at, MARKER)).sha; } catch (e) { if (e.status !== 404) throw e; }
+    await gh.writeText(at, MARKER, markerText(r), sha, `Share settings in ${MARKER} from ${APP_NAME}`);
+    toast(`Shared. Everyone who can save to ${r.repo} gets it in ${APP_NAME} within the hour.`, "ok", 6000);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
 /** Someone opened an invite link. */
 function join(params) {
   const r = joinRepo(params);
@@ -1814,7 +1891,10 @@ function showWelcome(joining = null) {
     if (!(await connect(input.value.trim(), out))) return;
     // The welcome page takes no place in the history: Back must not lead to it once connected.
     // A new device without an invite has no repos yet: the next step is adding one.
-    if (!joining) return void redirect(app.repos.length ? "#/" : "#/settings?add=1");
+    if (!joining) {
+      await lookForVaults(true);
+      return void redirect(app.repos.length ? "#/" : "#/settings?add=1");
+    }
     const r = addRepo(joining);
     store.remove("join");
     redirect(hrefFor(r));
@@ -1945,6 +2025,8 @@ function showSettings(adding = false) {
             toast(inviteLink(r), "info", 15000);
           }
         } }, icon("external"), "Copy invite link") : null,
+        r.repo ? h("button", { class: "btn small", type: "button", title: `Saves ${MARKER} in the repo, so everyone who can save to it gets it by themselves`,
+          onclick: () => shareRepoSettings(r) }, icon("upload"), "Share with everyone") : null,
         h("button", { class: "btn small danger", type: "button", onclick: (e) => e.target.closest("details").remove() }, icon("trash"), "Remove this repo"))));
   const newCard = () => repoCard({ owner: store.get("user")?.login || "", branch: "main", home: "README.md" }, true);
   forms.append(...app.repos.map((r) => repoCard(r)));
@@ -1964,6 +2046,12 @@ function showSettings(adding = false) {
       ids.add(id);
       return { id, ...r, label: r.label || `${r.owner}/${r.repo}` };
     }).filter((r) => r.owner && r.repo);
+    // A repo removed by hand isn't added back by the look for vaults on GitHub; one added again is.
+    const kept = new Set(repos.map(repoKey));
+    const discovery = store.get("discovery") || {};
+    const removed = new Set((discovery.removed || []).filter((k) => !kept.has(k)));
+    for (const r of app.repos) if (!kept.has(repoKey(r))) removed.add(repoKey(r));
+    store.set("discovery", { ...discovery, removed: [...removed] });
     app.repos = repos;
     store.set("repos", repos);
     app.trees.clear();
@@ -1977,9 +2065,18 @@ function showSettings(adding = false) {
     h("p", {}, app.repos.length
       ? "The GitHub repos the app opens. Switch between them at the top of the file list."
       : "No repos yet. Fill in the one that holds your notes (Owner and Repo are enough to start), then press Save repos."),
+    h("p", { class: "fine" }, `Repos you can save to that have a ${MARKER} at the top are added by themselves. To share a repo's settings with everyone who can save to it, open it below and press Share with everyone.`),
     forms,
     h("div", { class: "card-actions" },
       h("button", { class: "btn", onclick: () => forms.append(newCard()) }, icon("plus"), "Add a repo"),
+      h("button", { class: "btn", title: `Adds the repos you can save to that have a ${MARKER}`, onclick: async (e) => {
+        const button = e.currentTarget;
+        button.disabled = true;
+        const added = await lookForVaults(true);
+        if (added?.length) return showSettings();
+        button.disabled = false;
+        if (added) toast("No new vaults found on GitHub.");
+      } }, icon("search"), "Look for vaults"),
       h("button", { class: "btn primary", onclick: saveRepos }, "Save repos")));
 
   // ---- this device ----
@@ -2066,7 +2163,10 @@ function start() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
     navigator.serviceWorker.register("sw.js").catch(() => { /* the app works without it */ });
   }
-  if (app.token) refreshUser();
+  if (app.token) {
+    refreshUser();
+    lookForVaults();
+  }
   route();
 }
 
