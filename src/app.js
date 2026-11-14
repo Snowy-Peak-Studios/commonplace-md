@@ -759,7 +759,7 @@ function renderPreview() {
   fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
 }
 
-// ---- a task's fields as a form (the project's task setup, C-044) ----
+// ---- a task's fields as a form (the project's task setup) ----
 
 /** Each repo's task setup, read once from its .commonplace.json: repo id -> { setup, load }. */
 const setups = new Map();
