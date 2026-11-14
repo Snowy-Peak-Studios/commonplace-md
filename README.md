@@ -99,7 +99,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 Either:
 
-- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages.
+- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, and reaches `main` (and the site) at the next release.
 - **B. Host your own copy:**
   1. Fork [github.com/Snowy-Peak-Studios/commonplace-md](https://github.com/Snowy-Peak-Studios/commonplace-md) (keep the name `commonplace-md`, or change the address below to match).
   2. In your fork: **Settings › Pages › Build and deployment**: Source *Deploy from a branch*, branch `main`, folder `/ (root)`. Save.

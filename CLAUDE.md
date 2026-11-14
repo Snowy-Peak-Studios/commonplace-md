@@ -6,6 +6,7 @@ Guidance for contributors and AI agents working on Commonplace.md: a static brow
 
 - **Commits:** no `Co-Authored-By` lines in commits or pull request descriptions.
 - **Line endings:** every file in the repo is LF (`.gitattributes`). Notes the app saves are UTF-8 with LF line endings too (`src/app.js` saves through `toLf`), because many vault tools break on CRLF.
+- **Branches:** commit to `dev`. `main` is the latest release, and GitHub Pages serves it, so it moves only at a release: `dev` merged in, with a version tag and release notes.
 - **Personal notes:** anything about your own setup (accounts, repos, deployments) goes in `CLAUDE.local.md`, which git ignores. Never put names, emails, tokens or private repo names in tracked files.
 
 ## Working on it

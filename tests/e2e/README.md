@@ -1,7 +1,7 @@
 # Browser check
 
 `run.mjs` opens the app in Chrome (headless) against the example vault on GitHub (`example-vault/` in this repo's
-`main` branch). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
+`dev` branch, where work happens). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
 `template=Templates/Note.md`, the Inbox page, the Inboxes folder and the start page), and the script then checks:
 
 - reading: the start page, an embedded section, an image, callouts, properties, the Inbox button and shortcut;
@@ -33,7 +33,7 @@ Settings, all optional:
 |---|---|---|
 | `OWNER` | `Snowy-Peak-Studios` | The owner of the repo with the example vault |
 | `REPO` | `commonplace-md` | That repo |
-| `BRANCH` | `main` | Its branch |
+| `BRANCH` | `dev` | Its branch; `main` to check the released version, as on the live site |
 | `FOLDER` | `example-vault` | The vault's folder in it (empty for the whole repo) |
 | `BASE` | `http://localhost:8765/` | The app's address; use `http://127.0.0.1:8765/` if another server answers on `localhost:8765` |
 | `CHROME` | Chrome's usual path on Windows | Chrome's path |
