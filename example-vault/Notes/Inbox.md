@@ -13,6 +13,7 @@ Put your GitHub login in `github` above to make this one yours. The box below sh
 ```top-tasks
 range: 3
 areas:
+order: priority-newest
 sprint: current-then-next
 owner: Your name
 ```

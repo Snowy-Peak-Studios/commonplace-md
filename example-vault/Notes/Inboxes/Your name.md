@@ -13,6 +13,7 @@ The box below (the ` ```top-tasks ` block) shows the top three free tasks to sta
 ```top-tasks
 range: 3
 areas: Sharing, Notes
+order: priority-newest
 sprint: current-then-next
 owner: Your name
 ```

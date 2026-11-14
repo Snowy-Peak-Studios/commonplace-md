@@ -29,6 +29,7 @@ The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block.
 
 - `range:` how many tasks (up to 20);
 - `areas:` only these areas (empty: every area);
+- `order:` `priority-newest` (High, Medium, Low, the newest first within each), `priority-oldest`, `newest` or `oldest` (priority not counted);
 - `sprint:` `current-only`, `current-then-next` (the next sprint's when the current one has none left), or `off` (every task);
 - `owner:` whom **Claim** claims a task for.
 
@@ -37,6 +38,7 @@ Nothing is taken from anywhere else. Other Markdown editors show it as a small c
 ```top-tasks
 range: 3
 areas:
+order: priority-newest
 sprint: current-then-next
 owner: Your name
 ```
