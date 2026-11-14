@@ -6,3 +6,6 @@ goal: Share the notes with a friend
 ---
 
 # Sprint 2
+
+```sprint
+```

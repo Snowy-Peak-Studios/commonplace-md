@@ -13,6 +13,15 @@ blocked_by: ["[[Write the welcome note]]"]
 
 # Invite a friend
 
+```subtasks
+```
+
+```relations
+```
+
+```commits
+```
+
 As someone who shares notes, I want a friend to read and edit them too, so that we keep one set of notes.
 
 - [ ] Add them to the repo on GitHub

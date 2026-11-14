@@ -13,6 +13,15 @@ part_of: "[[Get set up]]"
 
 # Try the app on a phone
 
+```subtasks
+```
+
+```relations
+```
+
+```commits
+```
+
 As someone away from my desk, I want my notes on my phone, so that I can add to the [[Inbox]] anywhere.
 
 - [x] Open the app in the phone's browser

@@ -11,6 +11,15 @@ part_of: "[[Get set up]]"
 
 # Make a note template
 
+```subtasks
+```
+
+```relations
+```
+
+```commits
+```
+
 As a writer, I want new notes to start the same way, so that their properties are never forgotten.
 
 - [x] Write [[Templates/Note|the template]] with `{{title}}` and `{{date}}`

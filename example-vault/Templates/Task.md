@@ -10,6 +10,15 @@ priority: Medium
 
 # {{title}}
 
+```subtasks
+```
+
+```relations
+```
+
+```commits
+```
+
 **As** someone who ..., **I want** ..., **so that** ...
 
 ## Acceptance criteria
