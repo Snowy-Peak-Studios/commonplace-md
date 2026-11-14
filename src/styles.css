@@ -660,7 +660,7 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
 .prop-val a { text-decoration: none; }
 .props-raw { background: var(--code-bg); padding: 10px 12px; border-radius: 8px; font: 13px/1.5 var(--mono); }
 
-/* an inbox's top tasks to start */
+/* the top tasks to start: over an inbox, or a ```top-tasks block on any page */
 .suggest { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg-soft); font-size: 14px; }
 .suggest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .suggest-head .icon { width: 18px; height: 18px; color: var(--accent); }

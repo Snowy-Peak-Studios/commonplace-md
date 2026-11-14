@@ -9,7 +9,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks,
 } from "./vault.js";
-import { createMarkdown, renderNote } from "./markdown.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
@@ -859,6 +859,7 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
+  fillTopTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
@@ -873,7 +874,7 @@ function renderPreview() {
   const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
   fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? commitsBox(f, props) : null, sprint,
     frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
-    isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+    isInbox(f.repo, f.path) ? inboxBox(f) : "", body);
 }
 
 // ---- a task's fields as a form (the project's task setup) ----
@@ -1323,25 +1324,25 @@ async function setTaskField(f, field, input, control) {
   }
 }
 
-// ---- an inbox's top tasks to start ----
+// ---- the top tasks to start: over an inbox, and in a ```top-tasks block on any page ----
 
 /** The repo's Inbox page and the notes in its inboxes folder. */
 const isInbox = (repo, path) => inboxCandidates([path], repo.inbox, repo.inboxes || "").length > 0;
 
 /** One look-up per tree version and areas, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who) {
+function loadSuggestions(repo, areas, who, count) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}`;
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
       .then(async (notes) => {
         const sprint = await suggestSprints(repo, tree).catch(() => null);
-        const fromSprint = sprint && sprintSuggestions(notes, { areas, prop: sprint.prop, now: sprint.now?.path, next: sprint.next?.path,
+        const fromSprint = sprint && sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: sprint.next?.path,
           resolve: (t, from) => tree.index.resolve(t, from) });
         const shown = {
-          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas }),
+          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count }),
           waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
           sprint: fromSprint ? sprint : null,
         };
@@ -1370,22 +1371,43 @@ async function suggestSprints(repo, tree) {
   return { prop: field.prop, now: list.find((s) => s.when === "now") ?? null, next: list.find((s) => s.when === "next") ?? null };
 }
 
-/**
- * The top three free tasks, over the inbox's text: the notes in a `Tasks` folder with no assignee, highest
- * priority first. The inbox's `areas` property limits them to those areas; `owner` is who a click claims them for.
- * Above them, the tasks its owner has claimed and not finished: waiting for their agent, or with an agent on it.
- */
-function suggestBox(f) {
-  const { repo } = f;
-  const tree = app.trees.get(repo.id);
-  if (![...tree.files.keys()].some(isTaskPath)) return null;
+/** Who the page's box claims tasks for: its `owner` property, else the signed-in GitHub user. */
+const boxOwner = (props) => String(props.owner ?? "").trim() || store.get("user")?.login || "";
+
+/** The inbox's box, over its text: its `areas` property limits the tasks, its `owner` is who Claim claims them for. */
+function inboxBox(f) {
   const props = noteProps(f.text);
-  const areas = listProp(props.areas);
-  const who = String(props.owner ?? "").trim() || store.get("user")?.login || "";
+  const shown = Array.isArray(props.areas) ? props.areas.map(String) : listProp(props.areas).length ? [String(props.areas)] : [];
+  return suggestBox(f.repo, { areas: listProp(props.areas), shown, who: boxOwner(props) });
+}
+
+/**
+ * Each ```top-tasks block on the page becomes the same box, with its own `areas` and `count` lines; the page's
+ * `owner` property (or the signed-in user) is who it claims for. In a repo without tasks, the block's code stays.
+ */
+function fillTopTasks(root, f) {
+  const blocks = root.querySelectorAll(".top-tasks-block");
+  if (!blocks.length) return;
+  const who = boxOwner(noteProps(f.text));
+  for (const el of blocks) {
+    const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
+    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who, count: Number(el.dataset.count) || TOP_TASKS_COUNT });
+    if (box) el.replaceWith(box);
+  }
+}
+
+/**
+ * The top free tasks (three unless `count` says): the notes in a `Tasks` folder with no assignee, highest
+ * priority first, only in `areas` (lower case) when given; `shown` is how the areas are written, for the head.
+ * Above them, the tasks `who` has claimed and not finished: waiting for their agent, or with an agent on it.
+ */
+function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT }) {
+  const tree = app.trees.get(repo.id);
+  if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
   const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
   const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
-      h("small", { class: "muted" }, areas.length ? `Areas: ${Array.isArray(props.areas) ? props.areas.join(", ") : props.areas}` : "All areas")),
+      h("small", { class: "muted" }, areas.length ? `Areas: ${shown.join(", ")}` : "All areas")),
     list);
   const editable = canWrite(repo) && !!app.token;
   let allAreas = [];
@@ -1422,7 +1444,7 @@ function suggestBox(f) {
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
-  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found, states: told, sprint }) => {
+  loadSuggestions(repo, areas, who, count).then(({ mine, free, waiting, allAreas: found, states: told, sprint }) => {
     allAreas = found;
     states = told;
     // With sprints, the free tasks are the current sprint's, or the next one's when it has none left.
@@ -1493,9 +1515,9 @@ async function claimSuggested(repo, path, who, button, move = null) {
   if (!refreshInboxBox(repo)) button.disabled = false;
 }
 
-/** Draws the open inbox again (its box re-sorts), keeping the scroll. False when no inbox of `repo` is open. */
+/** Draws the open page again (its top tasks box re-sorts), keeping the scroll. False when no page of `repo` with one is open. */
 function refreshInboxBox(repo) {
-  if (!(app.file?.repo === repo && isInbox(repo, app.file.path) && app.file.dom?.preview.isConnected)) return false;
+  if (!(app.file?.repo === repo && app.file.dom?.preview.isConnected && app.file.dom.preview.querySelector(".suggest"))) return false;
   const scroll = $("#main").scrollTop;
   renderPreview();
   $("#main").scrollTop = scroll;

@@ -1,7 +1,7 @@
 // Markdown preview: wikilinks, embeds, callouts, task checkboxes.
 // `env` (passed to render) supplies { resolve(target) -> path|null, href(path, heading), fromPath, depth }.
 // Icons, embedded pages, base views and Mermaid diagrams are left as placeholders (`data-icon`, `.embed-page`, `.embed-base`,
-// `.mermaid-diagram`) for the app to fill.
+// `.mermaid-diagram`, `.top-tasks-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
 import { parseWikilink, isImagePath, prepareForPreview } from "./vault.js";
@@ -134,16 +134,45 @@ export function createMarkdown() {
   };
   // A ```mermaid block: its code shows until the app draws the diagram from it. Other fences render as before.
   // The source isn't put in an attribute: DOMPurify drops attribute values with `-->` in them, which is Mermaid's arrow.
+  // A ```top-tasks block: the app puts the top tasks box there; until then (or inside an embed) its code shows.
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    if (token.info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid") return fence(tokens, idx, options, env, self);
+    const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
+    if (lang === "top-tasks") {
+      const { areas, count } = topTasksOptions(token.content);
+      return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}">`
+        + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
+    }
+    if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
   };
 
   md.renderer.rules.callout_close = (tokens, idx) => (tokens[idx].meta.fold ? "</div></details>\n" : "</div></div>\n");
 
   return md;
+}
+
+/** How many tasks a ```top-tasks block shows when it doesn't say, and the most it can ask for. */
+export const TOP_TASKS_COUNT = 3;
+const TOP_TASKS_MAX = 20;
+
+/**
+ * The options of a ```top-tasks block, one per line: `areas: Features, Docs` (or `[Features, Docs]`) and
+ * `count: 5`. Other lines are ignored; a missing or odd count is the default three.
+ */
+export function topTasksOptions(src) {
+  const out = { areas: [], count: TOP_TASKS_COUNT };
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(areas|count)\s*:\s*(.*?)\s*$/i);
+    if (!m) continue;
+    if (m[1].toLowerCase() === "areas") {
+      out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map((a) => a.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    } else if (/^\d+$/.test(m[2])) {
+      out.count = Math.min(TOP_TASKS_MAX, Math.max(1, Number(m[2])));
+    }
+  }
+  return out;
 }
 
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */

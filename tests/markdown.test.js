@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -63,4 +63,19 @@ test("a mermaid block becomes a diagram placeholder holding its source; other fe
   const escaped = 'graph TB\n  A[&quot;Run &lt;br&gt; start&quot;] --&gt; B &amp; C\n';
   assert.equal(html, `<div class="mermaid-diagram"><pre><code>${escaped}</code></pre></div>\n`);
   assert.equal(render("```js\nconst a = 1 < 2;\n```\n"), '<pre><code class="language-js">const a = 1 &lt; 2;\n</code></pre>\n');
+});
+
+test("a top-tasks block becomes a placeholder with its areas and count, holding its source", () => {
+  assert.equal(render("```top-tasks\nareas: Features, Docs\ncount: 5\n```\n"),
+    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5"><pre><code>areas: Features, Docs\ncount: 5\n</code></pre></div>\n');
+  assert.equal(render("```top-tasks\n```\n"), '<div class="top-tasks-block" data-areas="" data-count="3"><pre><code></code></pre></div>\n');
+  assert.match(render('```Top-Tasks\nareas: ["A&B"]\n```\n'), /data-areas="A&amp;B"/);
+});
+
+test("a top-tasks block's options: areas as a list or in brackets, a count from 1 to 20, other lines ignored", () => {
+  assert.deepEqual(topTasksOptions(""), { areas: [], count: 3 });
+  assert.deepEqual(topTasksOptions("Areas: [Features, 'Docs']\nCOUNT: 7"), { areas: ["Features", "Docs"], count: 7 });
+  assert.deepEqual(topTasksOptions("count: 0\nnote: hi"), { areas: [], count: 1 });
+  assert.deepEqual(topTasksOptions("count: 99"), { areas: [], count: 20 });
+  assert.deepEqual(topTasksOptions("count: five\nareas:"), { areas: [], count: 3 });
 });

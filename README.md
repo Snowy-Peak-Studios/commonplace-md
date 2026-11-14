@@ -26,6 +26,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
   - `![[image.png]]` embeds show, and so do callouts and the front matter as properties.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
+  - A ` ```top-tasks ` block shows the top tasks to start on any page, like the inbox does.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
 - **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
@@ -285,7 +286,7 @@ A GitHub Action fills them in by itself. After each push, it adds every commit w
 
 ```text
 example-vault/
-├── Home.md                      start page: links, a table, a callout, an embedded section, a Mermaid diagram, an image
+├── Home.md                      start page: links, a table, a callout, an embedded section, the top tasks, a Mermaid diagram, an image
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], the sprints, and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
@@ -338,6 +339,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - front matter, shown as properties
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths
 - ` ```mermaid ` diagrams
+- ` ```top-tasks ` blocks: the top tasks to start, on any page
 - checkboxes, ticked in Read mode
 - `%% comments %%`, hidden in the preview
 - note templates with `{{title}}` and `{{date}}`
@@ -410,7 +412,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
-- **Top tasks to start:** every inbox shows, above its text, the three free tasks you could start now: notes in a `Tasks` folder with no `assignee` and not *In Progress*, *Blocked* (any case) or *Done*, highest `priority` first (*High*, *Medium*, *Low*), then the newest (highest `id`). An `areas` property on the inbox keeps only those areas (e.g. `areas: [Features, Docs]`); without it, every area counts. **Claim** sets the task's `status` to *In Progress* and its `assignee` to the inbox's `owner`, in one commit. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints**, the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit.
+- **Top tasks to start:** every inbox shows, above its text, the three free tasks you could start now: notes in a `Tasks` folder with no `assignee` and not *In Progress*, *Blocked* (any case) or *Done*, highest `priority` first (*High*, *Medium*, *Low*), then the newest (highest `id`). An `areas` property on the inbox keeps only those areas (e.g. `areas: [Features, Docs]`); without it, every area counts. **Claim** sets the task's `status` to *In Progress* and its `assignee` to the inbox's `owner`, in one commit. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints**, the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit. **On any page:** a ` ```top-tasks ` block shows the same box there (e.g. on your Home, a project page or a sprint), with an optional `areas:` line (`areas: Features, Docs`) and `count:` line (three unless it says, up to 20); its **Claim** claims for the page's `owner`, or for you. Other Markdown editors show the block as plain code.
 
 </details>
 

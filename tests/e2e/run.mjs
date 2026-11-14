@@ -178,6 +178,13 @@ check(await until(() => {
 await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));
 check(await page.$('.preview .callout[data-callout="tip"]') !== null, "the tip callout shows as a callout");
 check(await page.$$eval("#shortcuts a.file", (a) => a.map((x) => x.textContent)).then((t) => t.includes("Inbox")), "the sidebar has an Inbox shortcut");
+// Home's ```top-tasks block: the same box as the inbox's, in the page's text.
+await page.waitForSelector(".note-body .suggest .suggest-list a.suggest-name", { timeout: 15000 }).catch(() => {});
+const homeBox = await page.evaluate(() => ({
+  box: !!document.querySelector(".note-body .suggest"), code: !!document.querySelector(".note-body .top-tasks-block"),
+  rows: document.querySelectorAll(".note-body .suggest .suggest-list a.suggest-name").length,
+}));
+check(homeBox.box && !homeBox.code && homeBox.rows >= 1, "Home's top-tasks block shows the top tasks box: " + JSON.stringify(homeBox));
 await shot("1-home-desktop");
 await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
 await shot("1b-home-light");

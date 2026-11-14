@@ -23,6 +23,14 @@ The goals live on the Task Board; this is that section, embedded here:
 
 ![[Task Board#Current goals]]
 
+## What to start next
+
+The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block, with an optional `areas:` line and `count:` line. Other Markdown editors show it as a small code block.
+
+```top-tasks
+count: 3
+```
+
 ## How saving works
 
 ```mermaid
