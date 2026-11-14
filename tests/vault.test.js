@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -634,4 +634,15 @@ test("a top tasks order: the four orders, a few other ways to say them, else non
   assert.equal(taskOrder("oldest_first"), "oldest");
   assert.equal(taskOrder("by due date"), "");
   assert.equal(taskOrder(undefined), "");
+});
+
+test("a plain Markdown link to another file in the repo, read as GitHub reads it", () => {
+  assert.deepEqual(relativeLink("Add%20a%20vault.md", "How To/Start.md"), { path: "How To/Add a vault.md", heading: null });
+  assert.deepEqual(relativeLink("../Guide.md#callouts", "How To/Start.md"), { path: "Guide.md", heading: "callouts" });
+  assert.deepEqual(relativeLink("./Sub/Page.md#the-first-steps", "How To/Start.md"), { path: "How To/Sub/Page.md", heading: "the first steps" });
+  assert.deepEqual(relativeLink("/Tasks/Get%20set%20up.md", "How To/Start.md"), { path: "Tasks/Get set up.md", heading: null }, "from the top");
+  assert.deepEqual(relativeLink("Data/Reading list.csv", "Home.md"), { path: "Data/Reading list.csv", heading: null });
+  for (const href of ["https://example.com/a.md", "mailto:a@example.com", "#/settings?fields", "#heading", "//cdn/x.md", "../../Out.md", "", null]) {
+    assert.equal(relativeLink(href, "How To/Start.md"), null, String(href));
+  }
 });

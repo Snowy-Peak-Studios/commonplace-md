@@ -8,7 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -1690,9 +1690,23 @@ async function changeTask(repo, path, key, value, picker, said = "") {
 function decorate(root, repo, fromPath) {
   fillIcons(root);
   for (const a of root.querySelectorAll('a[href^="http"]')) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+  fillLinks(root, repo, fromPath);
   fillImages(root, repo, fromPath);
   fillDiagrams(root);
   fillFolds(root, fromPath);
+}
+
+/**
+ * Plain Markdown links to other files in the repo, `[Add a vault](Add%20a%20vault.md)`, open that file in the
+ * app, as they do on GitHub. A link to a file the repo doesn't have is left as it is.
+ */
+function fillLinks(root, repo, fromPath) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return;
+  for (const a of root.querySelectorAll("a[href]:not(.wikilink)")) {
+    const link = relativeLink(a.getAttribute("href"), fromPath);
+    if (link && tree.files.has(link.path)) a.setAttribute("href", hrefFor(repo, link.path, link.heading));
+  }
 }
 
 // ---- folding a list's subpoints ----

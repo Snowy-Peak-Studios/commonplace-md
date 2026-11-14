@@ -131,6 +131,30 @@ export function titleProblem(title) {
 /** How a new Markdown note starts when its repo has no note template. */
 export const defaultNote = (title) => `# ${title.trim()}\n\n`;
 
+/**
+ * Where a plain Markdown link in a note leads when it's a relative link to another file, as GitHub reads it:
+ * `[Add a vault](Add%20a%20vault.md#the-steps)` from `How To/Start.md` is `{ path: "How To/Add a vault.md",
+ * heading: "the steps" }`. A leading `/` starts at the top of the vault. Null for a web or mail address, an
+ * address in the app (`#/...`), a heading on the same page, or a path that climbs above the top.
+ */
+export function relativeLink(href, fromPath = "") {
+  const raw = String(href ?? "").trim();
+  if (!raw || raw.startsWith("#") || raw.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(raw)) return null;
+  const at = raw.indexOf("#");
+  const decode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const target = decode((at < 0 ? raw : raw.slice(0, at)).split("?")[0]);
+  const parts = target.startsWith("/") ? [] : String(fromPath).split("/").slice(0, -1);
+  for (const seg of target.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg !== "..") parts.push(seg);
+    else if (!parts.length) return null;
+    else parts.pop();
+  }
+  if (!parts.length) return null;
+  const heading = at < 0 ? "" : decode(raw.slice(at + 1)).replace(/-/g, " ").trim();
+  return { path: parts.join("/"), heading: heading || null };
+}
+
 /** The blocks a task's page shows its boxes in, and a sprint's: the app adds no box a note doesn't ask for. */
 export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
 export const SPRINT_BLOCKS = ["sprint"];

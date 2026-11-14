@@ -419,6 +419,18 @@ await page.waitForFunction(() => location.hash.endsWith("/Home.md") && document.
 check(hashPath(page.url()) === `/${ID}/Home.md`, "Up opens Home: " + hashPath(page.url()));
 check(await page.$eval("#up-btn", (b) => b.hidden), "Home has no parent, so no Up button");
 
+// 3c. Plain Markdown links between notes, as GitHub reads them: the How To pages link that way.
+await page.goto(at("How To/How To.md"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".preview h1");
+const plainLinks = await page.$$eval(".note-body a[href]", (a) => a.map((x) => ({ text: x.textContent, href: x.getAttribute("href") })));
+const toVault = plainLinks.find((l) => l.text === "Add a vault");
+const toGuide = plainLinks.find((l) => l.text === "The guide");
+check(toVault?.href === `#/${ID}/How%20To/Add%20a%20vault.md` && toGuide?.href === `#/${ID}/Guide.md`,
+  "plain Markdown links lead to the notes in the app, in the same folder and one up: " + JSON.stringify([toVault, toGuide]));
+await page.click(`.note-body a[href="${toVault.href}"]`);
+await page.waitForFunction(() => location.hash.endsWith("/Add%20a%20vault.md") && document.querySelector(".preview h1")?.textContent === "Add a vault", { timeout: 15000 }).catch(() => {});
+check(hashPath(page.url()) === `/${ID}/How To/Add a vault.md`, "following one opens that note: " + hashPath(page.url()));
+
 // 4. The Guide: folded nav box, no %% left, links with headings and aliases.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".preview h1");

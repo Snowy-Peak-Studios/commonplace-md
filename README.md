@@ -63,6 +63,8 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 ## Quick start
 
+**Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
+
 Five steps, about ten minutes. Or let your AI agent do most of them:
 
 <details>
@@ -317,6 +319,7 @@ example-vault/
 ├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, folding lists, diagrams
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], the sprints, and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
+├── How To/                      short how-to pages, one per thing people do, linked with plain Markdown links (they read the same on GitHub)
 ├── Other kinds of files.md      what opens how: tables, text with colours, PDFs, pictures, and downloads for the rest
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
 ├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
@@ -361,6 +364,7 @@ The navigation box in `Guide.md` is the kind a script writes and keeps up to dat
 The notes are plain Markdown files, so the same folder opens in any Markdown editor, and desktop note apps that use `[[wikilinks]]` read it as it is. What the app supports:
 
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
+- plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties
