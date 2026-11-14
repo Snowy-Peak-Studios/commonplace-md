@@ -386,7 +386,7 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
 /**
  * The task fields the app knows. `kind` says what control a field gets: a choice from `values`, a person,
  * a link to a task or a sprint note, a date, a number or text. `legacy` fields are the ones a repo
- * with no setup has had all along.
+ * with no setup has had all along; `optional` ones start off in a new setup, until a project turns them on.
  */
 export const TASK_FIELDS = [
   { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Blocked", "Waiting", "Done"], legacy: true },
@@ -394,6 +394,7 @@ export const TASK_FIELDS = [
   { key: "assignee", label: "Assignee", kind: "person", legacy: true },
   { key: "area", label: "Area", kind: "text", legacy: true },
   { key: "requested_by", label: "Requested by", kind: "person", legacy: true },
+  { key: "reviewer", label: "Reviewer", kind: "person", optional: true },
   { key: "type", label: "Type", kind: "choice", values: ["Epic", "Story", "Task", "Bug"] },
   { key: "part_of", label: "Parent task", kind: "task" },
   { key: "sprint", label: "Sprint", kind: "sprint", folder: "Sprints", length_days: 14 },
@@ -414,14 +415,15 @@ const cleanFolder = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/
 /**
  * A repo's task setup from the `tasks` part of its marker, with every field filled in. No setup at all
  * (`null`) keeps the fields repos have always had; a setup starts from a new project's fields (every
- * one on) and changes what it names. Anything it can't use is left at the default.
+ * one on but the optional ones) and changes what it names. Anything it can't use is left at the default.
  */
 export function taskSetup(raw) {
   const given = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
   const set = given?.fields && typeof given.fields === "object" ? given.fields : {};
   const fields = TASK_FIELDS.map((f) => {
     const s = set[f.key] && typeof set[f.key] === "object" ? set[f.key] : {};
-    const field = { key: f.key, label: f.label, kind: f.kind, on: given ? s.on !== false : !!f.legacy, prop: f.key };
+    const on = given ? (f.optional ? s.on === true : s.on !== false) : !!f.legacy;
+    const field = { key: f.key, label: f.label, kind: f.kind, on, prop: f.key };
     if (typeof s.prop === "string" && isFieldProp(s.prop.trim())) field.prop = s.prop.trim();
     if (f.values) field.values = cleanValues(s.values).length ? cleanValues(s.values) : [...f.values];
     if (f.kind === "sprint") {
@@ -553,6 +555,21 @@ export function newTaskProps(setup) {
     if (f.key === "type") return [f.prop, f.values.find((v) => v.toLowerCase() === "task") || f.values[0]];
     return [f.prop, f.values[0]];
   });
+}
+
+/**
+ * A new task's reviewer, when the setup has Reviewer on and the note doesn't name one yet: the person who
+ * asked for it (its Requested by), else `who`, the person making it. The note's text, changed or not.
+ */
+export function withReviewer(setup, text, who = "") {
+  const field = setup?.fields.find((f) => f.key === "reviewer" && f.on);
+  if (!field) return text;
+  // One plain line each (`reviewer: ""`, `requested_by: Ann`), read without a YAML parser.
+  const raw = splitFrontMatter(toLf(text))?.raw ?? "";
+  const line = (prop) => (new RegExp(`^${prop}:[ \t]*(.*)$`, "m").exec(raw)?.[1] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (line(field.prop)) return text;
+  const reviewer = line(fieldProp(setup, "requested_by")) || String(who ?? "").trim();
+  return reviewer ? withProps(text, [[field.prop, reviewer]]) : text;
 }
 
 // ---- parent tasks and subtasks ----

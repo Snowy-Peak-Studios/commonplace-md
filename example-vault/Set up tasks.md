@@ -11,7 +11,7 @@ Every task is a note in `Tasks/`, and its fields (status, priority, who it's for
 
 ## What you can change
 
-- **Turn fields on and off.** The app knows Status, Priority, Assignee, Area, Requested by, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date.
+- **Turn fields on and off.** The app knows Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. **Reviewer** is who checks and approves the work: a new task's reviewer is who asked for it, else whoever makes it.
 - **Change the lists:** the statuses, the priorities, the types. Type them split by commas.
 - **Rename a property:** each field is kept in a property of the same name (`status`, `priority`, ...). The parent task is kept in `part_of`, since `parent` places a page in the tree of pages.
 - **Sprints:** the folder the sprint notes go in, and how many days a sprint lasts.
@@ -40,4 +40,4 @@ A sprint is a note in `Sprints/` with its `start`, `end` and `goal`, like [[Spri
 
 ## No setup yet?
 
-A repo that was never set up has Status, Priority, Assignee, Area and Requested by, as before. The first time you open the setup, every field is ticked: untick the ones you don't need, then save.
+A repo that was never set up has Status, Priority, Assignee, Area and Requested by, as before. The first time you open the setup, every field but Reviewer is ticked: untick the ones you don't need (and tick Reviewer if you want one), then save.

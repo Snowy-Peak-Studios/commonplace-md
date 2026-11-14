@@ -223,7 +223,7 @@ Settings live in this browser's storage, so each device has its own. An invite l
 
 A task is a note in the tasks folder (`Tasks/` unless you change it), and its fields are properties in its front matter. In **Settings**, open the repo and press **Task fields**:
 
-- **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all ten on.
+- **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all of them on but Reviewer, the person who checks and approves the work, which a project turns on if it wants one. A new task's reviewer is who asked for it (its Requested by), else whoever makes it, and can be changed.
 - **Change the lists** (statuses, priorities, types), the **property** each field is kept in (the parent task is `part_of`, since `parent` places a page in the vault's tree), the sprints folder and length, and the estimate's unit (points, hours or days).
 - **Add a field of your own:** a name, its property, and its kind: text, number, date, a choice from a list, a person or a link to a page.
 - **Save to the repo** writes it into the repo's `.commonplace.json`, under `tasks`, in one commit. Everyone on the project shares it, and **Share with everyone** keeps it:

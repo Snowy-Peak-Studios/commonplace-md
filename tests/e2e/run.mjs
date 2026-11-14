@@ -816,16 +816,17 @@ await shot("8b-settings-desktop");
 // 8c. Task fields: a repo with no task setup opens with a new project's fields; saving writes them to its .commonplace.json.
 await page.$eval(".repo-card summary", (el) => el.click());
 await page.evaluate(() => [...document.querySelectorAll(".repo-card[open] button")].find((b) => /Task fields/.test(b.textContent)).click());
-check(await until(() => document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 10, 10000),
-  "Task fields opens with the ten fields a new project gets");
-check(await page.$$eval("dialog[open] .task-field:not(.head) input[type=checkbox]", (c) => c.every((x) => x.checked)), "every one of them on");
+check(await until(() => document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 11, 10000),
+  "Task fields opens with the eleven fields the app knows");
+const fieldsOn = await page.$$eval("dialog[open] .task-field:not(.head)", (rows) => rows.map((r) => [r.textContent.includes("Reviewer"), r.querySelector("input[type=checkbox]")?.checked]));
+check(fieldsOn.filter(([rev]) => rev).length === 1 && fieldsOn.every(([rev, on]) => on === !rev), "every one of them on but Reviewer, which a project turns on: " + JSON.stringify(fieldsOn));
 await shot("8c-task-fields");
 const putsBeforeFields = puts.length;
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => /Save to the repo/.test(b.textContent)).click());
 check(await until(() => !document.querySelector("dialog[open]"), 10000), "saving closes it");
 const markerPut = puts.slice(putsBeforeFields).find((p) => p.url === `${REPO_API}/contents/.commonplace.json`);
 const saved = markerPut ? JSON.parse(markerPut.text) : null;
-check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.folder === FOLDER,
+check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.tasks.fields.reviewer?.on === false && saved.folder === FOLDER,
   "the task setup is saved in .commonplace.json at the repo's top, with the repo's settings: " + (markerPut?.text || "no PUT").replace(/\s+/g, " ").slice(0, 120));
 
 // 8d. A task's fields as a form: with that setup, a task shows its ten fields; a change is one commit of that one line.
@@ -853,7 +854,7 @@ check(!!formPut && formPut.body.message === "T-4: type set to Bug from Commonpla
 await page.goto(at("Set up tasks.md"), { waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector('.note-body a[href="#/settings?fields"]'), 10000), "the Set up tasks page has a link to the setup");
 await page.evaluate(() => document.querySelector('.note-body a[href="#/settings?fields"]')?.click());
-check(await until(() => location.hash === "#/settings?fields" && document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 10, 10000),
+check(await until(() => location.hash === "#/settings?fields" && document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 11, 10000),
   "the Set up tasks page's link opens Task fields");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Cancel")?.click());
 

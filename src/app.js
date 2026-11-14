@@ -5,7 +5,7 @@ import { GitHub } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
-  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks,
 } from "./vault.js";
@@ -2306,13 +2306,13 @@ async function startingText(repo, tree, p) {
 
 /**
  * A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved).
- * With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
+ * With Reviewer on, its reviewer is who asked for it (Requested by), else whoever makes it. With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
  * a sprint the template already sets stays, and Add subtask then gives it its parent's.
  */
 async function asNewTask(repo, tree, p, text) {
   const setup = await loadTaskSetup(repo);
   if (!setup.configured || !isSetupTask(setup, p.path)) return text;
-  const out = withProps(text, newTaskProps(setup), { keep: true });
+  const out = withReviewer(setup, withProps(text, newTaskProps(setup), { keep: true }), store.get("user")?.login);
   const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
   if (!sprint?.next || String(noteProps(out)[sprint.prop] ?? "").trim()) return out;
   return setProps(out, [[sprint.prop, `[[${sprint.next.name}]]`]]) ?? out;

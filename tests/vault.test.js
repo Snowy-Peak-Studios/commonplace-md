@@ -4,7 +4,7 @@ import {
   LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
-  isSetupTask, withProps, linkName, fieldValue, newTaskProps,
+  isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
 } from "../src/vault.js";
@@ -295,6 +295,9 @@ test("a task setup starts from a new project's fields and changes what it names"
   assert.equal(f.estimate.unit, "hours");
   assert.deepEqual([f.component.label, f.component.kind, f.component.values, f.component.custom], ["Component", "choice", ["App"], true]);
   assert.deepEqual([f.notes.kind, f.notes.on], ["text", false]);
+  assert.deepEqual([f.reviewer.kind, f.reviewer.on], ["person", false], "Reviewer starts off in a new setup");
+  assert.equal(taskSetup({ fields: { reviewer: { on: true } } }).fields.find((x) => x.key === "reviewer").on, true);
+  assert.equal(taskSetup(null).fields.find((x) => x.key === "reviewer").on, false);
   assert.equal(s.fields.filter((x) => x.custom).length, 2, "a field named like a built-in one, or with no name, is left out");
   assert.equal(taskSetup({ fields: { sprint: { length_days: 0 } } }).fields.find((x) => x.key === "sprint").length_days, 14);
 });
@@ -304,6 +307,7 @@ test("a task setup round-trips through its JSON, and problems are named", () => 
   const json = taskSetupJson(s);
   assert.deepEqual(json.fields.part_of, { on: true, prop: "epic" });
   assert.deepEqual(json.fields.sprint, { on: true, folder: "Sprints", length_days: 14 });
+  assert.deepEqual(json.fields.reviewer, { on: false });
   assert.deepEqual(json.custom, [{ name: "Component", prop: "component", kind: "choice", values: ["App", "Docs"] }]);
   assert.deepEqual(taskSetup(JSON.parse(JSON.stringify(json))), s);
   assert.equal(taskSetupProblem(s), "");
@@ -315,7 +319,7 @@ test("a task setup round-trips through its JSON, and problems are named", () => 
   assert.match(taskSetupProblem(empty), /Type needs at least one value/);
   assert.equal(isFieldProp("part_of"), true);
   assert.equal(isFieldProp("2x"), false);
-  assert.equal(TASK_FIELDS.length, 10);
+  assert.equal(TASK_FIELDS.length, 11);
 });
 
 test("the marker keeps the task setup when the repo settings are shared again, and the other way round", () => {
@@ -370,6 +374,20 @@ test("a new task starts with the fields that are on", () => {
   const props = newTaskProps(taskSetup({ fields: { due: { on: false } }, custom: [{ name: "Size", kind: "choice", values: ["S", "M"] }] }));
   assert.deepEqual(props, [["status", "To Do"], ["priority", "Medium"], ["assignee", ""], ["area", ""], ["requested_by", ""],
     ["type", "Task"], ["part_of", ""], ["sprint", ""], ["estimate", ""], ["size", "S"]]);
+  const withRev = newTaskProps(taskSetup({ fields: { reviewer: { on: true } } }));
+  assert.deepEqual(withRev.slice(4, 6), [["requested_by", ""], ["reviewer", ""]]);
+});
+
+test("a new task's reviewer is who asked for it, else who makes it, and only when Reviewer is on", () => {
+  const on = taskSetup({ fields: { reviewer: { on: true } } });
+  const note = (rev, asked) => `---\nrequested_by: ${asked}\nreviewer: ${rev}\n---\n# Hi\n`;
+  assert.equal(withReviewer(on, note('""', "Ann Smith"), "bob"), note('Ann Smith', "Ann Smith"));
+  assert.equal(withReviewer(on, note('""', '""'), "bob"), note("bob", '""'));
+  assert.equal(withReviewer(on, note("Cy", "Ann"), "bob"), note("Cy", "Ann"), "a reviewer the template sets stays");
+  assert.equal(withReviewer(on, note('""', '""'), ""), note('""', '""'));
+  assert.equal(withReviewer(taskSetup({}), note('""', "Ann"), "bob"), note('""', "Ann"), "off: nothing changes");
+  const renamed = taskSetup({ fields: { reviewer: { on: true, prop: "approver" }, requested_by: { prop: "asked_by" } } });
+  assert.equal(withReviewer(renamed, "---\nasked_by: 'Zoë'\n---\n", ""), "---\nasked_by: 'Zoë'\napprover: Zoë\n---\n");
 });
 
 // ---- parent tasks and subtasks ----
