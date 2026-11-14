@@ -1222,3 +1222,7 @@ select.input { padding-right: 8px; }
 @media (max-width: 380px) {
   .save:disabled { display: none; }
 }
+
+/* Tokens for other owners: each with its Remove at the end of its line */
+.owner-tokens li .btn { margin-left: auto; }
+.owner-tokens-add { margin: 14px 0 4px; font-size: 15px; }

@@ -1,7 +1,7 @@
 // The app: routing, the sidebar, one view per kind of file, saving, drafts, dialogs and settings.
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
-import { GitHub } from "./github.js";
+import { GitHub, newTokenUrl } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
@@ -173,7 +173,14 @@ async function loadAccess(repo) {
     app.access.set(repo.id, info.permissions ? !!info.permissions.push : true);
   } catch { /* unknown: let saving say what's wrong */ }
 }
-let gh = new GitHub(app.token);
+/**
+ * This device's tokens for other owners, beside the main token: { owner in lower case: { token, login } }.
+ * A fine-grained token opens one owner's repos, so a personal account's vault and an organization's each
+ * need their own; the GitHub client picks the one for each repo's owner.
+ */
+const ownerTokens = () => store.get("tokens", {}) || {};
+const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
+let gh = new GitHub(app.token, tokenMap());
 
 // Older settings: vault mode also put new notes in Notes/. Those are the repo's own fields now.
 if (app.repos.some((r) => upgradeRepo(r) !== r)) {
@@ -575,7 +582,7 @@ async function route() {
     const fieldsOf = params.has("fields")
       ? app.repos.find((r) => r.id === params.get("fields")) || app.repo || app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0]
       : null;
-    showSettings(params.get("add") === "1");
+    showSettings(params.get("add") === "1", params.get("token") || "");
     if (fieldsOf) editTaskFields(fieldsOf);
     return;
   }
@@ -620,9 +627,11 @@ async function route() {
       fill($("#tree"));
       // GitHub answers 404 both for a repo that doesn't exist and for one this token may not see.
       const hint = e.status === 404
-        ? `GitHub won't show it to this token. If you just made the token, it may still be waiting for ${repo.owner} to approve it: reload once they have. Otherwise, check on GitHub that the token's resource owner is ${repo.owner} and that ${repo.repo} is selected.`
+        ? `GitHub won't show it to this token. A token opens one owner's repos: if this device's token is for another owner, add one for ${repo.owner}. If you just made it, it may still be waiting for ${repo.owner} to approve it: reload once they have. Otherwise, check on GitHub that the token's resource owner is ${repo.owner} and that ${repo.repo} is selected.`
         : e.message;
-      showProblem(`Couldn't open ${repo.owner}/${repo.repo}`, hint, e);
+      const addToken = e.status === 404 || e.status === 401 || e.status === 403
+        ? h("a", { class: "btn primary", href: `#/settings?token=${encodeURIComponent(repo.owner)}` }, icon("key"), `Add a token for ${repo.owner}`) : null;
+      showProblem(`Couldn't open ${repo.owner}/${repo.repo}`, hint, e, addToken);
     }
     return;
   }
@@ -696,12 +705,12 @@ function showMain(...children) {
   $("#main").scrollTop = 0;
 }
 
-function showProblem(title, message, error) {
+function showProblem(title, message, error, action = null) {
   closeFile();
   app.pageTitle = "";
   renderHeader();
   const toSettings = error?.status === 401 || error?.status === 403 || error?.status === 404;
-  showMain(emptyState("warning", title, message,
+  showMain(emptyState("warning", title, message, action,
     toSettings ? h("a", { class: "btn", href: "#/settings" }, icon("settings"), "Check the token and repos") : null));
 }
 
@@ -2576,10 +2585,10 @@ async function newNote() {
 
 function tokenSteps() {
   return h("ol", { class: "steps" },
-    h("li", {}, h("span", {}, "Open ", h("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"), ".")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Repository access"), ", choose ", h("b", {}, "Only select repositories"), " and pick your notes repos.")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Permissions"), ", click ", h("b", {}, "Add permissions"), ", tick ", h("b", {}, "Contents"),
-      ", and set it to ", h("b", {}, "Read and write"), ".")),
+    h("li", {}, h("span", {}, "Open ", h("a", { href: newTokenUrl(), target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"),
+      ". The link fills in the name, ", h("b", {}, "Contents"), " set to ", h("b", {}, "Read and write"), ", and a year.")),
+    h("li", {}, h("span", {}, "Set ", h("b", {}, "Resource owner"), " to whoever owns your notes repo (you, or an organization). Under ",
+      h("b", {}, "Repository access"), ", choose ", h("b", {}, "Only select repositories"), " and pick your notes repos.")),
     h("li", {}, h("span", {}, "Generate the token, copy it, and paste it here.")));
 }
 
@@ -2591,7 +2600,7 @@ async function connect(token, out) {
   try {
     const u = await probe.user();
     app.token = token;
-    gh = probe;
+    gh = new GitHub(token, tokenMap());
     store.set("token", token);
     store.set("user", { login: u.login, avatar: u.avatar_url ? `${u.avatar_url}${u.avatar_url.includes("?") ? "&" : "?"}s=64` : "" });
     app.trees.clear();
@@ -2602,6 +2611,39 @@ async function connect(token, out) {
     fill(out, h("li", { class: "bad" }, icon("failure"), e.message));
     return false;
   }
+}
+
+/**
+ * Keeps a token for one owner's repos on this device, after GitHub says it works; the repos of that owner
+ * are read again with it. With `check`, also says whether it opens that repo. Resolves to whether it was kept.
+ */
+async function saveOwnerToken(owner, token, out, check = null) {
+  const key = String(owner).trim().toLowerCase();
+  if (!key || !token) return false;
+  fill(out, h("li", {}, icon("spinner"), "Checking the token…"));
+  try {
+    const u = await new GitHub(token).user();
+    if (check) await new GitHub(token).repo(check);
+    store.set("tokens", { ...ownerTokens(), [key]: { token, login: u.login } });
+    gh = new GitHub(app.token, tokenMap());
+    for (const r of app.repos) if (r.owner.toLowerCase() === key) { app.trees.delete(r.id); app.access.delete(r.id); }
+    fill(out, h("li", { class: "ok" }, icon("success"), `The token for ${owner} works (made by ${u.login}).`));
+    return true;
+  } catch (e) {
+    fill(out, h("li", { class: "bad" }, icon("failure"), e.status === 404 && check
+      ? `The token works, but it can't open ${check.owner}/${check.repo}: check that its resource owner is ${check.owner} and that ${check.repo} is picked.`
+      : e.message));
+    return false;
+  }
+}
+
+/** Takes this device's token for an owner off it: that owner's repos go back to the main token. */
+function removeOwnerToken(owner) {
+  const all = { ...ownerTokens() };
+  delete all[owner];
+  store.set("tokens", all);
+  gh = new GitHub(app.token, tokenMap());
+  for (const r of app.repos) if (r.owner.toLowerCase() === owner) { app.trees.delete(r.id); app.access.delete(r.id); }
 }
 
 /** The link that brings someone to one shared repo: #/join?owner=…&repo=…&branch=…&label=… */
@@ -2664,28 +2706,35 @@ function discoverVaults(now = false) {
     const state = store.get("discovery") || {};
     if (!now && Date.now() - (state.at || 0) < DISCOVER_EVERY) return [];
     const seen = { ...(state.seen || {}) };
-    const todo = reposToCheck(await gh.listRepos(), { seen, known: app.repos.map(repoKey), removed: state.removed || [] });
     const found = [];
-    for (let i = 0; i < todo.length; i += 40) {
-      const part = todo.slice(i, i + 40);
-      const vars = {};
-      const fields = part.map((x, j) => {
-        vars[`o${j}`] = x.owner;
-        vars[`n${j}`] = x.repo;
-        return `r${j}: repository(owner: $o${j}, name: $n${j}) { object(expression: "HEAD:${MARKER}") { ... on Blob { text } } }`;
-      });
-      const args = part.map((_, j) => `$o${j}: String!, $n${j}: String!`).join(", ");
-      const data = await gh.graphql(`query(${args}) {\n${fields.join("\n")}\n}`, vars);
-      part.forEach((x, j) => {
-        seen[repoKey(x)] = x.pushed;
-        const text = data[`r${j}`]?.object?.text;
-        const r = text != null ? parseMarker(text, x.owner, x.repo) : null;
-        if (r) found.push({ ...r, branch: r.branch || x.branch });
-      });
-    }
+    // A token sees its own owner's repos: look with every token this device has.
+    for (const token of [app.token, ...Object.values(tokenMap())]) await lookWith(new GitHub(token), seen, state.removed || [], found);
     store.set("discovery", { ...(store.get("discovery") || {}), at: Date.now(), seen });
     return found.map(addRepo);
   })().finally(() => { discovering = null; }));
+}
+
+/** One token's look: the repos it can save to that are new or changed since the last look, read for a marker file. */
+async function lookWith(client, seen, removed, found) {
+  const known = [...app.repos, ...found].map(repoKey);
+  const todo = reposToCheck(await client.listRepos(), { seen, known, removed });
+  for (let i = 0; i < todo.length; i += 40) {
+    const part = todo.slice(i, i + 40);
+    const vars = {};
+    const fields = part.map((x, j) => {
+      vars[`o${j}`] = x.owner;
+      vars[`n${j}`] = x.repo;
+      return `r${j}: repository(owner: $o${j}, name: $n${j}) { object(expression: "HEAD:${MARKER}") { ... on Blob { text } } }`;
+    });
+    const args = part.map((_, j) => `$o${j}: String!, $n${j}: String!`).join(", ");
+    const data = await client.graphql(`query(${args}) {\n${fields.join("\n")}\n}`, vars);
+    part.forEach((x, j) => {
+      seen[repoKey(x)] = x.pushed;
+      const text = data[`r${j}`]?.object?.text;
+      const r = text != null ? parseMarker(text, x.owner, x.repo) : null;
+      if (r) found.push({ ...r, branch: r.branch || x.branch });
+    });
+  }
 }
 
 /**
@@ -2833,28 +2882,63 @@ async function editTaskFields(r) {
 }
 
 /** Someone opened an invite link. */
-function join(params) {
+async function join(params) {
   const r = joinRepo(params);
   if (!r) return showProblem("This invite link is broken", "It doesn't say which repo to open. Ask for a new link.");
   if (!app.token) {
     store.set("join", r);
     return showWelcome(r);
   }
+  // A device already connected: its token may be for another owner. Then it needs one for this owner too.
+  if (!ownerTokens()[r.owner.toLowerCase()]) {
+    showMain(skeleton());
+    try { await gh.repo(r); } catch (e) {
+      if ([401, 403, 404].includes(e.status)) return showOwnerToken(r);
+    }
+  }
   redirect(hrefFor(addRepo(r)));
 }
 
+/**
+ * This device's token can't open the repo an invite link (or a repo in the list) is for: a fine-grained
+ * token opens one owner's repos. This page adds a token for that owner, with GitHub's form filled in.
+ */
+function showOwnerToken(r) {
+  closeFile();
+  app.pageTitle = "";
+  renderHeader();
+  const input = h("input", { class: "input", type: "password", placeholder: "github_pat_…", autocomplete: "off", spellcheck: "false" });
+  const out = h("ul", { class: "checks" });
+  const go = async () => {
+    if (!input.value.trim()) return input.focus();
+    if (!(await saveOwnerToken(r.owner, input.value.trim(), out, r))) return;
+    redirect(hrefFor(addRepo(r)));
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  showMain(h("div", { class: "welcome" },
+    h("h1", {}, `A token for ${r.owner}`),
+    h("p", { class: "lead" }, "This device's token can't open ", h("b", {}, `${r.owner}/${r.repo}`),
+      `. A token opens one owner's repos, so add one for ${r.owner}: this device keeps both, and each repo uses its owner's.`),
+    h("div", { class: "card" },
+      h("h2", {}, icon("key"), `Add a token for ${r.owner}`),
+      guestSteps(r),
+      h("div", { class: "inline-form" }, input, h("button", { class: "btn primary", onclick: go }, "Save token")),
+      out,
+      h("p", { class: "fine" }, TOKEN_NOTE, " ", h("a", { href: "#/settings" }, "Settings"), " lists this device's tokens."))));
+}
+
 function guestSteps(r) {
-  const tokenUrl = `https://github.com/settings/personal-access-tokens/new?${new URLSearchParams({ name: `${APP_NAME}: ${r.repo}`, target_name: r.owner })}`;
+  const tokenUrl = newTokenUrl({ owner: r.owner, name: `${APP_NAME} - ${r.repo}` });
   return h("ol", { class: "steps" },
     h("li", {}, h("span", {}, "If you were invited on GitHub, accept the invitation first. It came by email; you can also open ",
       h("a", { href: `https://github.com/${r.owner}/${r.repo}/invitations`, target: "_blank", rel: "noopener" }, "the repo's invitation"), " or ",
       h("a", { href: `https://github.com/orgs/${r.owner}/invitation`, target: "_blank", rel: "noopener" }, "the organization's invitation"),
       " while signed in to GitHub.")),
     h("li", {}, h("span", {}, "Open ", h("a", { href: tokenUrl, target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"),
-      ". Set ", h("b", {}, "Resource owner"), " to ", h("b", {}, r.owner), ", and under ", h("b", {}, "Repository access"),
-      " choose ", h("b", {}, "Only select repositories"), " › ", h("b", {}, r.repo), ".")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Permissions"), ", click ", h("b", {}, "Add permissions"), ", tick ", h("b", {}, "Contents"),
-      ", and set it to ", h("b", {}, "Read and write"), " if you were asked to edit, or leave it at ", h("b", {}, "Read-only"), " if not.")),
+      ": it sets ", h("b", {}, "Resource owner"), " to ", h("b", {}, r.owner), " for you. Under ", h("b", {}, "Repository access"),
+      ", choose ", h("b", {}, "Only select repositories"), " › ", h("b", {}, r.repo), ".")),
+    h("li", {}, h("span", {}, "The link has filled in the rest: the name, ", h("b", {}, "Contents"), " set to ", h("b", {}, "Read and write"),
+      ", and a year. If you were only asked to read, set ", h("b", {}, "Contents"), " to ", h("b", {}, "Read-only"), ".")),
     h("li", {}, h("span", {}, "Click ", h("b", {}, "Generate token"), " (for an organization it may say ", h("b", {}, "Generate token and request access"),
       "), copy the token, and paste it here. If ", r.owner, " has to approve tokens, it starts working once they do; until then the app says it can't find the notes.")));
 }
@@ -2910,7 +2994,7 @@ async function ensureSidebar() {
   } catch { /* Settings shows what's wrong when access is checked */ }
 }
 
-function showSettings(adding = false) {
+function showSettings(adding = false, tokenOwner = "") {
   closeFile();
   app.pageTitle = "Settings";
   renderHeader();
@@ -2931,6 +3015,14 @@ function showSettings(adding = false) {
       items.push(h("li", { class: "ok" }, icon("success"), `The token works for ${u.login}`));
     } catch (e) {
       items.push(h("li", { class: "bad" }, icon("failure"), e.message));
+    }
+    for (const [owner, t] of Object.entries(ownerTokens())) {
+      try {
+        const u = await new GitHub(t.token).user();
+        items.push(h("li", { class: "ok" }, icon("success"), `The token for ${owner} works for ${u.login}`));
+      } catch (e) {
+        items.push(h("li", { class: "bad" }, icon("failure"), `The token for ${owner}: ${e.message}`));
+      }
     }
     for (const r of app.repos) {
       try {
@@ -2958,9 +3050,10 @@ function showSettings(adding = false) {
     h("div", { class: "card-actions" },
       h("button", { class: "btn", onclick: checkAccess }, icon("success"), "Check access"),
       h("button", { class: "btn danger", onclick: async () => {
-        if (!(await confirmDialog("Disconnect this device?", "The token is removed from this browser. Unsaved drafts stay.", "Disconnect", true))) return;
+        if (!(await confirmDialog("Disconnect this device?", "Its tokens are removed from this browser. Unsaved drafts stay.", "Disconnect", true))) return;
         app.token = "";
         store.remove("token");
+        store.remove("tokens");
         store.remove("user");
         gh = new GitHub("");
         app.trees.clear();
@@ -2972,6 +3065,53 @@ function showSettings(adding = false) {
     out,
     h("details", { class: "fine" }, h("summary", {}, "How to make a new token"), tokenSteps()),
     h("p", { class: "fine" }, TOKEN_NOTE));
+
+  // ---- tokens for other owners ----
+  const others = ownerTokens();
+  const ownerInput = h("input", { class: "input", list: "repo-owners", autocomplete: "off", spellcheck: "false", autocapitalize: "off",
+    placeholder: "The owner: your-name or your-organization", value: tokenOwner, "aria-label": "Owner" });
+  const repoOwners = [...new Set(app.repos.map((r) => r.owner))].filter((o) => !others[o.toLowerCase()]);
+  const makeLink = h("a", { class: "btn", target: "_blank", rel: "noopener" }, icon("key"), "Make it on GitHub");
+  const syncLink = () => {
+    const o = ownerInput.value.trim();
+    makeLink.href = newTokenUrl({ owner: o, name: `${APP_NAME} - ${o || "notes"}` });
+    makeLink.title = o ? `GitHub's new token page, filled in for ${o}` : "GitHub's new token page";
+  };
+  ownerInput.addEventListener("input", syncLink);
+  syncLink();
+  const ownerTokenInput = h("input", { class: "input", type: "password", autocomplete: "off", spellcheck: "false", placeholder: "github_pat_…",
+    "aria-label": "The token for that owner" });
+  const ownerOut = h("ul", { class: "checks" });
+  const saveOther = async () => {
+    const o = ownerInput.value.trim();
+    if (!o) return ownerInput.focus();
+    if (!ownerTokenInput.value.trim()) return ownerTokenInput.focus();
+    const check = app.repos.find((r) => r.owner.toLowerCase() === o.toLowerCase()) || null;
+    if (await saveOwnerToken(o, ownerTokenInput.value.trim(), ownerOut, check)) { toast(`Token for ${o} saved on this device`, "ok"); showSettings(); }
+  };
+  ownerTokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveOther(); });
+  const ownersCard = h("section", { class: "card", id: "owner-tokens" },
+    h("h2", {}, icon("key"), "Tokens for other owners"),
+    h("p", {}, "A token opens one owner's repos. To open another owner's too, say your own account beside an organization, add a token for it: each repo then uses its owner's token, and the token above opens the rest."),
+    Object.keys(others).length
+      ? h("ul", { class: "checks owner-tokens" }, Object.entries(others).map(([o, t]) => h("li", {}, icon("key"),
+        h("span", {}, h("b", {}, o), t.login ? h("small", { class: "muted" }, ` · made by ${t.login}`) : null),
+        h("button", { class: "btn small danger", type: "button", onclick: async () => {
+          if (!(await confirmDialog(`Remove the token for ${o}?`, `${o}'s repos go back to the main token, which may not open them.`, "Remove", true))) return;
+          removeOwnerToken(o);
+          showSettings();
+        } }, "Remove"))))
+      : null,
+    h("h3", { class: "owner-tokens-add" }, "Add a token for an owner"),
+    h("ol", { class: "steps" },
+      h("li", {}, h("span", {}, "Type the owner, as in github.com/owner/repo.")),
+      h("li", {}, h("span", {}, "Press ", h("b", {}, "Make it on GitHub"), ": the owner, ", h("b", {}, "Contents"), " (read and write) and a year are filled in. Pick the repos under ",
+        h("b", {}, "Only select repositories"), ", and press ", h("b", {}, "Generate token"), ".")),
+      h("li", {}, h("span", {}, "Paste it here and press ", h("b", {}, "Save"), "."))),
+    h("div", { class: "inline-form" }, ownerInput, makeLink),
+    h("datalist", { id: "repo-owners" }, repoOwners.map((o) => h("option", { value: o }))),
+    h("div", { class: "inline-form" }, ownerTokenInput, h("button", { class: "btn primary", type: "button", onclick: saveOther }, "Save")),
+    ownerOut);
 
   // ---- repos ----
   const forms = h("div", {});
@@ -3090,7 +3230,9 @@ function showSettings(adding = false) {
     h("div", { class: "page-head" },
       h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
-    github, repos, device));
+    github, ownersCard, repos, device));
+  // #/settings?token=<owner> opens straight to adding a token for that owner.
+  if (tokenOwner) { ownersCard.scrollIntoView({ block: "start" }); ownerTokenInput.focus(); }
 }
 
 // ================================================================

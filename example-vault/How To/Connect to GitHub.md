@@ -26,4 +26,14 @@ Make one token per device, so you can take one back without the others.
 The app goes on to [add a vault](Add%20a%20vault.md), or opens one an invite link brought you.
 
 - **An organization's repo** may need an owner to approve the token first (the organization's **Settings › Personal access tokens › Pending requests**). Until then the app says it can't find the repo.
-- **A new token later**: **Settings › GitHub**: paste it and press **Save token**. **Disconnect** takes the token off the device; unsaved drafts stay.
+- **A new token later**: **Settings › GitHub**: paste it and press **Save token**. **Disconnect** takes the device's tokens off it; unsaved drafts stay.
+
+## Notes with another owner
+
+A token opens one owner's repos. If your notes are with two owners (your own account and an organization, say), this device keeps a token for each, and each repo uses its owner's.
+
+1. **Settings › Tokens for other owners**: type the owner.
+2. Press **Make it on GitHub**. GitHub's form opens with the owner, **Contents** (read and write) and a year filled in. Pick the repos and press **Generate token**.
+3. Paste it and press **Save**.
+
+An invite link to another owner's repo asks for that token by itself, with the same link.

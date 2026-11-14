@@ -164,6 +164,8 @@ For a repo owned by an organization, the organization may hold new tokens until 
 
 Make one token per device, so you can revoke one without the others.
 
+**Notes with more than one owner** (your own account and an organization, say): a fine-grained token opens one owner's repos, so the device keeps one per owner. The token you connect with opens the rest; for each other owner, **Settings › Tokens for other owners** has **Make it on GitHub**, a link to GitHub's form with the owner, *Contents: Read and write* and a year already filled in: pick the repos, press **Generate token**, and paste it back. An invite link (or a repo the device's token can't open) asks for that owner's token by itself, with the same link. Each repo then goes with its owner's token.
+
 ### 4. Connect and add the repo
 
 1. Open the app, paste the token and press **Connect**.
@@ -516,7 +518,7 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 <details>
 <summary>Where your token lives, and what the app talks to</summary>
 
-- The token is kept in this browser's storage (`localStorage`) on this device, and is sent only to `api.github.com`. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
+- The tokens are kept in this browser's storage (`localStorage`) on this device, and are sent only to `api.github.com`; each repo's requests carry its owner's token. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
 - The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
