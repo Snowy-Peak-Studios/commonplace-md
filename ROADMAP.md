@@ -7,6 +7,7 @@ The same list is a task board in [`roadmap/`](roadmap/Roadmap.md): one note per 
 ## 🔨 Working on now
 
 - **Agile tasks**: types, subtasks, sprints, estimates and your own fields, set up per project.
+- **Modules**: turn the parts of the app you need on and off, down to a bare wiki.
 
 ## ⏭️ Next
 
