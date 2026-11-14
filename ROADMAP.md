@@ -4,6 +4,10 @@ What we're working on for Commonplace.md, and what comes next. It changes as the
 
 The same list is a task board in [`roadmap/`](roadmap/Roadmap.md): one note per task and a board over them, the way Commonplace.md keeps tasks. Open the repo in Commonplace.md with the folder `roadmap` to see it there.
 
+## 🔨 Working on now
+
+- **Agile tasks**: types, subtasks, sprints, estimates and your own fields, set up per project.
+
 ## ⏭️ Next
 
 - **Images in notes**: paste, drop or pick an image, and it's saved in your repo and linked into the note.
