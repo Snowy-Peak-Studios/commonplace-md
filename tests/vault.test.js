@@ -8,6 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -599,4 +600,22 @@ test("a task blocked by an open task isn't a top task", () => {
   assert.deepEqual([...blocked], ["Tasks/A.md"], "D is blocked only by C, which is done");
   assert.deepEqual(suggestTasks(REL, { blocked }).map((n) => n.path), ["Tasks/D.md"]);
   assert.deepEqual([...blockedTasks(REL, { setup: taskSetup({ fields: { blocked_by: { on: false } } }), resolve: relResolve })], []);
+});
+
+test("a note's blocks: found on a line of their own, in ``` or ~~~ fences", () => {
+  assert.equal(hasBlock("# A\n\n```subtasks\n```\n", "subtasks"), true);
+  assert.equal(hasBlock("# A\r\n\r\n~~~ Commits \r\n~~~\r\n", "commits"), true);
+  assert.equal(hasBlock("# A\n\n```subtasks-old\n```\n", "subtasks"), false);
+  assert.equal(hasBlock("Write ```subtasks to show them.", "subtasks"), false);
+});
+
+test("a new task gets its blocks under its title, unless it already has any", () => {
+  const blocks = "```subtasks\n```\n\n```relations\n```\n\n```commits\n```\n";
+  assert.equal(withBlocks(defaultNote("Do it"), TASK_BLOCKS), `# Do it\n\n${blocks}`);
+  assert.equal(withBlocks("---\nid: T-1\n---\n# Do it\n\n**As** me\n", TASK_BLOCKS), `---\nid: T-1\n---\n# Do it\n\n${blocks}\n**As** me\n`);
+  assert.equal(withBlocks("---\nid: T-1\n---\nNo title\n", TASK_BLOCKS), `---\nid: T-1\n---\n${blocks}\nNo title\n`);
+  assert.equal(withBlocks("", SPRINT_BLOCKS), "```sprint\n```\n");
+  const own = "# Do it\n\nText\n\n```commits\n```\n";
+  assert.equal(withBlocks(own, TASK_BLOCKS), own, "the template chose its own blocks");
+  assert.equal(withBlocks("# A\r\nB\r\n", SPRINT_BLOCKS), "# A\n\n```sprint\n```\n\nB\n", "LF");
 });

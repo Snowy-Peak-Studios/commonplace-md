@@ -79,3 +79,10 @@ test("a top-tasks block's options: areas as a list or in brackets, a count from 
   assert.deepEqual(topTasksOptions("count: 99"), { areas: [], count: 20 });
   assert.deepEqual(topTasksOptions("count: five\nareas:"), { areas: [], count: 3 });
 });
+
+test("a task's and a sprint's blocks become placeholders that keep their code", () => {
+  for (const name of ["subtasks", "relations", "commits", "sprint"]) {
+    assert.equal(render("```" + name + "\n```\n"), `<div class="app-block" data-block="${name}"><pre><code>${name}</code></pre></div>\n`);
+  }
+  assert.equal(render("```subtasks\nsome: thing\n```\n"), '<div class="app-block" data-block="subtasks"><pre><code>some: thing\n</code></pre></div>\n');
+});

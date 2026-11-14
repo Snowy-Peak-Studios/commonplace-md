@@ -131,6 +131,30 @@ export function titleProblem(title) {
 /** How a new Markdown note starts when its repo has no note template. */
 export const defaultNote = (title) => `# ${title.trim()}\n\n`;
 
+/** The blocks a task's page shows its boxes in, and a sprint's: the app adds no box a note doesn't ask for. */
+export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
+export const SPRINT_BLOCKS = ["sprint"];
+
+/** Whether the note has a fenced block of this name: ```name (or ~~~name) on a line of its own. */
+export function hasBlock(text, name) {
+  return new RegExp(`^ {0,3}(?:\`{3,}|~{3,})[ \\t]*${name}[ \\t]*$`, "mi").test(toLf(text));
+}
+
+/**
+ * The note with these blocks written in, each an empty fence, under its first `# ` heading (else at the
+ * top of its body). A note that already has any of them keeps what it has: it chose its own.
+ */
+export function withBlocks(text, names) {
+  const src = toLf(text);
+  if (!names.length || names.some((n) => hasBlock(src, n))) return src;
+  const blocks = names.map((n) => `\`\`\`${n}\n\`\`\``).join("\n\n");
+  const start = splitFrontMatter(src)?.length ?? 0;
+  const head = /^# .*$/m.exec(src.slice(start));
+  const at = head ? start + head.index + head[0].length : start;
+  const rest = src.slice(at).replace(/^\n+/, "");
+  return `${src.slice(0, at)}${head ? "\n\n" : ""}${blocks}\n${rest ? `\n${rest}` : ""}`;
+}
+
 /** A note template with `{{title}}` and `{{date}}` (YYYY-MM-DD) filled in; any other `{{...}}` stays as written. */
 export function fillTemplate(text, { title = "", date = "" } = {}) {
   const values = { title: title.trim(), date };

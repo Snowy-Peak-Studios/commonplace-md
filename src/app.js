@@ -8,6 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -869,14 +870,34 @@ function renderPreview() {
   }
   const isTask = setup && isSetupTask(setup, f.path);
   const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
-  // A task's commits show in their own box, not again among its properties.
-  const inForm = isTask ? new Set(["commits", ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
+  // A task with a ```commits block shows its commits there, not again among its properties.
+  const ownCommits = isTask && hasBlock(f.text, "commits");
+  const inForm = isTask ? new Set([...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
   let props = null;
   if (isTask && frontMatter) try { props = yamlLoad(frontMatter); } catch { /* the properties box shows what's wrong */ }
-  const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
-  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? relationsBox(f, setup) : null, isTask ? commitsBox(f, props) : null, sprint,
+  const isSprint = setup && !isTask && isSprintNote(setup, f.path);
+  fillAppBlocks(body, {
+    subtasks: isTask && (() => subtasksBox(f, setup)),
+    relations: isTask && (() => relationsBox(f, setup)),
+    commits: isTask && (() => commitsBox(f, props)),
+    sprint: isSprint && (() => sprintBox(f, setup)),
+  });
+  fill(f.dom.preview, form,
     frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
     isInbox(f.repo, f.path) && !ownBox ? inboxBox(f) : "", body);
+}
+
+/**
+ * Puts each box where its block is written in the note (```subtasks, ```relations, ```commits, ```sprint).
+ * A box with nothing to show leaves no trace; a block on a page that isn't a task (or a sprint), or one
+ * inside an embedded page, keeps its code, as it does outside the app. No block, no box.
+ */
+function fillAppBlocks(body, boxes) {
+  for (const el of body.querySelectorAll(".app-block")) {
+    const make = boxes[el.dataset.block];
+    if (!make || el.parentElement.closest(".embed-page")) continue;
+    el.replaceWith(make() ?? "");
+  }
 }
 
 // ---- a task's fields as a form (the project's task setup) ----
@@ -1228,7 +1249,7 @@ async function startNextSprint(f, setup, current, open) {
           const parent = noteProps(f.text).parent;
           const props = [...(typeof parent === "string" && parent.trim() ? [["parent", parent.trim()]] : []),
             ["start", start.value], ["end", end.value], ["goal", goal.value.trim()]];
-          const files = [{ path: pathOf(), text: withProps(defaultNote(title), props) }];
+          const files = [{ path: pathOf(), text: withProps(withBlocks(defaultNote(title), SPRINT_BLOCKS), props) }];
           for (const box of boxes.filter((b) => b.checked)) {
             const { text } = await gh.readText(repo, fullPath(repo, box.value));
             files.push({ path: box.value, text: withProps(text, [[field.prop, `[[${title}]]`]]) });
@@ -2446,13 +2467,18 @@ async function startingText(repo, tree, p) {
 }
 
 /**
- * A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved).
+ * A new note in a project's tasks folder gets the ```subtasks, ```relations and ```commits blocks (a new sprint
+ * note, the ```sprint block), unless its template already places any; and the fields that are on (only once a setup is saved).
  * With Reviewer on, its reviewer is who asked for it (Requested by), else whoever makes it. With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
  * a sprint the template already sets stays, and Add subtask then gives it its parent's.
  */
 async function asNewTask(repo, tree, p, text) {
   const setup = await loadTaskSetup(repo);
-  if (!setup.configured || !isSetupTask(setup, p.path)) return text;
+  // A new sprint note shows its sprint box where the block is.
+  if (!isSetupTask(setup, p.path)) return isSprintNote(setup, p.path) ? withBlocks(text, SPRINT_BLOCKS) : text;
+  // Its subtasks, relations and commits show where these blocks are, unless its template placed its own.
+  text = withBlocks(text, TASK_BLOCKS);
+  if (!setup.configured) return text;
   const out = withReviewer(setup, withProps(text, newTaskProps(setup), { keep: true }), store.get("user")?.login);
   const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
   if (!sprint?.next || String(noteProps(out)[sprint.prop] ?? "").trim()) return out;

@@ -1,10 +1,13 @@
 // Markdown preview: wikilinks, embeds, callouts, task checkboxes.
 // `env` (passed to render) supplies { resolve(target) -> path|null, href(path, heading), fromPath, depth }.
 // Icons, embedded pages, base views and Mermaid diagrams are left as placeholders (`data-icon`, `.embed-page`, `.embed-base`,
-// `.mermaid-diagram`, `.top-tasks-block`) for the app to fill.
+// `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS } from "./vault.js";
+
+/** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
+export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
 
 /** Callout kinds and the icon each shows. */
 const CALLOUT_ICONS = {
@@ -143,6 +146,10 @@ export function createMarkdown() {
       const { areas, count } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
+    }
+    // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
+    if (APP_BLOCKS.includes(lang)) {
+      return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;

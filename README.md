@@ -259,6 +259,17 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 **A link to the setup:** any note can link to `#/settings?fields`, which opens Task fields for the repo you're in, e.g. `[Set up task fields](#/settings?fields)`. The example vault's [Set up tasks](example-vault/Set%20up%20tasks.md) page does, and its Task Board links to it.
 
+**Boxes are blocks in the note:** a task's Subtasks, Relations and Commits boxes, and a sprint's Sprint box, show where the note has a block for them, so nothing shows that the note doesn't ask for:
+
+````markdown
+```subtasks
+```
+````
+
+- The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
+- A new task gets the three task blocks under its title, unless its template already has any of them; a new sprint gets ` ```sprint `.
+- In other Markdown editors, and on a page that isn't a task or a sprint, a block shows as a short code block.
+
 **Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
 
 - A task with subtasks lists them on its page, each with its status, under a bar of how many are done (*Done*, *Cancelled*, *Won't do* and the last status in your list count as done).

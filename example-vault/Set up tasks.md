@@ -26,6 +26,10 @@ Open any task, like [[Invite a friend]]: its fields are pickers and boxes above 
 
 A new note in `Tasks/` starts with every field that's on.
 
+## Boxes are blocks
+
+The Subtasks, Relations and Commits boxes on a task, and the Sprint box on a sprint, show where the note has a block for them: ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `, each an empty code block. Open [[Get set up]] in **Edit** to see them under its title. Move a block to move its box, or take it out and the box goes. A new task gets the three task blocks by itself (unless its template places its own), and a new sprint gets its block. Other Markdown editors show them as short code blocks.
+
 ## Subtasks
 
 A task can sit under another one: its **Parent task** (`part_of`) links to it. [[Get set up]] is an epic with three tasks under it: its page lists them with their status and a bar of how many are done, and **Add subtask** makes a new one, with the same area and sprint. Pick a parent by its ID or its name. The [[Task Board]]'s *By parent* view groups the tasks by their parent.
