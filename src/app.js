@@ -1443,10 +1443,33 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     ? h("button", { class: "btn small ghost", type: "button", title,
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
-  const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
+  const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
   loadSuggestions(repo, areas, who, count).then(({ mine, free, waiting, allAreas: found, states: told, sprint }) => {
     allAreas = found;
     states = told;
+    /**
+     * Putting a task off. With sprints, it's pushed to the next sprint (one commit of its sprint line); when
+     * there's no sprint after the one it's in, the button says so and offers the waiting list instead.
+     */
+    const notNow = (n) => {
+      if (!editable) return null;
+      if (!sprint) return statusButton(n.path, "Not now", WAITING, WAIT_TITLE);
+      const next = sprint.now && sprint.next && !n.nextSprint && linkName(String(n.props[sprint.prop] ?? "")) !== sprint.next.name
+        ? sprint.next : null;
+      const latest = sprint.next ?? sprint.now;
+      return h("button", { class: "btn small ghost", type: "button",
+        title: next ? `Move it into ${next.name}: it leaves ${sprint.now.name}'s top tasks`
+          : `There's no sprint after ${latest.name} yet: put it on the waiting list instead`,
+        onclick: async (e) => {
+          const button = e.currentTarget;
+          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, `pushed to ${next.name}`);
+          if (await confirmDialog(`No sprint after ${latest.name} yet`,
+            `Put ${shownName(n.path)} on the waiting list instead? It stops being suggested until you bring it back. `
+            + `To push tasks to a new sprint, open ${latest.name} and press Start the next sprint.`, "Not now")) {
+            changeTask(repo, n.path, "status", WAITING, button);
+          }
+        } }, "Push to the next sprint");
+    };
     // With sprints, the free tasks are the current sprint's, or the next one's when it has none left.
     const sprintName = sprint ? (sprint.now ?? sprint.next).name : "";
     if (sprint) box.querySelector(".suggest-head").append(h("span", { class: "chip sprint-chip", title: sprint.now
@@ -1463,7 +1486,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n.path)]));
+    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n)]));
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
@@ -1476,7 +1499,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
           moveTo(n) ? `, and move it into ${moveTo(n).name}` : ""}`,
           onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n)) }, icon("check"), "Claim")
         : null,
-      notNow(n.path)])),
+      notNow(n)])),
     !free.length ? h("li", { class: "muted" }, none) : null, waitingList);
   }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
   return box;
@@ -1524,8 +1547,11 @@ function refreshInboxBox(repo) {
   return true;
 }
 
-/** Sets one property of a task from the inbox's box: one commit that changes only that line. */
-async function changeTask(repo, path, key, value, picker) {
+/**
+ * Sets one property of a task from a top tasks box: one commit that changes only that line. `said` (e.g.
+ * "pushed to Sprint 2") is what the commit and the message say instead of "<key> set to <value>".
+ */
+async function changeTask(repo, path, key, value, picker, said = "") {
   picker.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
@@ -1541,11 +1567,11 @@ async function changeTask(repo, path, key, value, picker) {
       treeChanged(repo, path, sha);
     } else {
       const id = String(now.id ?? "").trim();
-      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${key} set to ${value} from ${APP_NAME}`);
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${said || `${key} set to ${value}`} from ${APP_NAME}`);
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
-      toast(key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
+      toast(said ? `${shownName(path)}: ${said}` : key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
         : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
   } catch (e) {

@@ -287,9 +287,20 @@ check(pickPut?.body.message?.startsWith("T-5: priority set to High"), "the commi
 await page.waitForFunction(() => document.querySelector('select[aria-label="Priority of Add a reading list"]')?.value === "High", { timeout: 10000 }).catch(() => {});
 check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s) => s.value).catch(() => null) === "High", "the box shows the new priority");
 // Not now: a task goes on the waiting list (status Waiting), out of the suggestions; Bring back takes it off.
+// With sprints the button is Push to the next sprint; this task is in the last sprint there is, so it asks, and offers the waiting list.
 const putsBeforeWait = puts.length;
-await page.evaluate(() => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Add a reading list"))
-  ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Not now") b.click(); }));
+const putOffLabel = sprintShown ? "Push to the next sprint" : "Not now";
+const putOffButtons = await page.$$eval(".suggest-list li button", (b) => b.map((x) => x.textContent));
+check(putOffButtons.includes(putOffLabel) && (!sprintShown || !putOffButtons.includes("Not now")),
+  `with sprints ${sprintShown ? "on" : "off"}, putting a task off is ${putOffLabel}: ` + JSON.stringify([...new Set(putOffButtons)]));
+await page.evaluate((label) => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Add a reading list"))
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent === label) b.click(); }), putOffLabel);
+if (sprintShown) {
+  await page.waitForSelector("dialog.modal[open] .btn.primary");
+  const askWait = await page.$eval("dialog.modal[open]", (d) => d.textContent);
+  check(/No sprint after .+ yet/.test(askWait) && askWait.includes("waiting list"), "with no sprint after the task's, it says so and offers the waiting list: " + askWait);
+  await page.click("dialog.modal .btn.primary");
+}
 await page.waitForFunction(() => document.querySelector(".suggest-waiting summary")?.textContent.includes("Waiting (1)"), { timeout: 15000 }).catch(() => {});
 const waitPut = puts.length > putsBeforeWait ? puts.at(-1) : null;
 check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? ""), "Not now saves the task with status Waiting");
@@ -310,6 +321,25 @@ const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
 // commits nothing. Any commit it does make must say To Do.
 check((!backPut || /^status: To Do$/m.test(backPut.text)) && !(await page.$(".suggest-waiting"))
   && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
+// Push to the next sprint: a task in the current sprint moves into the next one, one commit of its sprint line.
+const sprintNext = inboxSprints.find((x) => x.when === "next");
+if (inboxSprints.find((x) => x.when === "now") && sprintNext) {
+  const putsBeforePush = puts.length;
+  await page.evaluate(() => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Try the app on a phone"))
+    ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Push to the next sprint") b.click(); }));
+  await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("pushed to"), { timeout: 15000 }).catch(() => {});
+  const pushPut = puts.length > putsBeforePush ? puts.at(-1) : null;
+  const pushBefore = (await realFile("Tasks/Try the app on a phone.md")).text;
+  check(pushPut?.url === contentsUrl("Tasks/Try the app on a phone.md")
+    && pushPut.text === pushBefore.replace(/^sprint: .*$/m, `sprint: "[[${sprintNext.name}]]"`),
+  `Push to the next sprint saves the task in ${sprintNext.name}, with only that line changed`);
+  check(pushPut?.body.message?.startsWith(`T-3: pushed to ${sprintNext.name}`), "the commit says so: " + pushPut?.body.message);
+  // The box is drawn again after the change; wait until it has its tasks back.
+  await page.waitForFunction(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")
+    && [...li.querySelectorAll("button")].some((b) => b.textContent.includes("Claim"))), { timeout: 15000 }).catch(() => {});
+} else {
+  log("SKIP  Push to the next sprint: the example vault has no current and next sprint today");
+}
 // Claiming a task from the next sprint moves it into the current one, in the same commit.
 const sprintNow = inboxSprints.find((x) => x.when === "now");
 const fromNext = want1.find((n) => n.endsWith(" (next sprint)"))?.replace(" (next sprint)", "");

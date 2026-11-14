@@ -36,7 +36,7 @@ A task lists the commits in its `commits` property, each linking to GitHub: [[Ge
 
 ## Sprints
 
-A sprint is a note in `Sprints/` with its `start`, `end` and `goal`, like [[Sprint 1]]. A task joins it in its **Sprint** field, which offers the current sprint first, then the next. A new task goes on the next sprint by itself, so the current sprint's plan stays as it was agreed. A sprint's page lists its tasks by status, with how many are done and how many points. On the latest sprint, **Start the next sprint** makes the next one (its dates follow from the sprint length in the setup) and moves the unfinished tasks into it, all in one commit. The [[Task Board]] shows the sprint going on today. The top tasks to start in your [[Inbox]] come from the current sprint, or, when it has none left, from the next one, marked *Next sprint*: claiming one of those moves it into the current sprint.
+A sprint is a note in `Sprints/` with its `start`, `end` and `goal`, like [[Sprint 1]]. A task joins it in its **Sprint** field, which offers the current sprint first, then the next. A new task goes on the next sprint by itself, so the current sprint's plan stays as it was agreed. A sprint's page lists its tasks by status, with how many are done and how many points. On the latest sprint, **Start the next sprint** makes the next one (its dates follow from the sprint length in the setup) and moves the unfinished tasks into it, all in one commit. The [[Task Board]] shows the sprint going on today. The top tasks to start in your [[Inbox]] come from the current sprint, or, when it has none left, from the next one, marked *Next sprint*: claiming one of those moves it into the current sprint. **Push to the next sprint** puts a task off until the next sprint.
 
 ## No setup yet?
 
