@@ -849,8 +849,8 @@ await shot("8b-settings-desktop");
 // 8c. Task fields: a repo with no task setup opens with a new project's fields; saving writes them to its .commonplace.json.
 await page.$eval(".repo-card summary", (el) => el.click());
 await page.evaluate(() => [...document.querySelectorAll(".repo-card[open] button")].find((b) => /Task fields/.test(b.textContent)).click());
-check(await until(() => document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 11, 10000),
-  "Task fields opens with the eleven fields the app knows");
+check(await until(() => document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 15, 10000),
+  "Task fields opens with the fifteen fields the app knows");
 const fieldsOn = await page.$$eval("dialog[open] .task-field:not(.head)", (rows) => rows.map((r) => [r.textContent.includes("Reviewer"), r.querySelector("input[type=checkbox]")?.checked]));
 check(fieldsOn.filter(([rev]) => rev).length === 1 && fieldsOn.every(([rev, on]) => on === !rev), "every one of them on but Reviewer, which a project turns on: " + JSON.stringify(fieldsOn));
 await shot("8c-task-fields");
@@ -859,7 +859,7 @@ await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].
 check(await until(() => !document.querySelector("dialog[open]"), 10000), "saving closes it");
 const markerPut = puts.slice(putsBeforeFields).find((p) => p.url === `${REPO_API}/contents/.commonplace.json`);
 const saved = markerPut ? JSON.parse(markerPut.text) : null;
-check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.tasks.fields.reviewer?.on === false && saved.folder === FOLDER,
+check(saved?.tasks?.fields?.sprint?.on === true && saved.tasks.fields.part_of.on === true && saved.tasks.fields.reviewer?.on === false && saved.tasks.fields.blocked_by?.on === true && saved.folder === FOLDER,
   "the task setup is saved in .commonplace.json at the repo's top, with the repo's settings: " + (markerPut?.text || "no PUT").replace(/\s+/g, " ").slice(0, 120));
 
 // 8d. A task's fields as a form: with that setup, a task shows its ten fields; a change is one commit of that one line.
@@ -883,11 +883,60 @@ const formPut = puts.slice(putsBeforeForm).find((p) => p.url === contentsUrl(for
 check(!!formPut && formPut.body.message === "T-4: type set to Bug from Commonplace.md" && /\ntype: Bug\n/.test(formPut.text) && /\nstatus: To Do\n/.test(formPut.text),
   "one commit that adds that one line: " + formPut?.body.message);
 
+// 8d2. Relations: a task shows them both ways (its own links, and the other tasks' links to it, the other way
+// round); Add relation adds one and the x takes one out, each one commit of that one line.
+const relGroups = () => page.$$eval(".relations .rel-group", (gs) => Object.fromEntries(gs.map((g) => [g.querySelector(".rel-label").textContent,
+  [...g.querySelectorAll("li")].map((li) => li.textContent + (li.querySelector("button") ? " [x]" : ""))])));
+check(await until(() => document.querySelectorAll(".relations .rel-group").length === 2, 15000), "a task shows its relations");
+const rel4 = await relGroups();
+check(JSON.stringify(rel4) === JSON.stringify({ "Blocked by": ["T-1Write the welcome noteDone [x]"], "Comes before": ["T-5Add a reading listTo Do"] }),
+  "its own (which it can take out) and, the other way round, the ones another task links to it with: " + JSON.stringify(rel4));
+check(!(await page.$$eval(".props .prop-key", (k) => k.map((x) => x.textContent))).includes("blocked_by") && !(await page.$("#tf-blocked_by")),
+  "relations show only in their box: not in the form or the Properties box");
+await shot("8d2-relations");
+const putsBeforeRel = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".relations button")].find((b) => /Add relation/.test(b.textContent)).click());
+await page.waitForSelector("dialog[open] select");
+check(JSON.stringify(await page.$$eval("dialog[open] select option", (o) => o.map((x) => x.textContent))) === '["Blocked by","Related","Comes after","Comes before"]',
+  "Add relation offers the four kinds");
+await page.select("dialog[open] select", "related");
+await page.type("dialog[open] input", "T-4");
+check(await until(() => document.querySelector("dialog[open] small")?.textContent.includes("can't be related to itself"), 5000), "a task can't be related to itself");
+await page.$eval("dialog[open] input", (el) => { el.value = ""; });
+await page.type("dialog[open] input", "T-2");
+check(await until(() => document.querySelector("dialog[open] small")?.textContent === "Invite a friend: related Make a note template", 5000), "it says what it will add");
+await shot("8d2-add-relation");
+await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Add").click());
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Related: Make a note template"), 10000), "Add saves it at once");
+const relPut = puts.slice(putsBeforeRel).find((p) => p.url === contentsUrl(formTask));
+check(!!relPut && relPut.body.message === "T-4: related set to Make a note template from Commonplace.md" && /\nrelated: \["\[\[Make a note template\]\]"\]\n/.test(relPut.text)
+  && /\nblocked_by: \["\[\[Write the welcome note\]\]"\]\n/.test(relPut.text), "one commit that adds that one line, a list of links: " + relPut?.body.message);
+check(await until(() => document.querySelectorAll(".relations .rel-group").length === 3, 10000), "and the box shows it");
+const putsBeforeUnrel = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".relations .rel-group")].find((g) => g.textContent.startsWith("Blocked by")).querySelector("button").click());
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Blocked by: cleared"), 10000), "the x takes one out at once");
+const unrelPut = puts.slice(putsBeforeUnrel).find((p) => p.url === contentsUrl(formTask));
+check(!!unrelPut && unrelPut.body.message === "T-4: blocked_by set to nothing from Commonplace.md" && /\nblocked_by: \[\]\n/.test(unrelPut.text),
+  "one commit of that one line: " + unrelPut?.body.message);
+await page.setViewport({ width: 375, height: 812 });
+await wait(300);
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth
+  && [...document.querySelectorAll(".relations, .relations li, .relations button")].every((el) => el.getBoundingClientRect().right <= innerWidth + 0.5)),
+  "the relations fit at phone width");
+await shot("8d2-relations-phone");
+await page.setViewport({ width: 1280, height: 860 });
+// The other side: Make a note template now shows Invite a friend as related, from the change just made.
+await page.goto(at("Tasks/Make a note template.md"), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelectorAll(".relations .rel-group").length === 1, 15000), "the other task shows the relation too");
+const rel2 = await relGroups();
+check(JSON.stringify(rel2) === JSON.stringify({ Related: ["T-4Invite a friendTo Do", "T-5Add a reading listTo Do"] }),
+  "the other way round, and with no x, since the links are in the other tasks: " + JSON.stringify(rel2));
+
 // 8e. A note can link to the setup: #/settings?fields opens Task fields for the repo it's in.
 await page.goto(at("Set up tasks.md"), { waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector('.note-body a[href="#/settings?fields"]'), 10000), "the Set up tasks page has a link to the setup");
 await page.evaluate(() => document.querySelector('.note-body a[href="#/settings?fields"]')?.click());
-check(await until(() => location.hash === "#/settings?fields" && document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 11, 10000),
+check(await until(() => location.hash === "#/settings?fields" && document.querySelectorAll("dialog[open] .task-field:not(.head)").length === 15, 10000),
   "the Set up tasks page's link opens Task fields");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Cancel")?.click());
 

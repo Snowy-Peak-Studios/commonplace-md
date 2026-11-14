@@ -7,6 +7,7 @@ import {
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
+  linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -319,7 +320,7 @@ test("a task setup round-trips through its JSON, and problems are named", () => 
   assert.match(taskSetupProblem(empty), /Type needs at least one value/);
   assert.equal(isFieldProp("part_of"), true);
   assert.equal(isFieldProp("2x"), false);
-  assert.equal(TASK_FIELDS.length, 11);
+  assert.equal(TASK_FIELDS.length, 15);
 });
 
 test("the marker keeps the task setup when the repo settings are shared again, and the other way round", () => {
@@ -546,4 +547,56 @@ test("a task's commits, from its commits property, the newest first", () => {
     ["one (with brackets) [and more]"]);
   assert.deepEqual(taskCommitLinks(undefined), []);
   assert.deepEqual(taskCommitLinks(""), []);
+});
+
+// ---- relations ----
+
+const REL = [
+  { path: "Tasks/A.md", props: { id: "T-1", status: "To Do", blocked_by: ["[[B]]"], related: "[[C]]" } },
+  { path: "Tasks/B.md", props: { id: "T-2", status: "In Progress", after: [["C"]] } },
+  { path: "Tasks/C.md", props: { id: "T-3", status: "Done", before: ["[[A]]", "[[Nowhere]]"] } },
+  { path: "Tasks/D.md", props: { id: "T-4", status: "To Do", blocked_by: "[[C]]" } },
+];
+const relResolve = (t) => REL.find((n) => n.path === `Tasks/${t}.md`)?.path ?? null;
+
+test("a relation property is a list of links, however it's written", () => {
+  assert.deepEqual(linkList(["[[A]]", "[[B|the B]]", "[[A]]"]), ["A", "B"]);
+  assert.deepEqual(linkList([["A"]]), ["A"], "[[A]] unquoted is a list in a list in YAML");
+  assert.deepEqual(linkList("[[A]], [[B]]"), ["A", "B"]);
+  assert.deepEqual(linkList("A"), ["A"]);
+  assert.deepEqual(linkList(""), []);
+  assert.deepEqual(linkList(undefined), []);
+  assert.deepEqual(relationFields(null).map((f) => f.key), ["blocked_by", "related", "after", "before"]);
+  assert.deepEqual(relationFields(taskSetup({})).map((f) => f.prop), ["blocked_by", "related", "after", "before"], "on in a new setup");
+  assert.deepEqual(relationFields(taskSetup(null)), [], "off in a repo with no setup, like the other newer fields");
+  assert.deepEqual(relationFields(taskSetup({ fields: { related: { on: false }, after: { prop: "follows" } } })).map((f) => f.prop), ["blocked_by", "follows", "before"]);
+  assert.deepEqual(newTaskProps(taskSetup({})).map(([k]) => k).filter((k) => ["blocked_by", "related", "after", "before"].includes(k)), [],
+    "a new task gets no empty relation lines");
+  assert.deepEqual(fieldValue({ kind: "tasks" }, ["B", "[[C]]", "B", ""]), ["[[B]]", "[[C]]"]);
+});
+
+test("a list property is saved on one line, and replaces a list written one item per line", () => {
+  const note = '---\nid: T-1\nblocked_by:\n  - "[[B]]"\n- "[[C]]"\nstatus: To Do\n---\nText\n';
+  assert.equal(setProps(note, [["blocked_by", ["[[B]]", "[[D]]"]]]), '---\nid: T-1\nblocked_by: ["[[B]]", "[[D]]"]\nstatus: To Do\n---\nText\n');
+  assert.equal(setProps(note, [["blocked_by", []]]), "---\nid: T-1\nblocked_by: []\nstatus: To Do\n---\nText\n");
+  assert.equal(setProps("---\nid: T-1\n---\n", [["related", ["[[A]]"]]]), '---\nid: T-1\nrelated: ["[[A]]"]\n---\n');
+});
+
+test("a task shows its relations both ways", () => {
+  const groups = (path) => Object.fromEntries(taskRelations(REL, path, REL.find((n) => n.path === path).props, { resolve: relResolve })
+    .map((g) => [g.label, g.tasks.map((t) => `${t.path ?? t.name}${t.own ? "" : " (theirs)"}`)]));
+  assert.deepEqual(groups("Tasks/A.md"), { "Blocked by": ["Tasks/B.md"], "Comes after": ["Tasks/C.md (theirs)"], Related: ["Tasks/C.md"] });
+  assert.deepEqual(groups("Tasks/B.md"), { Blocks: ["Tasks/A.md (theirs)"], "Comes after": ["Tasks/C.md"] });
+  assert.deepEqual(groups("Tasks/C.md"), { Blocks: ["Tasks/D.md (theirs)"], "Comes before": ["Tasks/A.md", "Tasks/B.md (theirs)", "Nowhere"], Related: ["Tasks/A.md (theirs)"] });
+  const c = taskRelations(REL, "Tasks/A.md", REL[0].props, { resolve: relResolve });
+  assert.deepEqual(c[0].tasks[0], { path: "Tasks/B.md", name: "B", id: "T-2", status: "In Progress", done: false, own: true, key: "blocked_by" });
+  const off = taskSetup({ fields: { related: { on: false } } });
+  assert.equal(taskRelations(REL, "Tasks/A.md", REL[0].props, { setup: off, resolve: relResolve }).some((g) => g.label === "Related"), false);
+});
+
+test("a task blocked by an open task isn't a top task", () => {
+  const blocked = blockedTasks(REL, { resolve: relResolve });
+  assert.deepEqual([...blocked], ["Tasks/A.md"], "D is blocked only by C, which is done");
+  assert.deepEqual(suggestTasks(REL, { blocked }).map((n) => n.path), ["Tasks/D.md"]);
+  assert.deepEqual([...blockedTasks(REL, { setup: taskSetup({ fields: { blocked_by: { on: false } } }), resolve: relResolve })], []);
 });

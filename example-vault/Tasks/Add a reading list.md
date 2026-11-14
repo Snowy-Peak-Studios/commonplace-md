@@ -8,6 +8,8 @@ area: Notes
 priority: Medium
 sprint: "[[Sprint 2]]"
 estimate: 2
+after: ["[[Invite a friend]]"]
+related: ["[[Make a note template]]"]
 ---
 
 # Add a reading list

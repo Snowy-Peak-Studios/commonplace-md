@@ -8,6 +8,7 @@ area: Sharing
 priority: High
 sprint: "[[Sprint 1]]"
 estimate: 1
+blocked_by: ["[[Write the welcome note]]"]
 ---
 
 # Invite a friend

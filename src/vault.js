@@ -193,10 +193,11 @@ const FINISHED = /^(done|cancell?ed|won'?t do)$/i;
 export const WAITING = "Waiting";
 const isWaiting = (n) => String(n.props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase();
 
-export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
+export function suggestTasks(notes, { areas = [], count = 3, blocked = null } = {}) {
   const want = listProp(areas);
   return notes
     .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim()) && !isEpic(n)
+      && !blocked?.has(n.path)
       && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
     .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
     .slice(0, count);
@@ -296,8 +297,9 @@ export function taskState(text) {
   return { state: "ready", reason: "Ready to start: no open decisions" };
 }
 
-/** A YAML scalar: plain when that's safe, else double-quoted. */
-const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
+/** A YAML value: a scalar plain when that's safe, else double-quoted; a list on one line, `["[[A]]", "[[B]]"]`. */
+const yamlValue = (s) => Array.isArray(s) ? `[${s.map((x) => JSON.stringify(String(x))).join(", ")}]`
+  : (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
 
 /**
  * A task note claimed by `who`: its front matter's `status` becomes "In Progress" and its `assignee` `who`,
@@ -317,7 +319,8 @@ export function setProps(text, entries) {
   let raw = fm.raw;
   for (const [key, value] of entries) {
     const line = `${key}: ${yamlValue(value)}`;
-    const re = new RegExp(`^${key}:.*$`, "m");
+    // The old value's own lines go too: a list written one item per line (`- "[[A]]"`), or anything indented.
+    const re = new RegExp(`^${key}:.*(?:\\n(?:[ \\t]+.*|-(?:[ \\t].*)?))*$`, "m");
     raw = re.test(raw) ? raw.replace(re, () => line) : raw.trim() ? `${raw}\n${line}` : line;
   }
   // The front matter starts right after the opening `---` line.
@@ -397,6 +400,11 @@ export const TASK_FIELDS = [
   { key: "reviewer", label: "Reviewer", kind: "person", optional: true },
   { key: "type", label: "Type", kind: "choice", values: ["Epic", "Story", "Task", "Bug"] },
   { key: "part_of", label: "Parent task", kind: "task" },
+  // Relations: lists of links to other tasks. Each shows on the other task too, the other way round.
+  { key: "blocked_by", label: "Blocked by", kind: "tasks", reverse: "Blocks" },
+  { key: "related", label: "Related", kind: "tasks", reverse: "Related" },
+  { key: "after", label: "Comes after", kind: "tasks", reverse: "Comes before" },
+  { key: "before", label: "Comes before", kind: "tasks", reverse: "Comes after" },
   { key: "sprint", label: "Sprint", kind: "sprint", folder: "Sprints", length_days: 14 },
   { key: "estimate", label: "Estimate", kind: "number", unit: "points" },
   { key: "due", label: "Due date", kind: "date" },
@@ -533,8 +541,9 @@ export const linkName = (v) => {
   return (m ? m[1] : s).trim();
 };
 
-/** What a field's control saves: link kinds become `[[Name]]`, numbers stay digits, empty stays empty. */
+/** What a field's control saves: link kinds become `[[Name]]` (a list of them for relations), numbers stay digits, empty stays empty. */
 export function fieldValue(field, input) {
+  if (field.kind === "tasks") return [...new Set((Array.isArray(input) ? input : [input]).map(linkName).filter(Boolean))].map((x) => `[[${x}]]`);
   const s = String(input ?? "").trim();
   if (!s) return "";
   if (["task", "sprint", "link"].includes(field.kind)) return `[[${linkName(s)}]]`;
@@ -546,10 +555,10 @@ export function fieldValue(field, input) {
 /**
  * The properties a new task starts with: every field that's on, empty, except the choices, which start
  * at their first value; Priority at its middle one and Type at "Task" when it has one, so a new task
- * isn't the highest priority or an epic.
+ * isn't the highest priority or an epic. Relations are left out until a task has some.
  */
 export function newTaskProps(setup) {
-  return setup.fields.filter((f) => f.on).map((f) => {
+  return setup.fields.filter((f) => f.on && f.kind !== "tasks").map((f) => {
     if (f.kind !== "choice" || !f.values?.length) return [f.prop, ""];
     if (f.key === "priority") return [f.prop, f.values[Math.floor((f.values.length - 1) / 2)]];
     if (f.key === "type") return [f.prop, f.values.find((v) => v.toLowerCase() === "task") || f.values[0]];
@@ -602,6 +611,91 @@ export function subtasksOf(notes, path, { prop = "part_of", resolve, setup = nul
     .map((n) => ({ path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[status] ?? "").trim(), done: isDoneStatus(n.props[status], setup) }))
     .sort((a, b) => a.done - b.done || a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
   return { tasks, done: tasks.filter((t) => t.done).length, total: tasks.length };
+}
+
+// ---- relations between tasks: blocked by, related, comes after, comes before ----
+
+/**
+ * The pages a list property links to, as link targets: `["[[A]]", "[[B]]"]` -> ["A", "B"]. One link, links
+ * in a line of text, or a plain name count too; so does `[[A]]` left unquoted, which YAML reads as a list in a list.
+ */
+export function linkList(v) {
+  if (blank(v)) return [];
+  const items = Array.isArray(v) ? v.map(String) : [...String(v).matchAll(/\[\[[^\]]+\]\]/g)].map((m) => m[0]);
+  if (!Array.isArray(v) && !items.length) items.push(String(v));
+  return [...new Set(items.filter((x) => !blank(x)).map(linkName).filter(Boolean))];
+}
+
+/**
+ * The relation fields that are on, in their order, each with its property and how it reads from the
+ * other task (`reverse`): Blocked by / Blocks, Related, Comes after / Comes before. All four with no setup.
+ */
+export function relationFields(setup = null) {
+  return TASK_FIELDS.filter((f) => f.kind === "tasks").map((f) => {
+    const s = setup?.fields.find((x) => x.key === f.key);
+    return { key: f.key, label: f.label, reverse: f.reverse, prop: s?.prop || f.key, on: s ? !!s.on : true };
+  }).filter((f) => f.on);
+}
+
+/**
+ * A task's relations both ways, from [{ path, props }]: its own links (from `props`, its properties now) and
+ * the other tasks' links to it, which read the other way round (B blocked by A shows on A as "Blocks").
+ * Groups [{ label, tasks }] in a fixed order, each task once ({ path, name, id, status, done, own, key });
+ * `own` ones are in this task's own property `key` (`name` as written there), so they can be taken out here.
+ * A link to no page keeps its name, with no path, and comes last.
+ */
+export function taskRelations(notes, path, props, { setup = null, resolve }) {
+  const statusProp = fieldProp(setup, "status");
+  const byPath = new Map(notes.map((n) => [n.path, n]));
+  const groups = new Map();
+  const add = (label, item) => {
+    if (!groups.has(label)) groups.set(label, []);
+    const list = groups.get(label);
+    const same = list.find((x) => (item.path ? x.path === item.path : !x.path && x.name.toLowerCase() === item.name.toLowerCase()));
+    if (!same) list.push(item);
+    else if (item.own && !same.own) Object.assign(same, { own: true, key: item.key, name: item.name });
+  };
+  const about = (p) => {
+    const n = byPath.get(p);
+    return { id: String(n?.props.id ?? "").trim(), status: String(n?.props[statusProp] ?? "").trim(), done: isDoneStatus(n?.props[statusProp], setup) };
+  };
+  const fields = relationFields(setup);
+  for (const f of fields) {
+    for (const name of linkList(props?.[f.prop])) {
+      const p = resolve(name, path);
+      if (p === path) continue;
+      add(f.label, p ? { path: p, name, ...about(p), own: true, key: f.key } : { path: null, name, id: "", status: "", done: false, own: true, key: f.key });
+    }
+    for (const n of notes) {
+      if (n.path === path || !linkList(n.props[f.prop]).some((t) => resolve(t, n.path) === path)) continue;
+      add(f.reverse, { path: n.path, name: "", ...about(n.path), own: false, key: f.key });
+    }
+  }
+  const order = ["Blocked by", "Blocks", "Comes after", "Comes before", "Related"];
+  return order.filter((l) => groups.get(l)?.length).map((label) => ({
+    label,
+    tasks: groups.get(label).sort((a, b) => !a.path - !b.path || a.done - b.done || a.id.localeCompare(b.id, undefined, { numeric: true }) || (a.path || a.name).localeCompare(b.path || b.name)),
+  }));
+}
+
+/**
+ * The tasks that wait on an open task, from [{ path, props }]: their Blocked by links a task that isn't done.
+ * A link to no task doesn't block. Empty when the setup has Blocked by off.
+ */
+export function blockedTasks(notes, { setup = null, resolve }) {
+  const field = relationFields(setup).find((f) => f.key === "blocked_by");
+  if (!field) return new Set();
+  const statusProp = fieldProp(setup, "status");
+  const byPath = new Map(notes.map((n) => [n.path, n]));
+  const out = new Set();
+  for (const n of notes) {
+    const open = linkList(n.props[field.prop]).some((t) => {
+      const other = byPath.get(resolve(t, n.path));
+      return other && other.path !== n.path && !isDoneStatus(other.props[statusProp], setup);
+    });
+    if (open) out.add(n.path);
+  }
+  return out;
 }
 
 /**
@@ -686,12 +780,12 @@ export function nextSprint(last, days, today) {
  * none left, a few from the next sprint's (`next`), each with `nextSprint: true`. Null when there's neither
  * a current nor a next sprint, so the top tasks are picked from all tasks, as without sprints.
  */
-export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve }) {
+export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve, blocked = null }) {
   if (!now && !next) return null;
   const inSprint = (path) => (n) => !!linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path;
-  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count }) : [];
+  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count, blocked }) : [];
   if (current.length || !next) return current;
-  return suggestTasks(notes.filter(inSprint(next)), { areas, count }).map((n) => ({ ...n, nextSprint: true }));
+  return suggestTasks(notes.filter(inSprint(next)), { areas, count, blocked }).map((n) => ({ ...n, nextSprint: true }));
 }
 
 /**

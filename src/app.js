@@ -7,7 +7,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
-  sprintSuggestions, taskCommitLinks,
+  sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -874,7 +874,7 @@ function renderPreview() {
   let props = null;
   if (isTask && frontMatter) try { props = yamlLoad(frontMatter); } catch { /* the properties box shows what's wrong */ }
   const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
-  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? commitsBox(f, props) : null, sprint,
+  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? relationsBox(f, setup) : null, isTask ? commitsBox(f, props) : null, sprint,
     frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
     isInbox(f.repo, f.path) && !ownBox ? inboxBox(f) : "", body);
 }
@@ -960,6 +960,84 @@ function subtasksBox(f, setup) {
     h("ul", { class: "st-list" }, tasks.map((t) => h("li", { class: t.done ? "done" : null },
       h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
       t.status ? h("span", { class: "st-status" }, t.status) : null))));
+}
+
+// ---- a task's relations ----
+
+/**
+ * A task's relations both ways, grouped: Blocked by, Blocks, Comes after, Comes before, Related; each task
+ * with its status. The task's own links can be taken out here, and Add relation links another task.
+ */
+function relationsBox(f, setup) {
+  const fields = relationFields(setup);
+  if (!fields.length) return null;
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const tree = app.trees.get(f.repo.id);
+  const groups = taskRelations(entry.notes, f.path, noteProps(f.text), { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  const editable = canWrite(f.repo);
+  const add = editable ? h("button", { class: "btn small ghost", type: "button", onclick: () => addRelation(f, setup, fields) }, icon("plus"), "Add relation") : null;
+  if (!groups.length) return add ? h("div", { class: "subtasks none" }, add) : null;
+  const remove = (t, button) => {
+    const field = setup.fields.find((x) => x.key === t.key);
+    const left = linkList(noteProps(f.text)[field.prop]).filter((n) => n.toLowerCase() !== t.name.toLowerCase());
+    setTaskField(f, field, left, button);
+  };
+  const name = (t) => (t.path ? shownName(t.path) : t.name);
+  return h("section", { class: "subtasks relations", "aria-label": "Relations" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Relations"), add),
+    groups.map((g) => h("div", { class: "rel-group" },
+      h("div", { class: "rel-label" }, g.label),
+      h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
+        t.path
+          ? h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path))
+          : h("span", { class: "rel-missing", title: "No page has this name" }, t.name),
+        t.status ? h("span", { class: "st-status" }, t.status) : null,
+        editable && t.own ? h("button", { class: "icon-btn", type: "button", title: `Take ${name(t)} out of ${g.label}`,
+          "aria-label": `Take ${name(t)} out of ${g.label}`, onclick: (e) => remove(t, e.currentTarget) }, icon("x")) : null))))));
+}
+
+/** Links another task to this one: how they're related, and which task (by its ID or name). One commit. */
+async function addRelation(f, setup, fields) {
+  const tree = app.trees.get(f.repo.id);
+  const notes = taskNotes(f.repo, setup).notes || [];
+  const resolve = (n) => tree.index.resolve(n, f.path);
+  const kind = h("select", { class: "input", "aria-label": "How they're related" }, fields.map((x) => h("option", { value: x.key }, x.label)));
+  const options = notes.filter((n) => n.path !== f.path)
+    .map((n) => { const tid = String(n.props.id ?? "").trim(); return tid ? `${tid} ${shownName(n.path)}` : shownName(n.path); })
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const task = h("input", { class: "input", list: "rel-task-list", autocomplete: "off", spellcheck: "false", placeholder: "A task's ID or name",
+    "aria-label": "The other task" });
+  const hint = h("small", {});
+  const pick = () => {
+    const s = task.value.trim();
+    if (!s) return { error: "" };
+    const found = findTask(notes, s);
+    if (!found) return { error: `No task is called “${linkName(s)}”.` };
+    if (found.path === f.path) return { error: "A task can't be related to itself." };
+    const field = setup.fields.find((x) => x.key === kind.value);
+    const now = linkList(noteProps(f.text)[field.prop]);
+    if (now.some((n) => resolve(n) === found.path)) return { error: `${shownName(found.path)} is already under ${field.label}.` };
+    return { found, field, now };
+  };
+  const update = () => {
+    const p = pick();
+    hint.textContent = p.error || (p.found ? `${shownName(f.path)}: ${p.field.label.toLowerCase()} ${shownName(p.found.path)}` : "");
+    hint.classList.toggle("bad", !!p.error);
+  };
+  task.addEventListener("input", update);
+  kind.addEventListener("change", update);
+  const ok = await modal({
+    title: "Add relation",
+    text: `How ${shownName(f.path)} is related to another task. It shows on that task too, the other way round.`,
+    body: [h("div", { class: "rel-add" }, kind, task), h("datalist", { id: "rel-task-list" }, options.map((v) => h("option", { value: v }))), hint],
+    buttons: [{ label: "Cancel", value: false }, { label: "Add", kind: "primary", icon: "plus", value: true }],
+    onOpen: () => task.focus(),
+  });
+  if (!ok) return;
+  const p = pick();
+  if (!p.found) return p.error && toast(p.error, "error");
+  await setTaskField(f, p.field, [...p.now, shownName(p.found.path)], h("button"));
 }
 
 // ---- a task's commits ----
@@ -1213,7 +1291,8 @@ function taskForm(f, setup) {
     lists.push(h("datalist", { id }, [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b)).map((v) => h("option", { value: v }))));
     return id;
   };
-  const cells = setup.fields.filter((x) => x.on).flatMap((field) => {
+  // Relations are added and taken out in their own box, which shows them both ways.
+  const cells = setup.fields.filter((x) => x.on && x.kind !== "tasks").flatMap((field) => {
     const cur = shownValue(props[field.prop]).trim();
     const id = `tf-${field.prop}`;
     let control;
@@ -1265,6 +1344,9 @@ function parentList(f, field, setup, paths, lists) {
   return id;
 }
 
+/** A field's new value in words: a page's name, or the names in a list; `none` when it's empty. */
+const saidValue = (v, none) => (Array.isArray(v) ? (v.length ? v.map(linkName).join(", ") : none) : v ? linkName(v) : none);
+
 /**
  * One field changed on the open task. With no unsaved edits it's one commit of that one line, at once;
  * with some, the line changes in the text and Save keeps it with the rest.
@@ -1305,7 +1387,7 @@ async function setTaskField(f, field, input, control) {
   try {
     const id = String(noteProps(f.text).id ?? "").trim();
     const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), next, f.sha,
-      `${id ? id + ": " : ""}${field.prop} set to ${value ? linkName(value) : "nothing"} from ${APP_NAME}`);
+      `${id ? id + ": " : ""}${field.prop} set to ${saidValue(value, "nothing")} from ${APP_NAME}`);
     wroteCommit(f.repo, res);
     baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
     treeChanged(f.repo, f.path, res.sha);
@@ -1319,7 +1401,7 @@ async function setTaskField(f, field, input, control) {
       if (!f.dirty) store.remove(draftKey(f));
       redraw();
     }
-    toast(`${field.label}: ${value ? linkName(value) : "cleared"}`, "ok");
+    toast(`${field.label}: ${saidValue(value, "cleared")}`, "ok");
   } catch (e) {
     toast(e.isConflict ? `Not changed: ${shownName(f.path)} changed on GitHub. Reload it first.` : `Not changed: ${e.message}`, "error");
     if (control.isConnected) control.disabled = false;
@@ -1341,10 +1423,13 @@ function loadSuggestions(repo, areas, who, count) {
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
       .then(async (notes) => {
         const sprint = await suggestSprints(repo, tree).catch(() => null);
+        const resolve = (t, from) => tree.index.resolve(t, from);
+        // A task blocked by an open task waits for it: it isn't suggested.
+        const blocked = blockedTasks(notes, { setup: await loadTaskSetup(repo).catch(() => null), resolve });
         const fromSprint = sprint && sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: sprint.next?.path,
-          resolve: (t, from) => tree.index.resolve(t, from) });
+          resolve, blocked });
         const shown = {
-          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count }),
+          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked }),
           waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
           sprint: fromSprint ? sprint : null,
         };
@@ -2650,6 +2735,9 @@ async function editTaskFields(r) {
         oninput: (e) => { f.folder = e.target.value.trim().replace(/^\/+|\/+$/g, "") || "Sprints"; } }));
       extra.push(h("label", { class: "task-days" }, h("input", { class: "input", type: "number", min: "1", max: "90", value: String(f.length_days),
         "aria-label": "Sprint length in days", oninput: (e) => { f.length_days = Math.min(90, Math.max(1, parseInt(e.target.value, 10) || 14)); } }), "days"));
+    }
+    if (f.kind === "tasks") {
+      extra.push(h("small", { class: "muted" }, `Links to tasks; the other task shows “${relationFields().find((x) => x.key === f.key)?.reverse}”`));
     }
     if (f.kind === "number") {
       extra.push(h("select", { class: "input", "aria-label": "Estimate unit", onchange: (e) => { f.unit = e.target.value; } },
