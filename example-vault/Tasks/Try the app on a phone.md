@@ -6,6 +6,7 @@ assignee: Your name
 requested_by: Your name
 area: Setup
 priority: Medium
+part_of: "[[Get set up]]"
 ---
 
 # Try the app on a phone

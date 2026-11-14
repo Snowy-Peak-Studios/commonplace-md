@@ -10,6 +10,7 @@
 - ticking a checkbox and saving it, drafts after a reload, and the conflict view when a save is refused;
 - a new note: only a title, in `Notes/`, started from `Templates/Note.md`;
 - CSV tables: the reading list, and editing and saving a test table;
+- parent tasks and subtasks: the example epic's list and progress bar, the parent picker refusing a loop, and Add subtask;
 - other kinds of files: a TSV as a table, JSON and Python with colours, a PDF (in the page, or Open and Download on a phone), and a Download for a file the app can't show;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;

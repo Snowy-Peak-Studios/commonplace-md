@@ -553,3 +553,63 @@ export function newTaskProps(setup) {
     return [f.prop, f.values[0]];
   });
 }
+
+// ---- parent tasks and subtasks ----
+
+/** The property a field of the setup is kept in (its key when there's no setup): `fieldProp(setup, "part_of")`. */
+export const fieldProp = (setup, key) => setup?.fields.find((f) => f.key === key)?.prop || key;
+
+/** The page a link property leads to, as a link target: `[[Epic]]` -> "Epic"; a list uses its first link. */
+export function linkTarget(v) {
+  const first = Array.isArray(v) ? v.find((x) => !blank(x)) : v;
+  return blank(first) ? "" : linkName(first);
+}
+
+/** Whether a status means the work is over: Done, Cancelled, Won't do, or the last of the setup's statuses. */
+export function isDoneStatus(status, setup = null) {
+  const s = String(status ?? "").trim();
+  if (!s) return false;
+  const statuses = setup?.fields.find((f) => f.key === "status")?.values;
+  return FINISHED.test(s) || (!!statuses?.length && s.toLowerCase() === statuses.at(-1).toLowerCase());
+}
+
+/**
+ * The tasks under one task, from [{ path, props }]: the notes whose parent property (`prop`) links to
+ * `path`, through `resolve(target, fromPath)`. The open ones first, then by ID and name; with how many are done.
+ */
+export function subtasksOf(notes, path, { prop = "part_of", resolve, setup = null } = {}) {
+  const status = fieldProp(setup, "status");
+  const tasks = notes
+    .filter((n) => n.path !== path && linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path)
+    .map((n) => ({ path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[status] ?? "").trim(), done: isDoneStatus(n.props[status], setup) }))
+    .sort((a, b) => a.done - b.done || a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
+  return { tasks, done: tasks.filter((t) => t.done).length, total: tasks.length };
+}
+
+/**
+ * Why `parentPath` can't be `path`'s parent, or "" when it can: a task can't be its own parent, nor sit
+ * under one of its own subtasks (at any depth), which would make a loop.
+ */
+export function parentProblem(notes, path, parentPath, { prop = "part_of", resolve } = {}) {
+  if (!parentPath) return "";
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+  if (parentPath === path) return "A task can't be its own parent.";
+  const parentOf = new Map(notes.map((n) => [n.path, linkTarget(n.props[prop]) ? resolve(linkTarget(n.props[prop]), n.path) : null]));
+  const seen = new Set();
+  for (let p = parentOf.get(parentPath); p && !seen.has(p); p = parentOf.get(p)) {
+    if (p === path) return `${name(parentPath)} is already under ${name(path)}, so it can't be its parent.`;
+    seen.add(p);
+  }
+  return "";
+}
+
+/** The task a parent picker's text means: an ID (`C-12`, any case) or a task's name; null when none. */
+export function findTask(notes, input) {
+  const s = linkName(input).toLowerCase();
+  if (!s) return null;
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "").toLowerCase();
+  return notes.find((n) => String(n.props.id ?? "").trim().toLowerCase() === s)
+    || notes.find((n) => name(n.path) === s)
+    || notes.find((n) => { const id = String(n.props.id ?? "").trim().toLowerCase(); return id && s.startsWith(id + " ") && name(n.path) === s.slice(id.length + 1); })
+    || null;
+}

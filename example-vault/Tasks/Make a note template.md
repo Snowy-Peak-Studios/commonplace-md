@@ -6,6 +6,7 @@ assignee: Your name
 requested_by: Your name
 area: Setup
 priority: Low
+part_of: "[[Get set up]]"
 ---
 
 # Make a note template

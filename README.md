@@ -39,6 +39,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
+- **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
@@ -243,7 +244,14 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 **A link to the setup:** any note can link to `#/settings?fields`, which opens Task fields for the repo you're in, e.g. `[Set up task fields](#/settings?fields)`. The example vault's [Set up tasks](example-vault/Set%20up%20tasks.md) page does, and its Task Board links to it.
 
-Coming next: parent tasks with their subtasks, and sprints.
+**Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
+
+- A task with subtasks lists them on its page, each with its status, under a bar of how many are done (*Done*, *Cancelled*, *Won't do* and the last status in your list count as done).
+- **Add subtask** on a task makes a new task in the tasks folder, linked to it, with its area and sprint, and opens it.
+- The parent picker lists the tasks by ID and name (type either). A task can't be its own parent, or sit under one of its own subtasks.
+- On the board, a base can group by the parent: the example vault's *By parent* view does (`groupBy: part_of`).
+
+Coming next: sprints.
 
 </details>
 
@@ -266,8 +274,9 @@ example-vault/
 ├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)
 ├── .claude/skills/              optional: pointers to those skills, so Claude Code finds them
 ├── Bases/
-│   └── Tasks.base               a base with three views (By status, Open, Done), a formula, groups, sorts and filters
-├── Tasks/                       five task notes with id, status, priority, area, assignee and requested_by properties, and checklists
+│   └── Tasks.base               a base with four views (By status, By parent, Open, Done), a formula, groups, sorts and filters
+├── Tasks/                       six task notes with id, status, priority, area, assignee and requested_by properties, and checklists;
+│                                an epic, Get set up, with three of them under it (part_of)
 ├── Notes/
 │   ├── Inbox.md                 the shared inbox: owner and github properties, New tasks, Notes and Needs attention sections
 │   └── Inboxes/

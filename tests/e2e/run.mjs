@@ -691,6 +691,52 @@ check(await until(() => location.hash === "#/settings?fields" && document.queryS
   "the Set up tasks page's link opens Task fields");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Cancel")?.click());
 
+// 8f. Parent tasks and subtasks: the example epic lists its three tasks, the parent picker refuses a loop,
+// and Add subtask makes a new task under it.
+const epic = "Tasks/Get set up.md";
+await page.goto(at(epic), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelectorAll(".subtasks .st-list li").length === 3, 15000), "the epic lists its three subtasks");
+const subs = await page.evaluate(() => ({
+  count: document.querySelector(".subtasks .st-count")?.textContent,
+  done: document.querySelector(".subtasks .st-bar")?.getAttribute("aria-valuenow"),
+  width: document.querySelector(".subtasks .st-bar > span")?.style.width,
+  rows: [...document.querySelectorAll(".subtasks .st-list li")].map((li) => li.textContent),
+}));
+check(subs.count === "2 of 3 done" && subs.done === "2" && subs.width === "67%", "with a bar of how many are done: " + JSON.stringify(subs));
+check(/^T-3.*Try the app on a phone.*In Progress$/.test(subs.rows[0] ?? ""), "the open one first, with its ID and status: " + subs.rows[0]);
+await shot("8f-subtasks");
+await page.setViewport({ width: 375, height: 812 });
+await wait(300);
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth
+  && [...document.querySelectorAll(".subtasks, .subtasks button")].every((el) => el.getBoundingClientRect().right <= innerWidth + 0.5)),
+  "the subtasks fit at phone width");
+await shot("8f-subtasks-phone");
+await page.setViewport({ width: 1280, height: 860 });
+await wait(300);
+const parentOptions = await page.$$eval("#tf-list-part_of option", (o) => o.map((x) => x.value));
+check(parentOptions.includes("T-4 Invite a friend") && !parentOptions.some((o) => /Try the app|Get set up/.test(o)),
+  "the parent picker lists tasks by ID and name, leaving out the task and the ones under it: " + JSON.stringify(parentOptions));
+const putsBeforeLoop = puts.length;
+const pickParent = (text) => page.$eval("#tf-part_of", (el, t) => { el.value = t; el.dispatchEvent(new Event("change")); }, text);
+await pickParent("T-3");
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Try the app on a phone is already under Get set up"), 5000),
+  "a task under it can't be its parent (picked by ID)");
+await pickParent("Get set up");
+check(await until(() => document.querySelector("#toast")?.textContent.includes("can't be its own parent"), 5000), "nor can the task itself");
+check(puts.length === putsBeforeLoop && await page.$eval("#tf-part_of", (el) => el.value) === "", "nothing is saved, and the picker goes back");
+const putsBeforeSub = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".subtasks button")].find((b) => /Add subtask/.test(b.textContent)).click());
+await page.waitForSelector("dialog[open] input");
+await page.type("dialog[open] input", "Set up a second device");
+await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Add subtask").click());
+check(await until(() => location.hash.endsWith("/Tasks/Set%20up%20a%20second%20device.md"), 10000), "Add subtask opens the new task");
+const subPut = puts.slice(putsBeforeSub).find((p) => p.url === contentsUrl("Tasks/Set up a second device.md"));
+check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text),
+  "it's a new task under the epic, with the epic's area: " + JSON.stringify(subPut?.text.split("\n---")[0]));
+check(subPut?.body.message === "T-6: add Tasks/Set up a second device.md as a subtask of Get set up from Commonplace.md", "the commit says so: " + subPut?.body.message);
+await page.goto(at(epic), { waitUntil: "networkidle0" });
+check(await until(() => document.querySelector(".subtasks .st-count")?.textContent === "2 of 4 done", 15000), "the epic now has four subtasks");
+
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();
 const newcomer = await fresh.newPage();

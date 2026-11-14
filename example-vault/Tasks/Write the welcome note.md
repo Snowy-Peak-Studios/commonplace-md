@@ -6,6 +6,7 @@ assignee: Your name
 requested_by: Your name
 area: Docs
 priority: High
+part_of: "[[Get set up]]"
 ---
 
 # Write the welcome note

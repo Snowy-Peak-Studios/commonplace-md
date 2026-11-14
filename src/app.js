@@ -6,6 +6,7 @@ import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -790,9 +791,11 @@ function renderPreview() {
   if (app.token && !setup) {
     loadTaskSetup(f.repo).then(() => { if (app.file === f && f.dom?.preview.isConnected && f.kind === "md") renderPreview(); });
   }
-  const form = setup && canWrite(f.repo) && isSetupTask(setup, f.path) ? taskForm(f, setup) : null;
+  const isTask = setup && isSetupTask(setup, f.path);
+  const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
   const inForm = form ? new Set(setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase())) : null;
-  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
+    isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
 }
 
 // ---- a task's fields as a form (the project's task setup) ----
@@ -818,6 +821,113 @@ function loadTaskSetup(repo, force = false) {
 /** A setup saved from Task fields is the one to use from now on. */
 function useTaskSetup(repo, setup) {
   setups.set(repo.id, { setup, load: Promise.resolve(setup) });
+}
+
+/** Every task's properties, read once per tree version: repo id -> { version, notes, load }. */
+const taskNoteLoads = new Map();
+function taskNotes(repo, setup) {
+  const tree = app.trees.get(repo.id);
+  const known = taskNoteLoads.get(repo.id);
+  if (!tree) return { notes: null, settled: true };
+  if (known?.version === tree.version) return known;
+  // Until the new version is read, the last one's notes are shown; the note is drawn again when it's in.
+  const entry = { version: tree.version, notes: known?.notes ?? null, settled: false };
+  entry.load = baseNotes(repo, tree, [...tree.files.keys()].filter((p) => isSetupTask(setup, p)))
+    .then((notes) => { entry.notes = notes; entry.settled = true; redrawNote(); }, () => { taskNoteLoads.delete(repo.id); });
+  taskNoteLoads.set(repo.id, entry);
+  return entry;
+}
+
+/** Draws the open note's preview again, where it was scrolled to. */
+function redrawNote() {
+  if (app.file?.kind !== "md" || !app.file.dom?.preview.isConnected) return;
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+}
+
+/** A task's subtasks, each with its status, and a bar of how many are done; Add subtask makes a new one under it. */
+function subtasksBox(f, setup) {
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const tree = app.trees.get(f.repo.id);
+  const { tasks, done, total } = subtasksOf(entry.notes, f.path,
+    { prop: fieldProp(setup, "part_of"), resolve: (t, from) => tree.index.resolve(t, from), setup });
+  const add = canWrite(f.repo) ? h("button", { class: "btn small ghost", onclick: () => addSubtask(f, setup) }, icon("plus"), "Add subtask") : null;
+  if (!total) return add ? h("div", { class: "subtasks none" }, add) : null;
+  return h("section", { class: "subtasks", "aria-label": "Subtasks" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Subtasks"), h("span", { class: "st-count" }, `${done} of ${total} done`), add),
+    h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(total), "aria-valuenow": String(done),
+      "aria-label": `${done} of ${total} subtasks done` }, h("span", { style: `width: ${Math.round((done / total) * 100)}%` })),
+    h("ul", { class: "st-list" }, tasks.map((t) => h("li", { class: t.done ? "done" : null },
+      h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
+      t.status ? h("span", { class: "st-status" }, t.status) : null))));
+}
+
+/** A new task under this one, in the tasks folder: linked to it, with its area and sprint, from the note template. */
+async function addSubtask(parent, setup) {
+  const { repo } = parent;
+  const tree = await loadTree(repo);
+  const folder = setup.configured ? setup.folder : dirName(parent.path);
+  const name = h("input", { class: "input", autocomplete: "off", placeholder: "What's to be done?" });
+  const hint = h("small", {});
+  let createBtn;
+  const plan = () => {
+    const title = name.value.trim();
+    if (!title) return {};
+    const problem = titleProblem(title);
+    if (problem) return { error: problem };
+    const path = `${folder ? folder + "/" : ""}${title}.md`;
+    if (tree.index.has(path)) return { error: `${path} already exists.` };
+    const existing = repo.vault && tree.index.resolve(title);
+    if (existing) return { error: `A page called “${title}” already exists: ${existing}` };
+    return { path, title, kind: "md" };
+  };
+  const update = () => {
+    const p = plan();
+    hint.textContent = p.error || (p.path ? `It will be ${p.path}, under ${shownName(parent.path)}` : "");
+    hint.classList.toggle("bad", !!p.error);
+    if (createBtn) createBtn.disabled = !p.path;
+  };
+  name.addEventListener("input", update);
+  name.addEventListener("keydown", (e) => { if (e.key === "Enter" && !createBtn.disabled) { e.preventDefault(); createBtn.click(); } });
+  const props = noteProps(parent.text);
+  const inherit = ["area", "sprint"].map((k) => fieldProp(setup, k)).filter((k) => String(props[k] ?? "").trim());
+  const created = await modal({
+    title: "Add subtask",
+    text: `A new task under ${shownName(parent.path)}${inherit.length ? `, with the same ${inherit.join(" and ")}` : ""}.`,
+    body: [h("label", { class: "field" }, h("span", {}, "Title"), name, hint)],
+    buttons: [
+      { label: "Cancel", value: null },
+      { label: "Add subtask", kind: "primary", icon: "plus", onclick: async () => {
+        const p = plan();
+        if (!p.path) return false;
+        createBtn.disabled = true;
+        try {
+          const own = [[fieldProp(setup, "part_of"), `[[${shownName(parent.path)}]]`], ...inherit.map((k) => [k, String(props[k]).trim()])];
+          const text = withProps(await startingText(repo, tree, p), own);
+          const id = String(props.id ?? "").trim();
+          const res = await gh.writeText(repo, fullPath(repo, p.path), text, null,
+            `${id ? id + ": add" : "Add"} ${p.path} as a subtask of ${shownName(parent.path)} from ${APP_NAME}`);
+          wroteCommit(repo, res);
+          baseCache("baseProps", repo)[res.sha] = noteProps(text);
+          treeChanged(repo, p.path, res.sha);
+          return p.path;
+        } catch (e) {
+          hint.textContent = `It wasn't added: ${e.message}`;
+          hint.classList.add("bad");
+          createBtn.disabled = false;
+          return false;
+        }
+      } },
+    ],
+    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); name.focus(); },
+  });
+  if (!created) return;
+  app.mode = "edit";
+  store.set("mode", "edit");
+  location.hash = hrefFor(repo, created);
+  toast(`Added ${shownName(created)} under ${shownName(parent.path)}`, "ok");
 }
 
 /** The value of a property as a control shows it. */
@@ -853,7 +963,7 @@ function taskForm(f, setup) {
     } else {
       const link = ["task", "sprint", "link"].includes(field.kind);
       let list = null;
-      if (field.kind === "task") list = listFor(field, notes.filter((p) => isSetupTask(setup, p)).map(shownName));
+      if (field.kind === "task") list = parentList(f, field, setup, notes, lists);
       else if (field.kind === "sprint") list = listFor(field, notes.filter(inFolder(field.folder)).map(shownName));
       else if (field.kind === "link") list = listFor(field, notes.map(shownName));
       else if (field.kind === "person") list = listFor(field, [login, cur]);
@@ -875,10 +985,43 @@ function taskForm(f, setup) {
 }
 
 /**
+ * The parent picker's list: every task by its ID and name ("C-12 Pick a name"), leaving out this task
+ * and the ones under it, which can't be its parent. Until the tasks' properties are read, just their names.
+ */
+function parentList(f, field, setup, paths, lists) {
+  const id = `tf-list-${field.prop}`;
+  const tree = app.trees.get(f.repo.id);
+  const known = taskNotes(f.repo, setup).notes;
+  const notes = known ?? paths.filter((p) => isSetupTask(setup, p)).map((p) => ({ path: p, props: {} }));
+  const resolve = (t, from) => tree.index.resolve(t, from);
+  const options = notes
+    .filter((n) => n.path !== f.path && (!known || !parentProblem(known, f.path, n.path, { prop: field.prop, resolve })))
+    .map((n) => { const tid = String(n.props.id ?? "").trim(); return tid ? `${tid} ${shownName(n.path)}` : shownName(n.path); })
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  lists.push(h("datalist", { id }, options.map((v) => h("option", { value: v }))));
+  return id;
+}
+
+/**
  * One field changed on the open task. With no unsaved edits it's one commit of that one line, at once;
  * with some, the line changes in the text and Save keeps it with the rest.
  */
 async function setTaskField(f, field, input, control) {
+  // A parent task is picked by its ID or name, and can't be the task itself or one under it.
+  if (field.kind === "task" && String(input ?? "").trim()) {
+    const setup = taskSetupOf(f.repo);
+    const notes = setup ? taskNotes(f.repo, setup).notes : null;
+    if (notes) {
+      const tree = app.trees.get(f.repo.id);
+      const undo = () => { control.value = linkTarget(noteProps(f.text)[field.prop]); };
+      const task = findTask(notes, input);
+      if (!task) { undo(); return toast(`${field.label}: no task is called “${linkName(input)}”.`, "error"); }
+      const problem = parentProblem(notes, f.path, task.path, { prop: field.prop, resolve: (t, from) => tree.index.resolve(t, from) });
+      if (problem) { undo(); return toast(problem, "error"); }
+      input = shownName(task.path);
+      control.value = input;
+    }
+  }
   const value = fieldValue(field, input);
   if (value == null) return toast(`${field.label}: that isn't a ${field.kind === "date" ? "date" : "number"}.`, "error");
   const next = withProps(f.text, [[field.prop, value]]);

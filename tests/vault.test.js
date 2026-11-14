@@ -5,6 +5,7 @@ import {
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps,
+  fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -360,4 +361,60 @@ test("a new task starts with the fields that are on", () => {
   const props = newTaskProps(taskSetup({ fields: { due: { on: false } }, custom: [{ name: "Size", kind: "choice", values: ["S", "M"] }] }));
   assert.deepEqual(props, [["status", "To Do"], ["priority", "Medium"], ["assignee", ""], ["area", ""], ["requested_by", ""],
     ["type", "Task"], ["part_of", ""], ["sprint", ""], ["estimate", ""], ["size", "S"]]);
+});
+
+// ---- parent tasks and subtasks ----
+
+const TASKS = [
+  { path: "Tasks/Launch.md", props: { id: "T-1", type: "Epic", status: "In Progress" } },
+  { path: "Tasks/Write the docs.md", props: { id: "T-10", status: "Done", part_of: "[[Launch]]" } },
+  { path: "Tasks/Fix the build.md", props: { id: "T-2", status: "In Progress", part_of: "[[Launch|the launch]]" } },
+  { path: "Tasks/Pick a name.md", props: { id: "T-3", status: "To Do", part_of: ["[[Launch]]"] } },
+  { path: "Tasks/Name ideas.md", props: { id: "T-4", status: "Cancelled", part_of: "[[Pick a name]]" } },
+  { path: "Tasks/Unrelated.md", props: { id: "T-5", status: "To Do", part_of: "" } },
+];
+const taskIndex = new LinkIndex(TASKS.map((n) => n.path));
+const resolveTask = (t, from) => taskIndex.resolve(t, from);
+
+test("a task's subtasks: the open ones first, by ID, and how many are done", () => {
+  const s = subtasksOf(TASKS, "Tasks/Launch.md", { resolve: resolveTask });
+  assert.deepEqual(s.tasks.map((t) => t.id), ["T-2", "T-3", "T-10"]);
+  assert.deepEqual([s.done, s.total], [1, 3]);
+  assert.equal(s.tasks[2].status, "Done");
+  assert.deepEqual(subtasksOf(TASKS, "Tasks/Pick a name.md", { resolve: resolveTask }).done, 1);
+  assert.equal(subtasksOf(TASKS, "Tasks/Unrelated.md", { resolve: resolveTask }).total, 0);
+});
+
+test("the setup's own names: a renamed parent property, and its last status counts as done", () => {
+  const setup = taskSetup({ fields: { part_of: { prop: "epic" }, status: { values: ["Open", "Shipped"] } } });
+  assert.equal(fieldProp(setup, "part_of"), "epic");
+  assert.equal(fieldProp(null, "part_of"), "part_of");
+  const notes = [{ path: "Tasks/A.md", props: { epic: "[[B]]", status: "Shipped" } }, { path: "Tasks/B.md", props: {} }];
+  const s = subtasksOf(notes, "Tasks/B.md", { prop: "epic", resolve: (t) => new LinkIndex(notes.map((n) => n.path)).resolve(t), setup });
+  assert.deepEqual([s.done, s.total], [1, 1]);
+  assert.ok(isDoneStatus("won't do") && isDoneStatus("Done") && !isDoneStatus("Waiting") && !isDoneStatus(""));
+  assert.equal(linkTarget(["", "[[X#h]]"]), "X");
+});
+
+test("a parent can't be the task itself, or one of its subtasks at any depth", () => {
+  const opts = { resolve: resolveTask };
+  assert.equal(parentProblem(TASKS, "Tasks/Launch.md", "Tasks/Launch.md", opts), "A task can't be its own parent.");
+  assert.match(parentProblem(TASKS, "Tasks/Launch.md", "Tasks/Pick a name.md", opts), /Pick a name is already under Launch/);
+  assert.match(parentProblem(TASKS, "Tasks/Launch.md", "Tasks/Name ideas.md", opts), /Name ideas is already under Launch/);
+  assert.equal(parentProblem(TASKS, "Tasks/Pick a name.md", "Tasks/Unrelated.md", opts), "");
+  assert.equal(parentProblem(TASKS, "Tasks/Name ideas.md", "Tasks/Launch.md", opts), "");
+  assert.equal(parentProblem(TASKS, "Tasks/Launch.md", "", opts), "");
+  // A loop already in the notes doesn't hang it.
+  const loop = [{ path: "Tasks/A.md", props: { part_of: "[[B]]" } }, { path: "Tasks/B.md", props: { part_of: "[[A]]" } }, { path: "Tasks/C.md", props: {} }];
+  const idx = new LinkIndex(loop.map((n) => n.path));
+  assert.equal(parentProblem(loop, "Tasks/C.md", "Tasks/A.md", { resolve: (t) => idx.resolve(t) }), "");
+});
+
+test("the parent picker takes an ID, a name, or the ID and name its list shows", () => {
+  assert.equal(findTask(TASKS, "t-3")?.path, "Tasks/Pick a name.md");
+  assert.equal(findTask(TASKS, "Fix the build")?.path, "Tasks/Fix the build.md");
+  assert.equal(findTask(TASKS, "[[Launch]]")?.path, "Tasks/Launch.md");
+  assert.equal(findTask(TASKS, "T-10 Write the docs")?.path, "Tasks/Write the docs.md");
+  assert.equal(findTask(TASKS, "Nothing like it"), null);
+  assert.equal(findTask(TASKS, " "), null);
 });

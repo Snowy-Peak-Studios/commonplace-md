@@ -26,6 +26,10 @@ Open any task, like [[Invite a friend]]: its fields are pickers and boxes above 
 
 A new note in `Tasks/` starts with every field that's on.
 
+## Subtasks
+
+A task can sit under another one: its **Parent task** (`part_of`) links to it. [[Get set up]] is an epic with three tasks under it: its page lists them with their status and a bar of how many are done, and **Add subtask** makes a new one, with the same area and sprint. Pick a parent by its ID or its name. The [[Task Board]]'s *By parent* view groups the tasks by their parent.
+
 ## No setup yet?
 
 A repo that was never set up has Status, Priority, Assignee, Area and Requested by, as before. The first time you open the setup, every field is ticked: untick the ones you don't need, then save.
