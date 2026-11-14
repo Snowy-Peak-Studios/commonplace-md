@@ -431,6 +431,30 @@ check(guide.heading?.includes("Home.md?h="), "[[Home#How saving works|...]] lead
 check(guide.missing === 0, "no missing links on the Guide: " + guide.missing);
 check(guide.folded === false, "a [!warning]- callout starts folded");
 await shot("2b-guide-desktop");
+// Lists with subpoints: each point that has some gets an arrow that folds them; only the view changes.
+const foldState = () => page.evaluate(() => {
+  const li = [...document.querySelectorAll(".note-body li.has-fold")].find((x) => x.textContent.startsWith("Plan the week"));
+  return { arrows: document.querySelectorAll(".note-body li > .fold, .note-body li > p > .fold").length,
+    folded: li?.classList.contains("folded"), shown: li ? li.querySelector(":scope > ul").offsetParent !== null : null,
+    expanded: li?.querySelector(".fold").getAttribute("aria-expanded"), save: document.querySelector("#save-btn")?.disabled };
+});
+const fold0 = await foldState();
+check(fold0.arrows === 5 && fold0.folded === false && fold0.shown && fold0.expanded === "true",
+  "the Guide's points with subpoints have arrows (bullets, a deeper one, numbered and tasks), all open: " + JSON.stringify(fold0));
+await page.evaluate(() => [...document.querySelectorAll(".note-body li.has-fold")].find((x) => x.textContent.startsWith("Plan the week"))?.querySelector(".fold").click());
+const fold1 = await foldState();
+check(fold1.folded && !fold1.shown && fold1.expanded === "false" && fold1.save, "a tap folds its subpoints away, and the note isn't changed: " + JSON.stringify(fold1));
+await page.evaluate(() => document.querySelector(".note-body li.folded")?.scrollIntoView({ block: "center" }));
+await shot("2e-guide-folded");
+// A redraw (here the colour scheme, which draws the diagrams again) keeps the fold.
+await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
+await until(() => !!document.querySelector(".note-body .mermaid-diagram"), 5000);
+await wait(300);
+check((await foldState()).folded === true, "the fold stays when the page is drawn again");
+await shot("2f-guide-folded-light");
+await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "dark" }]);
+await page.evaluate(() => document.querySelector(".note-body li.folded .fold")?.click());
+check((await foldState()).shown === true, "a second tap shows them again");
 
 // 5. A task page: tick a checkbox, save (faked), check the commit body.
 const taskPath = "Tasks/Try the app on a phone.md";

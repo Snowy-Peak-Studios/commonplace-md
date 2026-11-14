@@ -12,6 +12,7 @@ tags:
 > - [[#Embeds|Embeds]]
 > - [[#Callouts|Callouts]]
 > - [[#Checkboxes|Checkboxes]]
+> - [[#Lists with subpoints|Lists with subpoints]]
 > - [[#Diagrams|Diagrams]]
 > - [[#The navigation box|The navigation box]]
 %% /nav %%
@@ -55,6 +56,28 @@ Tick them in Read mode; each tick is saved as a commit.
 - [x] Make a token
 - [ ] Add the repo in Settings
 - [ ] Write a first note
+
+## Lists with subpoints
+
+In Read mode, a point with subpoints has a small arrow: tap it to fold them all away, and again to show them. It only changes what you see, never the note.
+
+- Plan the week
+  - Monday: sort the inbox
+  - Friday: look back
+    - What got done
+    - What moves to next week
+- Pack for the trip
+  - Tickets
+  - Charger
+
+1. Make the repo
+   1. Pick a name
+   2. Keep it private
+2. Add it in Settings
+
+- [ ] Share the notes
+  - [ ] Copy the invite link
+  - [ ] Send it to a friend
 
 ## Diagrams
 

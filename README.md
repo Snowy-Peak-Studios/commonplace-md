@@ -29,6 +29,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
   - A ` ```top-tasks ` block shows the top tasks to start on any page, like the inbox does.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
+  - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
 - **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
 - **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
 - **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
@@ -287,7 +288,7 @@ A GitHub Action fills them in by itself. After each push, it adds every commit w
 ```text
 example-vault/
 ├── Home.md                      start page: links, a table, a callout, an embedded section, the top tasks, a Mermaid diagram, an image
-├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
+├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, folding lists, diagrams
 ├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], the sprints, and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
 ├── Other kinds of files.md      what opens how: tables, text with colours, PDFs, pictures, and downloads for the rest
@@ -341,6 +342,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - ` ```mermaid ` diagrams
 - ` ```top-tasks ` blocks: the top tasks to start, on any page
 - checkboxes, ticked in Read mode
+- lists whose subpoints fold away in Read mode
 - `%% comments %%`, hidden in the preview
 - note templates with `{{title}}` and `{{date}}`
 

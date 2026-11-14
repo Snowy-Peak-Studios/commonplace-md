@@ -9,7 +9,7 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 
 | Page | What it holds |
 |---|---|
-| [[Guide]] | Links, embeds, callouts, checkboxes, diagrams and the navigation box |
+| [[Guide]] | Links, embeds, callouts, checkboxes, folding lists, diagrams and the navigation box |
 | [[Task Board]] | The tasks in `Tasks/`, shown as a table from [[Tasks.base]] |
 | [[Set up tasks]] | Which fields your tasks have: [set them up](#/settings?fields) for the whole project |
 | [[Inbox]] | Quick notes, new tasks and questions; each person can have their own in `Notes/Inboxes/` |

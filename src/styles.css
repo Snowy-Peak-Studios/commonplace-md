@@ -583,6 +583,35 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
   transform: rotate(45deg);
 }
 .preview li.task-item:has(> input.task:checked), .preview li.task-item:has(> p > input.task:checked) { color: var(--muted); }
+/* folding a list's subpoints: an arrow on each item that has some; a bullet's arrow takes the bullet's place */
+.preview li.has-fold { position: relative; }
+.preview li.folded > ul, .preview li.folded > ol { display: none; }
+.preview .fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  height: 1.3em;
+  margin: 0 0.15em 0 -0.15em;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  vertical-align: -0.28em;
+  cursor: pointer;
+}
+.preview .fold:hover { color: var(--accent); background: var(--bg-soft); }
+.preview .fold .icon { width: 0.95em; height: 0.95em; transform: rotate(90deg); transition: transform 0.15s; }
+.preview li.folded > .fold .icon, .preview li.folded > p > .fold .icon { transform: none; }
+.preview li.folded > .fold, .preview li.folded > p > .fold { color: var(--accent); }
+.preview ul > li.has-fold:not(.task-item) { list-style: none; }
+.preview ul > li.has-fold:not(.task-item) > .fold, .preview ul > li.has-fold:not(.task-item) > p > .fold {
+  position: absolute;
+  left: -1.42em;
+  top: 0.2em;
+  margin: 0;
+}
 .preview code {
   font-family: var(--mono);
   font-size: 0.86em;

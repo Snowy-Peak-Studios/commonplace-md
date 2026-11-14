@@ -1586,6 +1586,52 @@ function decorate(root, repo, fromPath) {
   for (const a of root.querySelectorAll('a[href^="http"]')) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
   fillImages(root, repo, fromPath);
   fillDiagrams(root);
+  fillFolds(root, fromPath);
+}
+
+// ---- folding a list's subpoints ----
+
+/** The folded list items of the open note, by `listItemKey`: kept while it's open, so a redraw keeps them; never saved. */
+const foldsOf = (f) => (f.folds ||= new Set());
+
+/** A list item's own text (without its subpoints) and the page it's from: what a fold is remembered by, so typing above it doesn't move it. */
+function listItemKey(li, fromPath) {
+  const own = li.cloneNode(true);
+  for (const x of own.querySelectorAll(":scope > ul, :scope > ol, .fold")) x.remove();
+  return `${fromPath}\n${own.textContent.replace(/\s+/g, " ").trim().slice(0, 120)}`;
+}
+
+/**
+ * Each list item with subpoints gets an arrow that folds them all away, or shows them again. It only changes
+ * the view: the note's text stays as it is. A bullet's arrow takes the bullet's place; a numbered or task
+ * item's sits at the start of its line.
+ */
+function fillFolds(root, fromPath) {
+  const f = app.file;
+  for (const li of root.querySelectorAll("li")) {
+    if (![...li.children].some((c) => c.tagName === "UL" || c.tagName === "OL") || li.querySelector(":scope > .fold, :scope > p > .fold")) continue;
+    const key = listItemKey(li, fromPath);
+    const folds = f ? foldsOf(f) : new Set();
+    const button = h("button", { type: "button", class: "fold" }, icon("chevron"));
+    const show = (folded) => {
+      li.classList.toggle("folded", folded);
+      button.setAttribute("aria-expanded", String(!folded));
+      button.setAttribute("aria-label", folded ? "Show the subpoints" : "Fold the subpoints");
+      button.title = folded ? "Show the subpoints" : "Fold the subpoints";
+    };
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      const folded = !li.classList.contains("folded");
+      if (folded) folds.add(key); else folds.delete(key);
+      show(folded);
+    });
+    li.classList.add("has-fold");
+    show(folds.has(key));
+    // In a loose list the line is a paragraph: the arrow goes inside it, so it stays on the same line.
+    const line = li.firstElementChild?.tagName === "P" ? li.firstElementChild : li;
+    const box = line.querySelector(":scope > input.task");
+    if (box) box.after(button); else line.prepend(button);
+  }
 }
 
 // ---- Mermaid diagrams: ```mermaid blocks ----
