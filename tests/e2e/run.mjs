@@ -751,8 +751,9 @@ await page.type("dialog[open] input", "Set up a second device");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Add subtask").click());
 check(await until(() => location.hash.endsWith("/Tasks/Set%20up%20a%20second%20device.md"), 10000), "Add subtask opens the new task");
 const subPut = puts.slice(putsBeforeSub).find((p) => p.url === contentsUrl("Tasks/Set up a second device.md"));
-check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text),
-  "it's a new task under the epic, with the epic's area: " + JSON.stringify(subPut?.text.split("\n---")[0]));
+check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text)
+  && /^---\nparent: "\[\[Task Board\]\]"\n/.test(subPut.text),
+  "it's a new task under the epic, with the epic's area and place in the tree: " + JSON.stringify(subPut?.text.split("\n---")[0]));
 check(subPut?.body.message === "T-6: add Tasks/Set up a second device.md as a subtask of Get set up from Commonplace.md", "the commit says so: " + subPut?.body.message);
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelector(".subtasks .st-count")?.textContent === "2 of 4 done", 15000), "the epic now has four subtasks");
@@ -761,20 +762,22 @@ check(await until(() => document.querySelector(".subtasks .st-count")?.textConte
 // first; Start the next sprint makes the next one and moves what's left, in one commit; the board shows the current one.
 const realSprints = await Promise.all(["Sprints/Sprint 1.md", "Sprints/Sprint 2.md"].map(async (p) => ({ path: p, props: noteProps((await realFile(p)).text) })));
 await page.goto(at("Sprints/Sprint 1.md"), { waitUntil: "networkidle0" });
+await page.evaluate(() => document.querySelector("#mode").children[0].click()); // Read: Add subtask left it in Edit
 check(await until(() => document.querySelectorAll(".sprint-box .sprint-group").length === 3, 15000), "a sprint's page lists its tasks by status");
 const sprint1 = await page.evaluate(() => ({
   groups: [...document.querySelectorAll(".sprint-box .sprint-status")].map((g) => g.firstChild.textContent),
   done: document.querySelector(".sprint-box .sprint-done")?.textContent,
   goal: document.querySelector(".sprint-box .sprint-goal")?.textContent,
   start: !!document.querySelector(".sprint-box .st-head button"),
+  points: [...document.querySelectorAll(".sprint-box .st-status")].map((x) => x.textContent),
 }));
 check(JSON.stringify(sprint1.groups) === '["To Do","In Progress","Done"]', "in the setup's order of statuses: " + JSON.stringify(sprint1.groups));
-check(sprint1.done === "1 of 3 tasks done · 2 of 6 points" && sprint1.goal === "Goal: The notes on every device", "with how much is done, in tasks and points, and its goal: " + JSON.stringify(sprint1));
+check(sprint1.done === "1 of 3 tasks done · 2 of 6 points" && sprint1.points.join() === "1 point,3 points,2 points" && sprint1.goal === "Goal: The notes on every device", "with how much is done, in tasks and points, and its goal: " + JSON.stringify(sprint1));
 check(!sprint1.start, "only the latest sprint offers Start the next sprint");
 await shot("8g-sprint");
 await page.setViewport({ width: 375, height: 812 });
 await wait(300);
-check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth
+check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector(".sprint-box").offsetWidth > 0
   && document.querySelector(".sprint-box").getBoundingClientRect().right <= innerWidth + 0.5), "the sprint's page fits at phone width");
 await shot("8g-sprint-phone");
 await page.setViewport({ width: 1280, height: 860 });
@@ -805,11 +808,15 @@ check(sprintTree.length === 2 && sprintTree[0].path === PRE + "Sprints/Sprint 3.
 check(commitWrites.at(-1)?.message === "Start Sprint 3, with 1 unfinished task from Sprint 2 from Commonplace.md" && refWrites.length === 1
   && refWrites[0].url === `${REPO_API}/git/refs/heads/${encPath(BRANCH)}` && puts.length === putsBeforeSprint,
   "one commit, the branch moved to it, and nothing else saved: " + commitWrites.at(-1)?.message);
-check(await until(() => document.querySelector(".sprint-box .sprint-done")?.textContent === "0 of 1 tasks done · 0 of 2 points", 15000),
+check(await until(() => document.querySelector(".sprint-box .sprint-done")?.textContent === "0 of 1 task done · 0 of 2 points", 15000),
   "the new sprint has the moved task");
 await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
-check(await until(() => document.querySelectorAll(".base-view").length === 2 && !!document.querySelectorAll(".base-view")[1].querySelector(".base-count"), 40000),
-  "the Task Board shows the sprints' base too");
+check(await until(() => {
+  const v = document.querySelectorAll(".base-view")[1];
+  return !!v?.querySelector('.base-tab[aria-selected="true"]') && /\d/.test(v.querySelector(".base-count")?.textContent ?? "");
+}, 40000), "the Task Board shows the sprints' base too");
+await page.evaluate(() => document.querySelectorAll(".base-view")[1].scrollIntoView());
+await shot("8g-board-sprints");
 const currentView = runView(parseBase((await realFile("Bases/Sprints.base")).text), 0, realSprints);
 const currentShown = await page.evaluate(() => {
   const v = document.querySelectorAll(".base-view")[1];

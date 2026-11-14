@@ -922,7 +922,9 @@ async function addSubtask(parent, setup) {
         if (!p.path) return false;
         createBtn.disabled = true;
         try {
-          const own = [[fieldProp(setup, "part_of"), `[[${shownName(parent.path)}]]`], ...inherit.map((k) => [k, String(props[k]).trim()])];
+          // In the tree of pages it sits where its parent task does, whatever the note template says.
+          const place = typeof props.parent === "string" && props.parent.trim() ? [["parent", props.parent.trim()]] : [];
+          const own = [...place, [fieldProp(setup, "part_of"), `[[${shownName(parent.path)}]]`], ...inherit.map((k) => [k, String(props[k]).trim()])];
           const text = withProps(await startingText(repo, tree, p), own);
           const id = String(props.id ?? "").trim();
           const res = await gh.writeText(repo, fullPath(repo, p.path), text, null,
@@ -954,6 +956,8 @@ const shortDay = (day, year = false) => (day
   ? new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: year ? "numeric" : undefined, timeZone: "UTC" })
   : "");
 const WHEN = { now: "Now", next: "Next", later: "Later", past: "Ended" };
+/** "1 point", "3 points", "0.5 days": an estimate with its unit. */
+const amount = (n, unit = "") => `${n} ${n === 1 ? unit.replace(/s$/, "") : unit}`.trim();
 
 /**
  * A sprint's page: its dates and where it stands, its tasks by status, how many are done (and how much of
@@ -972,7 +976,7 @@ function sprintBox(f, setup) {
     ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
   const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
   const done = `${s.done} of ${s.total} task${s.total === 1 ? "" : "s"} done`
-    + (s.points ? ` · ${s.points.done} of ${s.points.total} ${s.points.unit}` : "");
+    + (s.points ? ` · ${s.points.done} of ${amount(s.points.total, s.points.unit)}` : "");
   return h("section", { class: "sprint-box", "aria-label": "Sprint" },
     h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"), h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
       h("span", { class: "st-count" }, dates), start),
@@ -981,11 +985,11 @@ function sprintBox(f, setup) {
       h("div", { class: "st-count sprint-done" }, done),
       h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(s.total), "aria-valuenow": String(s.done),
         "aria-label": done }, h("span", { style: `width: ${Math.round((s.done / s.total) * 100)}%` })),
-      s.groups.map((g) => h("div", { class: "sprint-group" },
+      ...s.groups.map((g) => h("div", { class: "sprint-group" },
         h("div", { class: "sprint-status" }, g.status || "No status", h("span", { class: "muted" }, ` ${g.tasks.length}`)),
         h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
           h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
-          t.points != null ? h("span", { class: "st-status" }, `${t.points} ${s.points?.unit ?? ""}`.trim()) : null))))),
+          t.points != null ? h("span", { class: "st-status" }, amount(t.points, s.points?.unit)) : null))))),
     ] : h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field."));
 }
 
