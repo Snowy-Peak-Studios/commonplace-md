@@ -30,6 +30,10 @@ A new note in `Tasks/` starts with every field that's on.
 
 A task can sit under another one: its **Parent task** (`part_of`) links to it. [[Get set up]] is an epic with three tasks under it: its page lists them with their status and a bar of how many are done, and **Add subtask** makes a new one, with the same area and sprint. Pick a parent by its ID or its name. The [[Task Board]]'s *By parent* view groups the tasks by their parent.
 
+## Commits
+
+A task lists the commits whose message starts with its ID, like `T-6: the welcome note says how to get set up`, each linking to GitHub. They're found in this repo; to look in another one too, add `commits_in: [you/your-app]` to the task. This example's commits don't carry its tasks' IDs, so its tasks show none.
+
 ## Sprints
 
 A sprint is a note in `Sprints/` with its `start`, `end` and `goal`, like [[Sprint 1]]. A task joins it in its **Sprint** field, which offers the current sprint first, then the next. A sprint's page lists its tasks by status, with how many are done and how many points. On the latest sprint, **Start the next sprint** makes the next one (its dates follow from the sprint length in the setup) and moves the unfinished tasks into it, all in one commit. The [[Task Board]] shows the sprint going on today.

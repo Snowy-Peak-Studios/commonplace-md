@@ -180,6 +180,16 @@ export class GitHub {
     return { commit: made.sha, parent, shas };
   }
 
+  /**
+   * GitHub's commit search: the commits in these repos ("owner/repo") whose message has `text`, the newest
+   * first. It covers each repo's default branch only, lags a little behind, and has its own rate limit
+   * (30 searches a minute), apart from the other calls'.
+   */
+  searchCommits(repos, text, perPage = 50) {
+    const q = `"${text.replace(/"/g, "")}" ` + repos.map((r) => `repo:${r}`).join(" ");
+    return this.request("GET", `/search/commits?per_page=${perPage}&sort=committer-date&order=desc&q=${encodeURIComponent(q)}`);
+  }
+
   /** GitHub's code search; it only covers the repo's default branch and lags a little behind. */
   searchCode(r, query) {
     const q = `${query} repo:${r.owner}/${r.repo}` + (r.folder ? ` path:${r.folder}` : "");

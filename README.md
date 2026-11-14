@@ -40,6 +40,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
 - **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
+- **Commits:** a task lists the commits whose message starts with its ID, from its repo and any others it names, each linking to GitHub ([more](#task-fields)).
 - **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
@@ -251,6 +252,12 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 - **Add subtask** on a task makes a new task in the tasks folder, linked to it, with its area and sprint, and opens it.
 - The parent picker lists the tasks by ID and name (type either). A task can't be its own parent, or sit under one of its own subtasks.
 - On the board, a base can group by the parent: the example vault's *By parent* view does (`groupBy: part_of`).
+
+**Commits:** a task with an `id` lists the commits whose message starts with it (`T-6: ...`, or `T-5, T-6: ...` for several tasks), the newest first, each linking to GitHub.
+
+- They're found with GitHub's commit search in the vault's repo. To look in other repos too, name them on the task: `commits_in: [you/your-app]`.
+- The search covers each repo's default branch only, and can lag a little behind a push.
+- It's one search when the task is opened, kept until the vault's branch has a new commit, so it costs little. GitHub allows 30 searches a minute, apart from the other calls.
 
 **Sprints:** a sprint is a note in the sprints folder (`Sprints/` unless the setup says otherwise) with `start`, `end` and `goal`; a task joins it with `sprint: "[[Sprint 12]]"`.
 
@@ -523,7 +530,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
-| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it |
+| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it, a task's commits |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
 | `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view, colours for code and other text files |

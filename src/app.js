@@ -7,6 +7,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
+  COMMITS_PROP, commitRepos, taskCommits,
 } from "./vault.js";
 import { createMarkdown, renderNote } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -795,7 +796,8 @@ function renderPreview() {
   const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
   const inForm = form ? new Set(setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase())) : null;
   const sprint = setup && !isTask && isSprintNote(setup, f.path) ? sprintBox(f, setup) : null;
-  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, sprint, frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
+  fill(f.dom.preview, form, isTask ? subtasksBox(f, setup) : null, isTask ? commitsBox(f, frontMatter) : null, sprint,
+    frontMatter ? propertiesBox(frontMatter, env, inForm) : "",
     isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
 }
 
@@ -880,6 +882,50 @@ function subtasksBox(f, setup) {
     h("ul", { class: "st-list" }, tasks.map((t) => h("li", { class: t.done ? "done" : null },
       h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
       t.status ? h("span", { class: "st-status" }, t.status) : null))));
+}
+
+// ---- a task's commits ----
+
+/** Each task's commits, searched once per branch head: key -> { commits, error, at }. */
+const commitLoads = new Map();
+
+/**
+ * The commits made for a task: those whose message starts with its ID, in the vault's repo and the repos
+ * its `commits_in` names, found by GitHub's commit search. One search when the task is opened, kept until
+ * the vault's branch moves on; nothing shows until it's in, or when there are none.
+ */
+function commitsBox(f, frontMatter) {
+  let props = null;
+  try { props = frontMatter ? yamlLoad(frontMatter) : null; } catch { /* the properties box shows what's wrong */ }
+  const id = String(props?.id ?? "").trim();
+  const tree = app.trees.get(f.repo.id);
+  if (!id || !tree || !app.token || typeof props !== "object") return null;
+  const own = `${f.repo.owner}/${f.repo.repo}`.toLowerCase();
+  const repos = commitRepos(own, props[COMMITS_PROP]);
+  const key = `${f.repo.id}:${tree.head || tree.version}:${id}:${repos.join(" ")}`;
+  let entry = commitLoads.get(key);
+  // A failed search is tried again a minute later, when the task is drawn again.
+  if (!entry || (entry.error && Date.now() - entry.at > 60_000)) {
+    entry = { commits: null, error: "", at: Date.now() };
+    commitLoads.set(key, entry);
+    gh.searchCommits(repos, id)
+      .then((res) => { entry.commits = taskCommits(res?.items, id); }, (e) => { entry.error = e.message || "GitHub didn't answer."; })
+      .then(() => { if (app.file === f) redrawNote(); });
+  }
+  const head = (count) => h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Commits"), count ? h("span", { class: "st-count" }, count) : null);
+  if (entry.error) {
+    return h("section", { class: "commits", "aria-label": "Commits" }, head(""),
+      h("p", { class: "st-note" }, `Couldn't look for this task's commits: ${entry.error}`));
+  }
+  if (!entry.commits?.length) return null;
+  const list = entry.commits;
+  return h("section", { class: "commits", "aria-label": "Commits" },
+    head(`${list.length}${list.length >= 50 ? "+" : ""} ${list.length === 1 ? "commit" : "commits"}`),
+    h("ul", { class: "st-list" }, list.map((c) => h("li", {},
+      h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", title: c.title },
+        h("span", { class: "st-id" }, c.short), c.title),
+      c.repo && c.repo !== own ? h("span", { class: "st-status" }, c.repo.slice(c.repo.indexOf("/") + 1)) : null,
+      c.date ? h("time", { class: "st-date", datetime: c.date }, shortDay(c.date.slice(0, 10), !c.date.startsWith(isoDate().slice(0, 4)))) : null))));
 }
 
 /** A new task under this one, in the tasks folder: linked to it, with its area and sprint, from the note template. */
