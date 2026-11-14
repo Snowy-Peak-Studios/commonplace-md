@@ -8,9 +8,13 @@ github: your-github-login
 
 The shared inbox: write here first, sort it later. The Inbox button opens it, unless you have an inbox of your own in `Notes/Inboxes/` (see [[Your name]]).
 
-Put your GitHub login in `github` above to make this one yours. The box below shows the top three free tasks you could start; **Claim** makes one yours. It's the ` ```top-tasks ` block: move it, or put one on any page.
+Put your GitHub login in `github` above to make this one yours. The box below shows the top three free tasks you could start; **Claim** makes one yours. It's the ` ```top-tasks ` block, and its lines say what it shows (the [[Home]] page says what each means): change them, move the block, or put one on any page.
 
 ```top-tasks
+range: 3
+areas:
+sprint: current-then-next
+owner: Your name
 ```
 
 ## New tasks

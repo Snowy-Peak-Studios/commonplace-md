@@ -25,10 +25,20 @@ The goals live on the Task Board; this is that section, embedded here:
 
 ## What to start next
 
-The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block, with an optional `areas:` line and `count:` line. Other Markdown editors show it as a small code block.
+The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block. Everything it shows is written in it, one option per line:
+
+- `range:` how many tasks (up to 20);
+- `areas:` only these areas (empty: every area);
+- `sprint:` `current-only`, `current-then-next` (the next sprint's when the current one has none left), or `off` (every task);
+- `owner:` whom **Claim** claims a task for.
+
+Nothing is taken from anywhere else. Other Markdown editors show it as a small code block.
 
 ```top-tasks
-count: 3
+range: 3
+areas:
+sprint: current-then-next
+owner: Your name
 ```
 
 ## How saving works

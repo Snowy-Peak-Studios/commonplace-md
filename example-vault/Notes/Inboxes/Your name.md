@@ -2,16 +2,19 @@
 parent: "[[Inbox]]"
 owner: Your name
 github: your-github-login
-areas: [Sharing, Notes]
 ---
 
 # Your name's inbox
 
 One inbox per person: copy this note, name it after yourself, and put your GitHub login in `github`. When you're signed in with that login, the Inbox button opens this note instead of the shared [[Inbox]].
 
-The box below (the ` ```top-tasks ` block) shows the top three free tasks to start, from `Tasks/`. The `areas` property above keeps only the tasks in those areas; take it out to see every area.
+The box below (the ` ```top-tasks ` block) shows the top three free tasks to start, from `Tasks/`. Its `areas:` line keeps only the tasks in those areas; empty it to see every area. Its `owner:` is whom **Claim** claims for: put your name there too.
 
 ```top-tasks
+range: 3
+areas: Sharing, Notes
+sprint: current-then-next
+owner: Your name
 ```
 
 ## New tasks
