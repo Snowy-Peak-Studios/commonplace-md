@@ -1430,9 +1430,9 @@ async function setTaskField(f, field, input, control) {
 
 /** One look-up per tree version and options, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who, count, sprintMode) {
+function loadSuggestions(repo, areas, who, count, sprintMode, order) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}`;
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
@@ -1445,10 +1445,10 @@ function loadSuggestions(repo, areas, who, count, sprintMode) {
         // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
         const only = sprintMode === "current-only";
         const fromSprint = !sprint ? null : only && !sprint.now ? []
-          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked });
+          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
         const shown = {
-          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked }),
-          waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
+          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked, order }),
+          waiting: waitingTasks(notes, { areas, owner: who, order }), allAreas: taskAreas(notes),
           sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
           noSprintNow: !!fromSprint && only && !sprint.now,
         };
@@ -1487,27 +1487,30 @@ function fillTopTasks(root, f) {
     if (el.parentElement.closest(".embed-page")) continue;
     const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
     const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
-      count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault, sprintMode: el.dataset.sprint || "off" });
+      count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault,
+      order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off" });
     if (box) el.replaceWith(box);
   }
 }
 
 /** How the box's head says each sprint choice. */
 const SPRINT_SAID = { "current-only": "Current sprint only", "current-then-next": "Current sprint, then the next", off: "" };
+/** How the box's head says each order. */
+const ORDER_SAID = { "priority-newest": "By priority, newest first", "priority-oldest": "By priority, oldest first", newest: "Newest first", oldest: "Oldest first" };
 
 /**
- * The top free tasks (`count` of them): the notes in a `Tasks` folder with no assignee, highest priority first,
+ * The top free tasks (`count` of them): the notes in a `Tasks` folder with no assignee, in `order` (`TASK_ORDERS`),
  * only in `areas` (lower case) when given; `shown` is how the areas are written, for the head. With `sprintMode`
  * (`current-only`, `current-then-next`), from the sprints. Above them, the tasks `who` has claimed and not
  * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
- * says to add an owner. The head says every option in use, and when the range is the default.
+ * says to add an owner. The head says every option in use, and when the range or the order is the default.
  */
-function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, sprintMode = "off" }) {
+function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off" }) {
   const tree = app.trees.get(repo.id);
   if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
   const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
   const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
-    SPRINT_SAID[sprintMode], who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
+    orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode], who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
   const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
       h("small", { class: "muted" }, said.join(" · "))),
@@ -1547,7 +1550,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
-  loadSuggestions(repo, areas, who, count, sprintMode).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow }) => {
+  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow }) => {
     allAreas = found;
     states = told;
     /**

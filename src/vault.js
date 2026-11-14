@@ -207,23 +207,43 @@ export function listProp(v) {
 
 /**
  * The top free tasks, from [{ path, props }]: no assignee, not started or done, in one of `areas`
- * (any area when empty). Highest priority first; within a priority, the newest (highest ID number) first.
+ * (any area when empty), sorted in `order` (`TASK_ORDERS`; by default the highest priority first, and within a
+ * priority the newest, the highest ID number, first) and cut to `count`.
  */
 const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerCase()] ?? 3;
 const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
+
+/**
+ * The orders a top tasks box can sort by: priority (High, Medium, Low, then none) and the newest or oldest
+ * first within it, or only the newest or oldest (by the number at the end of `id`). `priority-newest` is
+ * what the box used before it could be chosen.
+ */
+export const TASK_ORDERS = ["priority-newest", "priority-oldest", "newest", "oldest"];
+const ORDER_WORDS = { priority: "priority-newest", "priority-only": "priority-newest", "newest-first": "newest", "oldest-first": "oldest" };
+/** An `order:` value as one of `TASK_ORDERS`, or "" when it isn't one. */
+export function taskOrder(v) {
+  const w = String(v ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return TASK_ORDERS.includes(w) ? w : ORDER_WORDS[w] ?? "";
+}
+/** A sort for tasks in that order; the file path settles ties, so the order is always the same. */
+function byOrder(order = "priority-newest") {
+  const age = order.endsWith("oldest") ? (a, b) => idNum(a) - idNum(b) : (a, b) => idNum(b) - idNum(a);
+  const prio = order.startsWith("priority") ? (a, b) => rank(a) - rank(b) : () => 0;
+  return (a, b) => prio(a, b) || age(a, b) || a.path.localeCompare(b.path);
+}
 /** Statuses of work that's over. */
 const FINISHED = /^(done|cancell?ed|won'?t do)$/i;
 /** The status of a task put off with "Not now": on the waiting list, out of the suggestions. */
 export const WAITING = "Waiting";
 const isWaiting = (n) => String(n.props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase();
 
-export function suggestTasks(notes, { areas = [], count = 3, blocked = null } = {}) {
+export function suggestTasks(notes, { areas = [], count = 3, blocked = null, order = "priority-newest" } = {}) {
   const want = listProp(areas);
   return notes
     .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim()) && !isEpic(n)
       && !blocked?.has(n.path)
       && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
-    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
+    .sort(byOrder(order))
     .slice(0, count);
 }
 
@@ -274,14 +294,14 @@ export const PRIORITIES = ["High", "Medium", "Low"];
 /** An epic isn't worked on itself (its parts are), so it's never suggested or put on the waiting list. */
 const isEpic = (n) => String(n.props.type ?? "").trim().toLowerCase() === "epic";
 
-export function waitingTasks(notes, { areas = [], owner = "" } = {}) {
+export function waitingTasks(notes, { areas = [], owner = "", order = "priority-newest" } = {}) {
   const want = listProp(areas);
   const me = foldName(owner);
   return notes
     .filter((n) => isTaskPath(n.path) && isWaiting(n) && !isEpic(n) && (!want.length
       || want.includes(String(n.props.area ?? "").trim().toLowerCase())
       || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
-    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+    .sort(byOrder(order));
 }
 
 /**
@@ -804,12 +824,12 @@ export function nextSprint(last, days, today) {
  * none left, a few from the next sprint's (`next`), each with `nextSprint: true`. Null when there's neither
  * a current nor a next sprint, so the top tasks are picked from all tasks, as without sprints.
  */
-export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve, blocked = null }) {
+export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve, blocked = null, order }) {
   if (!now && !next) return null;
   const inSprint = (path) => (n) => !!linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path;
-  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count, blocked }) : [];
+  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count, blocked, order }) : [];
   if (current.length || !next) return current;
-  return suggestTasks(notes.filter(inSprint(next)), { areas, count, blocked }).map((n) => ({ ...n, nextSprint: true }));
+  return suggestTasks(notes.filter(inSprint(next)), { areas, count, blocked, order }).map((n) => ({ ...n, nextSprint: true }));
 }
 
 /**

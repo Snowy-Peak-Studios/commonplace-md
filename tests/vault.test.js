@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -138,6 +138,11 @@ test("suggested tasks: free ones in a Tasks folder, highest priority, then newes
     ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Low.md"]);
   assert.deepEqual(suggestTasks(notes, { areas: "Art" }).map((n) => n.path), ["Tasks/Medium.md"]);
   assert.equal(suggestTasks(notes, { count: 1 }).length, 1);
+  const inOrder = (order) => suggestTasks(notes, { order }).map((n) => n.path);
+  assert.deepEqual(inOrder("priority-newest"), ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Medium.md"]);
+  assert.deepEqual(inOrder("priority-oldest"), ["Tasks/Old high.md", "Tasks/New high.md", "Tasks/Medium.md"]);
+  assert.deepEqual(inOrder("newest"), ["Tasks/Low.md", "Tasks/Medium.md", "Tasks/New high.md"], "priority isn't counted");
+  assert.deepEqual(inOrder("oldest"), ["Tasks/Old high.md", "Tasks/New high.md", "Tasks/Medium.md"]);
   assert.ok(isTaskPath("Wiki/Tasks/A.md") && isTaskPath("tasks/a.md"));
   assert.ok(!isTaskPath("Tasks/Deeper/A.md") && !isTaskPath("MyTasks/A.md") && !isTaskPath("Tasks/a.csv"));
 });
@@ -215,6 +220,7 @@ test("Not now: waiting tasks leave the suggestions and the claimed ones, and mak
   assert.deepEqual(claimedTasks(notes, "Ann Example").map((n) => n.path), ["Tasks/Mine.md"]);
   assert.deepEqual(waitingTasks(notes).map((n) => n.path), ["Tasks/Put off, other area.md", "Tasks/Put off.md", "Tasks/Mine, put off.md"]);
   assert.deepEqual(waitingTasks(notes, { areas: ["Docs"], owner: "Ann Example" }).map((n) => n.path), ["Tasks/Put off.md", "Tasks/Mine, put off.md"]);
+  assert.deepEqual(waitingTasks(notes, { order: "oldest" }).map((n) => n.path), ["Tasks/Put off.md", "Tasks/Put off, other area.md", "Tasks/Mine, put off.md"]);
 });
 
 test("a task's state: ready, needs a decision, or a placeholder", async () => {
@@ -618,4 +624,14 @@ test("a new task gets its blocks under its title, unless it already has any", ()
   const own = "# Do it\n\nText\n\n```commits\n```\n";
   assert.equal(withBlocks(own, TASK_BLOCKS), own, "the template chose its own blocks");
   assert.equal(withBlocks("# A\r\nB\r\n", SPRINT_BLOCKS), "# A\n\n```sprint\n```\n\nB\n", "LF");
+});
+
+test("a top tasks order: the four orders, a few other ways to say them, else none", () => {
+  for (const o of ["priority-newest", "priority-oldest", "newest", "oldest"]) assert.equal(taskOrder(o), o);
+  assert.equal(taskOrder("Priority"), "priority-newest");
+  assert.equal(taskOrder("priority only"), "priority-newest");
+  assert.equal(taskOrder("Newest first"), "newest");
+  assert.equal(taskOrder("oldest_first"), "oldest");
+  assert.equal(taskOrder("by due date"), "");
+  assert.equal(taskOrder(undefined), "");
 });

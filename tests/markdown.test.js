@@ -66,17 +66,18 @@ test("a mermaid block becomes a diagram placeholder holding its source; other fe
 });
 
 test("a top-tasks block becomes a placeholder with all its options, holding its source", () => {
-  const src = "range: 5\nareas: Features, Docs\nsprint: current-only\nowner: Ana Lee\n";
+  const src = "range: 5\nareas: Features, Docs\norder: oldest\nsprint: current-only\nowner: Ana Lee\n";
   assert.equal(render("```top-tasks\n" + src + "```\n"),
-    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5" data-sprint="current-only" data-owner="Ana Lee">'
+    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5" data-order="oldest" data-sprint="current-only" data-owner="Ana Lee">'
     + `<pre><code>${src}</code></pre></div>\n`);
   assert.equal(render("```top-tasks\n```\n"),
-    '<div class="top-tasks-block" data-areas="" data-count="3" data-count-default="1" data-sprint="off" data-owner=""><pre><code></code></pre></div>\n');
+    '<div class="top-tasks-block" data-areas="" data-count="3" data-count-default="1" data-order="priority-newest" data-order-default="1"'
+    + ' data-sprint="off" data-owner=""><pre><code></code></pre></div>\n');
   assert.match(render('```Top-Tasks\nareas: ["A&B"]\nowner: "<b>"\n```\n'), /data-areas="A&amp;B".*data-owner="&lt;b&gt;"/);
 });
 
-test("a top-tasks block's options: range (or count) from 1 to 20, areas, sprint and owner; other lines ignored", () => {
-  const none = { areas: [], count: 3, countSet: false, sprint: "off", owner: "" };
+test("a top-tasks block's options: range (or count) from 1 to 20, areas, order, sprint and owner; other lines ignored", () => {
+  const none = { areas: [], count: 3, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
   assert.deepEqual(topTasksOptions(""), none);
   assert.deepEqual(topTasksOptions("Areas: [Features, 'Docs']\nRANGE: 7"), { ...none, areas: ["Features", "Docs"], count: 7, countSet: true });
   assert.deepEqual(topTasksOptions("count: 7"), { ...none, count: 7, countSet: true }, "older blocks say count");
@@ -89,6 +90,8 @@ test("a top-tasks block's options: range (or count) from 1 to 20, areas, sprint 
   }
   assert.equal(topTasksOptions("owner: 'Zoë Ng'").owner, "Zoë Ng");
   assert.equal(topTasksOptions("owner:").owner, "");
+  assert.deepEqual(topTasksOptions("order: Newest first"), { ...none, order: "newest", orderSet: true });
+  assert.deepEqual(topTasksOptions("order: by due date"), none, "an order it doesn't know is the default, and not set");
 });
 
 test("a task's and a sprint's blocks become placeholders that keep their code", () => {

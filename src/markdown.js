@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -143,9 +143,10 @@ export function createMarkdown() {
     const token = tokens[idx];
     const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
     if (lang === "top-tasks") {
-      const { areas, count, countSet, sprint, owner } = topTasksOptions(token.content);
+      const { areas, count, countSet, order, orderSet, sprint, owner } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
-        + `${countSet ? "" : ' data-count-default="1"'} data-sprint="${sprint}" data-owner="${esc(owner)}">`
+        + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
+        + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
@@ -175,14 +176,15 @@ const SPRINT_WORDS = { current: "current-only", "current-and-next": "current-the
 /**
  * The options of a ```top-tasks block, one per line, all written in the block, nothing taken from elsewhere:
  * `range: 3` (how many tasks; `count` in older blocks), `areas: Features, Docs` (or `[Features, Docs]`),
- * `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and `owner: Your Name` (whom Claim claims for).
- * Other lines are ignored. A missing or odd range is three, with `countSet` false so the box can say so.
+ * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and
+ * `owner: Your Name` (whom Claim claims for). Other lines are ignored. A missing or odd range is three, and a
+ * missing or odd order `priority-newest`, with `countSet` or `orderSet` false so the box can say so.
  */
 export function topTasksOptions(src) {
-  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, sprint: "off", owner: "" };
+  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(areas|count|range|sprint|owner)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(areas|count|range|order|sprint|owner)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
     const key = m[1].toLowerCase();
     if (key === "areas") {
@@ -190,6 +192,9 @@ export function topTasksOptions(src) {
     } else if (key === "sprint") {
       const v = unquote(m[2]).toLowerCase().replace(/[\s_]+/g, "-");
       out.sprint = TOP_TASKS_SPRINTS.includes(v) ? v : SPRINT_WORDS[v] ?? "off";
+    } else if (key === "order") {
+      const order = taskOrder(unquote(m[2]));
+      if (order) Object.assign(out, { order, orderSet: true });
     } else if (key === "owner") {
       out.owner = unquote(m[2]);
     } else if (/^\d+$/.test(m[2])) {
