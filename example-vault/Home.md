@@ -12,6 +12,7 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 | [[Guide]] | Links, embeds, callouts, checkboxes, folding lists, diagrams and the navigation box |
 | [[Task Board]] | The tasks in `Tasks/`, shown as a table from [[Tasks.base]] |
 | [[Set up tasks]] | Which fields your tasks have: [set them up](#/settings?fields) for the whole project |
+| [[How To]] | Short steps for each thing you do here: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone |
 | [[Inbox]] | Quick notes, new tasks and questions; each person can have their own in `Notes/Inboxes/` |
 | [[Reading list.csv\|Reading list]] | A CSV file, opened as a table you can edit |
 | [[Other kinds of files]] | Tables, JSON, scripts, PDFs and pictures: what opens how |
