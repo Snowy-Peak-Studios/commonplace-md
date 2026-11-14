@@ -69,6 +69,8 @@ page.on("request", async (req) => {
     if (putMode === "conflict") return req.respond(json(409, { message: "is at abc but expected def" }));
     return req.respond(json(200, { content: { sha: "fake" + puts.length }, commit: { sha: "c" + puts.length } }));
   }
+  // No vaults found by themselves: the check sees only the example vault, whatever else the token can open.
+  if (req.method() === "GET" && url.startsWith(`${API}/user/repos`)) return req.respond(json(200, []));
   if (fakeHead && req.method() === "GET" && url.startsWith(`${REPO_API}/commits/`)) {
     return req.respond({ status: 200, contentType: "text/plain", body: fakeHead,
       headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });

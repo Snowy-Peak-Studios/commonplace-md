@@ -196,7 +196,7 @@ const isWaiting = (n) => String(n.props.status ?? "").trim().toLowerCase() === W
 export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
   const want = listProp(areas);
   return notes
-    .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim())
+    .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim()) && !isEpic(n)
       && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
     .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
     .slice(0, count);
@@ -246,11 +246,14 @@ export const PRIORITIES = ["High", "Medium", "Low"];
  * The waiting list: tasks put off with "Not now" (`status: Waiting`), from [{ path, props }]. Those in
  * `areas` (any when empty) or claimed by `owner`; highest priority, then newest, first.
  */
+/** An epic isn't worked on itself (its parts are), so it's never suggested or put on the waiting list. */
+const isEpic = (n) => String(n.props.type ?? "").trim().toLowerCase() === "epic";
+
 export function waitingTasks(notes, { areas = [], owner = "" } = {}) {
   const want = listProp(areas);
   const me = foldName(owner);
   return notes
-    .filter((n) => isTaskPath(n.path) && isWaiting(n) && (!want.length
+    .filter((n) => isTaskPath(n.path) && isWaiting(n) && !isEpic(n) && (!want.length
       || want.includes(String(n.props.area ?? "").trim().toLowerCase())
       || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
     .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));

@@ -127,8 +127,9 @@ test("suggested tasks: free ones in a Tasks folder, highest priority, then newes
     t("Tasks/Medium.md", { id: "T-20", priority: "Medium", status: "To Do", assignee: "", area: "Art" }),
     t("Tasks/Low.md", { id: "T-30", priority: "Low", area: "Features" }),
     t("Notes/Not a task.md", { priority: "High", status: "To Do" }),
+    t("Tasks/Epic.md", { id: "T-40", priority: "High", status: "To Do", assignee: "", area: "Features", type: "Epic" }),
   ];
-  assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Medium.md"]);
+  assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Medium.md"], "an epic is never suggested");
   assert.deepEqual(suggestTasks(notes, { areas: ["features", "Docs"] }).map((n) => n.path),
     ["Tasks/New high.md", "Tasks/Old high.md", "Tasks/Low.md"]);
   assert.deepEqual(suggestTasks(notes, { areas: "Art" }).map((n) => n.path), ["Tasks/Medium.md"]);
