@@ -2250,16 +2250,24 @@ async function startingText(repo, tree, p) {
   const sha = template && tree.files.get(template);
   if (sha) {
     try {
-      return asNewTask(repo, p, fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() }));
+      return await asNewTask(repo, tree, p, fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() }));
     } catch { /* the template couldn't be read: start plain */ }
   }
-  return asNewTask(repo, p, defaultNote(p.title));
+  return asNewTask(repo, tree, p, defaultNote(p.title));
 }
 
-/** A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved). */
-async function asNewTask(repo, p, text) {
+/**
+ * A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved).
+ * With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
+ * a sprint the template already sets stays, and Add subtask then gives it its parent's.
+ */
+async function asNewTask(repo, tree, p, text) {
   const setup = await loadTaskSetup(repo);
-  return setup.configured && isSetupTask(setup, p.path) ? withProps(text, newTaskProps(setup), { keep: true }) : text;
+  if (!setup.configured || !isSetupTask(setup, p.path)) return text;
+  const out = withProps(text, newTaskProps(setup), { keep: true });
+  const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
+  if (!sprint?.next || String(noteProps(out)[sprint.prop] ?? "").trim()) return out;
+  return setProps(out, [[sprint.prop, `[[${sprint.next.name}]]`]]) ?? out;
 }
 
 async function newNote() {

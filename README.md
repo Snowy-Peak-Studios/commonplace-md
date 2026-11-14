@@ -270,6 +270,7 @@ A GitHub Action fills them in by itself. After each push, it adds every commit w
 
 - A sprint's page lists its tasks by status, with how many are done and, when estimates are on, how much of the estimate.
 - The sprint picker on a task offers the current sprint first, then the next one.
+- **A new task** (a new note in the tasks folder) goes on the next sprint, if there is one, so the current sprint's plan stays as agreed; change it in its Sprint field. **Add subtask** gives it its parent's sprint instead, when the parent has one.
 - **Start the next sprint** (on the latest sprint) makes the next note, its name counted on and its dates from the setup's length, and moves the unfinished tasks you keep ticked: one commit for all of it.
 - A base can show the sprint going on today with `start <= today()` and `end >= today()`: the example vault's *Current sprint* view.
 

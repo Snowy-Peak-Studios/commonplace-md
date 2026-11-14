@@ -870,6 +870,10 @@ const subPut = puts.slice(putsBeforeSub).find((p) => p.url === contentsUrl("Task
 check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text)
   && /^---\nparent: "\[\[Task Board\]\]"\n/.test(subPut.text),
   "it's a new task under the epic, with the epic's area and place in the tree: " + JSON.stringify(subPut?.text.split("\n---")[0]));
+// The epic has no sprint, so the new task goes on the next sprint (if there is one), like any new task.
+const nextForNew = inboxSprints.find((x) => x.when === "next");
+check(new RegExp(`\\nsprint: ${nextForNew ? `"\\[\\[${nextForNew.name}\\]\\]"` : '""'}\\n`).test(subPut?.text ?? ""),
+  `a new task goes on the next sprint (${nextForNew?.name ?? "none"}): ` + JSON.stringify(subPut?.text.match(/\nsprint:.*/)?.[0]));
 check(subPut?.body.message === "T-6: add Tasks/Set up a second device.md as a subtask of Get set up from Commonplace.md", "the commit says so: " + subPut?.body.message);
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelector(".subtasks .st-count")?.textContent === "2 of 4 done", 15000), "the epic now has four subtasks");
@@ -903,6 +907,8 @@ const sprintOptions = await page.$$eval("#tf-list-sprint option", (o) => o.map((
 const sprintOrder = sprintChoices(sprints(realSprints, isoDate())).map((x) => x.name);
 check(JSON.stringify(sprintOptions) === JSON.stringify(sprintOrder), "the sprint picker puts the current sprint first, then the next: " + JSON.stringify(sprintOptions));
 await page.goto(at("Sprints/Sprint 2.md"), { waitUntil: "networkidle0" });
+// The subtask added above was never saved (and went on the next sprint, Sprint 2), so read the real tree again.
+await page.reload({ waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector(".sprint-box .st-head button"), 15000), "the latest sprint offers Start the next sprint");
 await page.evaluate(() => document.querySelector(".sprint-box .st-head button").click());
 await page.waitForSelector("dialog[open] input");
