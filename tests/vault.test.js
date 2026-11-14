@@ -140,6 +140,14 @@ test("suggested tasks: free ones in a Tasks folder, highest priority, then newes
   assert.ok(!isTaskPath("Tasks/Deeper/A.md") && !isTaskPath("MyTasks/A.md") && !isTaskPath("Tasks/a.csv"));
 });
 
+test("blocked tasks are never suggested, in any case, with or without sprints", async () => {
+  const { suggestTasks, sprintSuggestions } = await import("../src/vault.js");
+  const t = (path, status) => ({ path, props: { status, assignee: "", priority: "High", sprint: "[[Sprint 1]]" } });
+  const notes = [t("Tasks/Blocked.md", "Blocked"), t("Tasks/Shouting.md", " BLOCKED "), t("Tasks/Free.md", "To Do")];
+  assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/Free.md"]);
+  assert.deepEqual(sprintSuggestions(notes, { now: "Sprints/Sprint 1.md", resolve: (x) => `Sprints/${x}.md` }).map((n) => n.path), ["Tasks/Free.md"]);
+});
+
 test("claiming a task sets its status and assignee in place", async () => {
   const { claimTask } = await import("../src/vault.js");
   const text = '---\nid: T-18\nstatus: To Do\nassignee: ""\npriority: Medium\n---\n\n# Top three\n\nassignee: in the body stays\n';
@@ -266,7 +274,7 @@ test("a repo with no task setup keeps the fields it always had", () => {
   assert.equal(s.configured, false);
   assert.equal(s.folder, "Tasks");
   assert.deepEqual(s.fields.filter((f) => f.on).map((f) => f.key), ["status", "priority", "assignee", "area", "requested_by"]);
-  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Waiting", "Done"]);
+  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Blocked", "Waiting", "Done"]);
 });
 
 test("a task setup starts from a new project's fields and changes what it names", () => {
@@ -461,12 +469,12 @@ test("a sprint's tasks by status in the setup's order, with how many are done an
     { path: "Tasks/B.md", props: { id: "T-1", sprint: "[[Sprint 1]]", status: "In Progress", estimate: "5" } },
     { path: "Tasks/C.md", props: { id: "T-3", sprint: "[[Sprint 1]]", status: "To Do" } },
     { path: "Tasks/D.md", props: { id: "T-4", sprint: "[[Sprint 2]]", status: "To Do", estimate: 8 } },
-    { path: "Tasks/E.md", props: { id: "T-5", sprint: "[[Sprint 1]]", status: "Blocked", estimate: 1 } },
+    { path: "Tasks/E.md", props: { id: "T-5", sprint: "[[Sprint 1]]", status: "On hold", estimate: 1 } },
   ];
   const idx = new LinkIndex([...notes.map((n) => n.path), ...SPRINTS.map((n) => n.path)]);
   const setup = taskSetup({});
   const s = sprintTasks(notes, "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) });
-  assert.deepEqual(s.groups.map((g) => `${g.status}: ${g.tasks.map((t) => t.id).join(" ")}`), ["To Do: T-3", "In Progress: T-1", "Done: T-2", "Blocked: T-5"]);
+  assert.deepEqual(s.groups.map((g) => `${g.status}: ${g.tasks.map((t) => t.id).join(" ")}`), ["To Do: T-3", "In Progress: T-1", "Done: T-2", "On hold: T-5"]);
   assert.deepEqual([s.done, s.total], [1, 4]);
   assert.deepEqual(s.points, { done: 3, total: 9, unit: "points" });
   assert.deepEqual(s.open.map((t) => t.id), ["T-1", "T-3", "T-5"]);

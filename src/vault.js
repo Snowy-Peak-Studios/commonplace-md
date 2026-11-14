@@ -172,8 +172,8 @@ export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
 
 const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
-/** Statuses that aren't free to start. */
-const NOT_FREE = /^(done|in progress|waiting|cancell?ed|won'?t do)$/i;
+/** Statuses that aren't free to start: started, put off, blocked or over. */
+const NOT_FREE = /^(done|in progress|waiting|blocked|cancell?ed|won'?t do)$/i;
 
 /** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
 export function listProp(v) {
@@ -389,7 +389,7 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
  * with no setup has had all along.
  */
 export const TASK_FIELDS = [
-  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Waiting", "Done"], legacy: true },
+  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Blocked", "Waiting", "Done"], legacy: true },
   { key: "priority", label: "Priority", kind: "choice", values: ["High", "Medium", "Low"], legacy: true },
   { key: "assignee", label: "Assignee", kind: "person", legacy: true },
   { key: "area", label: "Area", kind: "text", legacy: true },
