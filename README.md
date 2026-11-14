@@ -32,7 +32,7 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 - **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
 - **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
-- **Drafts:** unsaved changes stay in the browser and are offered back after the page closes.
+- **Drafts:** unsaved changes stay in the browser and are offered back after the page closes. Leaving a note with unsaved changes asks first: **Save**, **Keep as a draft** or **Discard** (or **Stay**).
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
 - **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. It needs a connection.
 - **Look:** light and dark, following the device.

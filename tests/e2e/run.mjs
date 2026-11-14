@@ -431,6 +431,61 @@ await page.evaluate(() => [...document.querySelectorAll("dialog.modal button")].
 await wait(200);
 check(!(await page.$("dialog.modal")), "Decide later closes the conflict view");
 putMode = "ok";
+
+// 8a. Leaving a note with unsaved changes asks first: Stay puts the address back, Keep as a draft keeps them
+// on this device, Discard drops them, and Save saves before moving on. Links, Back and Settings all ask.
+const guideHash = await page.evaluate(() => location.hash);
+const leaveDialog = () => page.evaluate(() => {
+  const d = document.querySelector("dialog.modal[open]");
+  return d ? { title: d.querySelector("h2")?.textContent, buttons: [...d.querySelectorAll("button")].map((b) => b.textContent.trim()) } : null;
+});
+const answerLeave = async (label) => {
+  await page.evaluate((l) => [...document.querySelectorAll("dialog.modal[open] button")].find((b) => b.textContent.trim() === l).click(), label);
+  await wait(400);
+};
+const draftOfGuide = () => page.evaluate((h) => Object.keys(localStorage).some((k) => k.startsWith("commonplace:draft:") && k.endsWith(":" + decodeURIComponent(h.split("/").slice(2).join("/")))), guideHash);
+await page.evaluate(() => [...document.querySelectorAll("#tree a")].find((a) => a.textContent.trim() === "Home").click());
+check(await until(() => !!document.querySelector("dialog.modal[open]"), 5000), "following a link from a note with unsaved changes asks first");
+const asked = await leaveDialog();
+check(asked?.title === "Leave without saving?" && JSON.stringify(asked.buttons) === JSON.stringify(["Stay", "Discard", "Keep as a draft", "Save"]),
+  "with Stay, Discard, Keep as a draft and Save: " + JSON.stringify(asked));
+await shot("4b-leave-unsaved");
+await answerLeave("Stay");
+check(await page.evaluate((h) => location.hash === h && document.querySelector("#save-btn .label")?.textContent === "Save" && !!document.querySelector(".cm-editor"), guideHash),
+  "Stay puts the address back and keeps the changes open");
+await page.evaluate(() => [...document.querySelectorAll("#tree a")].find((a) => a.textContent.trim() === "Home").click());
+await until(() => !!document.querySelector("dialog.modal[open]"), 5000);
+await answerLeave("Keep as a draft");
+check(await until(() => /\/Home\.md$/.test(location.hash) && !document.querySelector("dialog.modal[open]"), 8000) && await draftOfGuide(),
+  "Keep as a draft moves on and keeps the changes on this device");
+await page.evaluate(() => document.querySelector("#back-btn").click());
+await page.waitForSelector(".banner", { timeout: 10000 }).catch(() => {});
+check(await page.evaluate((h) => location.hash === h, guideHash) && await page.$eval(".banner", (b) => b.textContent.includes("weren't saved")).catch(() => false),
+  "Back opens the note again, with the draft offered back");
+await page.evaluate(() => [...document.querySelectorAll(".banner button")].find((b) => b.textContent.startsWith("Restore")).click());
+await wait(300);
+await page.evaluate(() => document.querySelector("#settings-btn").click());
+check(await until(() => !!document.querySelector("dialog.modal[open]"), 5000), "opening Settings asks too");
+await answerLeave("Discard");
+check(await until(() => location.hash.startsWith("#/settings"), 8000) && !(await draftOfGuide()), "Discard moves on and drops the changes");
+await page.goto(BASE + guideHash, { waitUntil: "networkidle0" });
+await page.waitForSelector(".cm-editor, .preview");
+const bannersAfter = await page.$$eval(".banner", (b) => b.map((x) => x.textContent));
+check(!bannersAfter.some((t) => t.includes("weren't saved")), "and nothing is offered back: " + JSON.stringify(bannersAfter));
+await page.evaluate(() => document.querySelectorAll("#mode button")[1].click());
+await page.waitForSelector(".cm-editor");
+await page.evaluate(async () => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(document.querySelector(".cm-editor"));
+  view.dispatch({ changes: { from: view.state.doc.length, insert: "\nSaved on the way out.\n" } });
+});
+const putsBeforeLeave = puts.length;
+await page.evaluate(() => [...document.querySelectorAll("#tree a")].find((a) => a.textContent.trim() === "Home").click());
+await until(() => !!document.querySelector("dialog.modal[open]"), 5000);
+await answerLeave("Save");
+check(await until(() => /\/Home\.md$/.test(location.hash), 8000) && puts.length === putsBeforeLeave + 1 && puts.at(-1).text.endsWith("Saved on the way out.\n"),
+  "Save saves the note, then moves on");
+await page.evaluate(() => document.querySelectorAll("#mode button")[0].click());
 await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("commonplace:draft:")).forEach((k) => localStorage.removeItem(k)));
 
 // 8b. New note: only a title, in the New notes folder, from the note template, and not over an existing page.

@@ -7,7 +7,7 @@
 - reading: the start page, an embedded section, an image, callouts, properties, the Inbox button and shortcut;
 - links: following a wikilink, links with headings and aliases, no missing links;
 - the navigation box: folded in the preview, and refused edits in the editor; a link to no page is warned about;
-- ticking a checkbox and saving it, drafts after a reload, and the conflict view when a save is refused;
+- ticking a checkbox and saving it, drafts after a reload, the conflict view when a save is refused, and the question when leaving unsaved changes (Stay, Keep as a draft, Discard, Save);
 - a new note: only a title, in `Notes/`, started from `Templates/Note.md`;
 - CSV tables: the reading list, and editing and saving a test table;
 - parent tasks and subtasks: the example epic's list and progress bar, the parent picker refusing a loop, and Add subtask; a task's commits, from a commit search the script answers;

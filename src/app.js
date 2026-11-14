@@ -536,8 +536,20 @@ function goBack() {
   else location.hash = "#/";
 }
 
+/** Set while the history is moved back to where it was, so that move doesn't route again. */
+let skipRoute = false;
+/** Set while the unsaved-changes question is open. */
+let askingLeave = false;
+
 async function route() {
+  if (skipRoute) {
+    skipRoute = false;
+    trackHistory();
+    return;
+  }
+  const depthBefore = navDepth;
   trackHistory();
+  if (!(await mayLeave(depthBefore))) return;
   flushDraft();
   closeSideOnPhone();
   const { parts, heading, params } = parseHash();
@@ -611,6 +623,54 @@ async function route() {
       h("button", { class: "btn primary", onclick: newNote }, icon("plus"), "New note")));
   }
   await openFile(repo, tree, path, heading, nav);
+}
+
+/**
+ * Moving away from a file with unsaved changes (a link, Back, Settings, another repo) asks first: Save,
+ * Keep as a draft (kept on this device, offered back when the file is opened again), or Discard. Stay, or
+ * Escape, puts the address back. Resolves to whether the move goes on.
+ */
+async function mayLeave(depthBefore) {
+  const f = app.file;
+  if (!f?.dirty) return true;
+  const { parts } = parseHash();
+  if (parts[0] === f.repo.id && parts.slice(1).join("/") === f.path) return true;
+  if (askingLeave) return false;
+  askingLeave = true;
+  let choice;
+  try {
+    choice = await modal({
+      title: "Leave without saving?",
+      text: `${shownName(f.path)} has changes that aren't saved to GitHub yet.`,
+      buttons: [
+        { label: "Stay", kind: "ghost", value: "stay" },
+        { spacer: true },
+        { label: "Discard", kind: "danger", value: "discard" },
+        { label: "Keep as a draft", value: "draft" },
+        { label: "Save", kind: "primary", icon: "upload", value: "save" },
+      ],
+    });
+  } finally {
+    askingLeave = false;
+  }
+  if (app.file !== f) return true;
+  if (choice === "save") await save();
+  else if (choice === "discard") {
+    f.text = f.saved;
+    f.dirty = false;
+    store.remove(draftKey(f));
+  }
+  // Saved, discarded or kept as a draft: on to the new page. Stay, or a save that didn't go through
+  // (refused, or someone else's change to sort out first): back to the file.
+  if ((choice === "save" && !f.dirty) || choice === "discard" || choice === "draft") return true;
+  if (navDepth !== depthBefore) {
+    skipRoute = true;
+    if (navDepth > depthBefore) history.back();
+    else history.forward();
+  } else {
+    try { history.replaceState({ ...(history.state ?? {}), navDepth }, "", hrefFor(f.repo, f.path)); } catch { /* the address stays */ }
+  }
+  return false;
 }
 
 function closeFile() {
