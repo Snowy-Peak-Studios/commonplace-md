@@ -15,7 +15,7 @@ Short steps for the things people do in Commonplace.md, one page each. They read
 The app is the same for everyone. What you pick is where your vault lives:
 
 ```mermaid
-flowchart TD
+flowchart LR
     q1{"Just you, on one device?"}
     q1 -- Yes --> local["A local vault on your device<br/>(coming soon)"]
     q1 -- "No: a team, or several devices" --> q2{"Does the project have its own repo?"}
