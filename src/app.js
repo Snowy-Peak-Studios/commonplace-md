@@ -8,7 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -814,6 +814,7 @@ function applyMode(focus = false) {
       language: f.kind === "text" ? languageFor(f.path) : null,
       vault: f.repo.vault && f.kind === "md",
       readOnly: !canWrite(f.repo),
+      people: () => loadPeople(f.repo),
     });
   }
   if (f.editor) setEditorText(f.editor, f.text);
@@ -873,6 +874,8 @@ function renderPreview() {
   fillTopTasks(body, f);
   // The open questions show only where a ```questions block is, like the top tasks.
   fillQuestions(body, f);
+  // The places that mention someone show only where a ```mentions block is, at the top of their inbox.
+  fillMentionBoxes(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
@@ -1558,6 +1561,107 @@ function questionsBox(repo, who) {
   return box;
 }
 
+// ---- mentions: `@login` ----
+
+/** The vault's people, from its inboxes' `github` and `owner`: one look-up per tree version. */
+const peopleLoads = new Map();
+function loadPeople(repo) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return Promise.resolve([]);
+  const key = `${repo.id}:${tree.version}`;
+  if (!peopleLoads.has(key)) {
+    for (const k of peopleLoads.keys()) if (k.startsWith(`${repo.id}:`)) peopleLoads.delete(k);
+    const paths = inboxCandidates([...tree.files.keys()], repo.inbox, repo.inboxes || "");
+    const load = paths.length ? baseNotes(repo, tree, paths).then(vaultPeople) : Promise.resolve([]);
+    peopleLoads.set(key, load);
+    load.catch(() => peopleLoads.delete(key));
+  }
+  return peopleLoads.get(key);
+}
+
+/** Each `@login` of a person with an inbox becomes a link to that inbox; any other stays plain text. */
+function fillMentions(root, repo) {
+  const spans = [...root.querySelectorAll("span.mention")];
+  if (!spans.length) return;
+  loadPeople(repo).then((people) => {
+    const byLogin = new Map(people.map((p) => [p.login.toLowerCase(), p]));
+    for (const span of spans) {
+      const p = byLogin.get(String(span.dataset.login).toLowerCase());
+      if (!p || !span.isConnected) continue;
+      span.replaceWith(h("a", { class: "mention", href: hrefFor(repo, p.path), title: `${p.name}'s inbox` }, `@${span.dataset.login}`));
+    }
+  }, () => {});
+}
+
+/** Puts the mentions box where each ```mentions block is (the top of an inbox), but not inside an embed. */
+function fillMentionBoxes(root, f) {
+  for (const el of root.querySelectorAll(".mentions-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const box = mentionsBox(f.repo, el.dataset.login || "");
+    if (box) el.replaceWith(box);
+  }
+}
+
+/** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
+async function noteMentions(repo, tree, paths) {
+  const cache = baseCache("mentions", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("mentions", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
+}
+
+/** One look-up per tree version and login: every note is read once (then cached), and the notes with a mention get their dates. */
+const mentionLoads = new Map();
+function loadMentions(repo, login) {
+  const tree = app.trees.get(repo.id);
+  const key = `${repo.id}:${tree.version}:${login.toLowerCase()}`;
+  if (!mentionLoads.has(key)) {
+    for (const k of mentionLoads.keys()) if (k.startsWith(`${repo.id}:`)) mentionLoads.delete(k);
+    const paths = [...tree.files.keys()].filter((p) => /\.md$/i.test(p));
+    const load = noteMentions(repo, tree, paths).then(async (all) => {
+      const me = login.toLowerCase();
+      const found = [];
+      for (const [path, list] of all) for (const m of list) if (m.login.toLowerCase() === me) found.push({ ...m, path });
+      const dates = await lastCommitDates(repo, tree, [...new Set(found.map((m) => m.path))]).catch(() => new Map());
+      for (const m of found) m.date = dates.get(m.path) ?? null;
+      found.sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || a.path.localeCompare(b.path) || a.line - b.line);
+      return { found, read: paths.length };
+    });
+    mentionLoads.set(key, load);
+    load.catch(() => mentionLoads.delete(key));
+  }
+  return mentionLoads.get(key);
+}
+
+/**
+ * The places in the vault that mention `@login`, newest note first: the note and the heading above, as a
+ * link to that place, the line's words and when the note last changed. The head says whose and how many
+ * notes were read. Without a login in the block, it says to add one.
+ */
+function mentionsBox(repo, login) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return null;
+  const list = h("ol", { class: "mentions-list" }, h("li", { class: "muted" }, login ? "Looking for mentions…" : "Add a login: line to the block, e.g. login: your-github-login"));
+  const head = h("small", { class: "muted" }, login ? `For @${login}` : "No login in the block");
+  const box = h("section", { class: "mentions", "aria-label": "Mentions" },
+    h("div", { class: "suggest-head" }, icon("info"), h("strong", {}, "Mentions"), head), list);
+  if (!login) return box;
+  loadMentions(repo, login).then(({ found, read }) => {
+    head.textContent = `For @${login} · ${found.length} in ${read} notes read`;
+    list.replaceChildren(...(found.length ? found.map((m) => h("li", {},
+      h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
+        m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
+      m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
+      h("span", { class: "mention-text" }, m.text)))
+      : [h("li", { class: "muted" }, `No note mentions @${login} yet.`)]));
+  }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
+  return box;
+}
+
 /** How the box's head says each sprint choice. */
 const SPRINT_SAID = { "current-only": "Current sprint only", "current-then-next": "Current sprint, then the next", off: "" };
 /** How the box's head says each order. */
@@ -1759,6 +1863,7 @@ function decorate(root, repo, fromPath) {
   fillImages(root, repo, fromPath);
   fillDiagrams(root);
   fillFolds(root, fromPath);
+  fillMentions(root, repo);
 }
 
 /**

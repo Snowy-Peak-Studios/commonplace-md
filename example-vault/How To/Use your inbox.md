@@ -12,6 +12,16 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 - **Notes**: thoughts that aren't tasks. They stay.
 - **Needs attention**: questions waiting for your answer. A ` ```questions ` block there lists the tasks with a question for you (below). Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
 
+## Mentions of you
+
+Anyone can mention you in any note with `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). A ` ```mentions ` block at the top of your inbox lists every place that does: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first. It takes one line:
+
+```text
+login: your-github-login
+```
+
+It reads every note once (then only the changed ones), so the first look in a big vault takes a moment. A mention stays listed while the note says it.
+
 ## Your own inbox
 
 Each person can have their own in `Notes/Inboxes/`, with their GitHub login in its `github` property. The **Inbox** button opens yours when you're signed in with that login ([Your name](../Notes/Inboxes/Your%20name.md) shows how).

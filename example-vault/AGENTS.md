@@ -97,6 +97,11 @@ A question lives on the task it's about, with its answer next to it. The inbox o
 
 Then move on to another task while it waits.
 
+## Mentions
+
+- To point someone to a place, write `@` and their GitHub login there (the `github` of their inbox). The ` ```mentions ` block at the top of their inbox lists it; nothing else needs writing.
+- A question for your own person still goes on its task (see Questions).
+
 ## Keep the vault in step
 
 - When something changes, change the pages that describe it in the same commit: the task, the page about the topic, and the links and `parent` properties of any page you add, move or rename.

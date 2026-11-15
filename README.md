@@ -36,6 +36,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - A ` ```questions ` block lists the tasks with a question waiting for you, each linking to the task, where you answer it.
+  - `@login` mentions a person (typing `@` offers everyone with an inbox), and a ` ```mentions ` block at the top of their inbox lists every place that mentions them.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
   - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
@@ -375,6 +376,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - ` ```mermaid ` diagrams
 - ` ```top-tasks ` blocks: the top tasks to start, on any page
 - ` ```questions ` blocks: the tasks with a question waiting for an answer
+- `@login` mentions, and ` ```mentions ` blocks: every place that mentions someone
 - checkboxes, ticked in Read mode
 - lists whose subpoints fold away in Read mode
 - `%% comments %%`, hidden in the preview
@@ -463,6 +465,12 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
 
   ```questions
   owner: Your Name
+  ```
+
+- **Mentions:** write `@` and a GitHub login in any note to mention that person; in Edit mode, typing `@` offers the people of the vault (every inbox with a `github` login, by its `owner`). In Read mode, the mention is a link to their inbox. Not in code, and not in an email address or a path. A ` ```mentions ` block (at the top of an inbox, or on any page) lists every place in the vault that mentions its `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first. It reads every note once and keeps what it found per note version on the device, so later looks only read what changed. Nothing is written into the inbox, and a mention stays listed while the note says it.
+
+  ```mentions
+  login: your-github-login
   ```
 
 </details>

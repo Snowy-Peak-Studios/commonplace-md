@@ -230,6 +230,24 @@ check(!questions.code && questions.head.includes("For Your name") && questions.r
 await page.evaluate(() => document.querySelector(".note-body .questions")?.scrollIntoView({ block: "center" }));
 await shot("2a-inbox-questions");
 
+// 2a2. The inbox's ```mentions block, before its top tasks: every place in the vault that mentions its login.
+await page.waitForSelector(".note-body .mentions .mentions-list a.suggest-name", { timeout: 20000 }).catch(() => {});
+const mentions = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .mentions");
+  const top = document.querySelector(".note-body .suggest");
+  return {
+    code: !!document.querySelector(".note-body .mentions-block"),
+    first: !!(box && top && box.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING),
+    head: box?.querySelector(".suggest-head small")?.textContent ?? "",
+    rows: [...(box?.querySelectorAll(".mentions-list li") ?? [])].map((li) => ({
+      name: li.querySelector(".suggest-name")?.textContent ?? "", href: decodeURIComponent(li.querySelector("a")?.getAttribute("href") ?? ""),
+      text: li.querySelector(".mention-text")?.textContent ?? "" })),
+  };
+});
+check(!mentions.code && mentions.first && mentions.head.startsWith("For @your-github-login")
+  && mentions.rows.some((r) => r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions") && r.text.includes("@your-github-login")),
+  "the inbox's ```mentions block comes first and lists the Guide's mention, linking to its heading: " + JSON.stringify(mentions));
+
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
 const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
   name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent.includes("Claim")),
@@ -468,6 +486,14 @@ check(guide.alias === "Notes/Inbox.md", "[[Notes/Inbox|the shared inbox]] leads 
 check(guide.heading?.includes("Home.md?h="), "[[Home#How saving works|...]] leads to the heading: " + guide.heading);
 check(guide.missing === 0, "no missing links on the Guide: " + guide.missing);
 check(guide.folded === false, "a [!warning]- callout starts folded");
+// A mention is a link to that person's inbox; one in code isn't a mention.
+await page.waitForSelector(".preview a.mention", { timeout: 10000 }).catch(() => {});
+const guideMentions = await page.evaluate(() => ({
+  links: [...document.querySelectorAll(".preview a.mention")].map((a) => [a.textContent, decodeURIComponent(a.getAttribute("href"))]),
+  inCode: [...document.querySelectorAll(".preview code")].some((c) => c.querySelector(".mention")),
+}));
+check(guideMentions.links.length >= 1 && guideMentions.links.every(([text, href]) => text === "@your-github-login" && /\/Notes\/Inbox(es\/Your name)?\.md$/.test(href))
+  && !guideMentions.inCode, "@your-github-login in the Guide is a link to that person's inbox, and not in code: " + JSON.stringify(guideMentions));
 await shot("2b-guide-desktop");
 // Lists with subpoints: each point that has some gets an arrow that folds them; only the view changes.
 const foldState = () => page.evaluate(() => {
@@ -545,6 +571,26 @@ await page.evaluate(async () => {
 await wait(600);
 check(await page.$eval(".link-warn", (e) => !e.hidden && e.textContent.includes("No such page here")), "a link to no page is warned about");
 check(await page.$(".cm-missing") !== null, "the editor marks the missing link");
+// Typing @ in the editor offers the people with an inbox; picking one writes @login.
+await page.evaluate(async () => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(document.querySelector(".cm-editor"));
+  view.focus();
+  view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
+});
+await page.keyboard.type("Ask @your");
+await page.waitForSelector(".cm-tooltip-autocomplete li", { timeout: 8000 }).catch(() => {});
+const picker = await page.$$eval(".cm-tooltip-autocomplete li", (li) => li.map((x) => x.textContent)).catch(() => []);
+// CodeMirror ignores Enter for a moment after the list opens, so a quick key press doesn't pick by mistake.
+await wait(300);
+await page.keyboard.press("Enter");
+await wait(200);
+const picked = await page.evaluate(async () => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  return EditorView.findFromDOM(document.querySelector(".cm-editor")).state.doc.toString().slice(-60);
+});
+check(picker.some((x) => x.includes("@your-github-login") && x.includes("Your name")) && picked.trimEnd().endsWith("Ask @your-github-login"),
+  "typing @ offers the people with an inbox, and picking one writes @login: " + JSON.stringify({ picker, end: picked }));
 await shot("3-guide-edit-desktop");
 await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
 await shot("3b-guide-edit-light");

@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -33,6 +33,33 @@ function wikilinkRule(state, silent) {
   }
   state.pos = end + 2;
   return true;
+}
+
+/**
+ * `@login` in text becomes a `mention` token (the app makes it a link to that person's inbox). Not inside a
+ * link or code (code spans and fences aren't text tokens), and not in an email address (see `MENTION`).
+ */
+function mentionRule(state) {
+  for (const block of state.tokens) {
+    if (block.type !== "inline" || !block.children) continue;
+    const out = [];
+    let inLink = 0;
+    for (const t of block.children) {
+      if (t.type === "link_open") inLink++;
+      else if (t.type === "link_close") inLink--;
+      if (t.type !== "text" || inLink > 0 || !t.content.includes("@")) { out.push(t); continue; }
+      let last = 0;
+      for (const m of t.content.matchAll(MENTION)) {
+        const at = m.index + m[1].length;
+        if (at > last) out.push(Object.assign(new state.Token("text", "", 0), { content: t.content.slice(last, at) }));
+        out.push(Object.assign(new state.Token("mention", "", 0), { content: `@${m[2]}`, meta: { login: m[2] } }));
+        last = at + 1 + m[2].length;
+      }
+      if (!last) { out.push(t); continue; }
+      if (last < t.content.length) out.push(Object.assign(new state.Token("text", "", 0), { content: t.content.slice(last) }));
+    }
+    block.children = out;
+  }
 }
 
 /** `> [!kind]+ Title` blockquotes become callouts. Runs before inline parsing, on raw text. */
@@ -95,6 +122,8 @@ export function createMarkdown() {
   md.core.ruler.after("block", "callouts", calloutRule);
   md.core.ruler.after("inline", "tasks", taskRule);
   md.core.ruler.after("inline", "headings", headingRule);
+  md.core.ruler.push("mentions", mentionRule);
+  md.renderer.rules.mention = (tokens, idx) => `<span class="mention" data-login="${esc(tokens[idx].meta.login)}">@${esc(tokens[idx].meta.login)}</span>`;
 
   const linkHtml = ({ target, heading, alias }, env) => {
     const path = target ? env.resolve(target) : env.fromPath;
@@ -148,6 +177,11 @@ export function createMarkdown() {
         + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
         + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
+    }
+    // A ```mentions block: the app lists the places in the vault that mention its login there.
+    if (lang === "mentions") {
+      return `<div class="mentions-block" data-login="${esc(mentionsOptions(token.content).login)}">`
+        + `<pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     // A ```questions block: the app lists the tasks with an open question there.
     if (lang === "questions") {
@@ -218,6 +252,15 @@ export function topTasksOptions(src) {
 export function questionsOptions(src) {
   const line = String(src ?? "").split("\n").map((l) => l.match(/^\s*owner\s*:\s*(.*?)\s*$/i)).find(Boolean);
   return { owner: line ? line[1].replace(/^["']|["']$/g, "").trim() : "" };
+}
+
+/**
+ * The options of a ```mentions block, one per line, all written in the block: `login: your-login` (whose
+ * mentions it lists: `@` and that GitHub login; the `@` may be written too). Other lines are ignored.
+ */
+export function mentionsOptions(src) {
+  const line = String(src ?? "").split("\n").map((l) => l.match(/^\s*login\s*:\s*(.*?)\s*$/i)).find(Boolean);
+  return { login: line ? line[1].replace(/^["']|["']$/g, "").trim().replace(/^@/, "") : "" };
 }
 
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */

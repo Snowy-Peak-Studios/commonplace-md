@@ -8,6 +8,12 @@ github: your-github-login
 
 The shared inbox: write here first, sort it later. The Inbox button opens it, unless you have an inbox of your own in `Notes/Inboxes/` (see [[Your name]]).
 
+Mentions of you come first: the ` ```mentions ` block lists every place in the vault that says `@` and your GitHub login. Put your login in its `login:` line.
+
+```mentions
+login: your-github-login
+```
+
 Put your GitHub login in `github` above to make this one yours. The box below shows the top three free tasks you could start; **Claim** makes one yours. It's the ` ```top-tasks ` block, and its lines say what it shows (the [[Home]] page says what each means): change them, move the block, or put one on any page.
 
 ```top-tasks

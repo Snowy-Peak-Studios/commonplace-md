@@ -3,7 +3,7 @@
 import {
   EditorState, EditorView, StateField, keymap, Decoration, ViewPlugin, WidgetType, MatchDecorator,
   drawSelection, highlightActiveLine, defaultKeymap, history, historyKeymap, indentWithTab,
-  searchKeymap, highlightSelectionMatches, syntaxHighlighting, HighlightStyle, markdown, markdownLanguage,
+  searchKeymap, highlightSelectionMatches, autocompletion, syntaxHighlighting, HighlightStyle, markdown, markdownLanguage,
   MergeView, tags as t, yamlFrontmatter, yamlLanguage, StreamLanguage, jsonLanguage, javascriptLanguage,
   typescriptLanguage, jsxLanguage, tsxLanguage, cssLanguage, htmlLanguage, xmlLanguage, pythonLanguage, shell, toml,
   properties, powerShell, standardSQL, diff, go, rust, lua, ruby, dockerFile, c, cpp, java, csharp, kotlin,
@@ -169,7 +169,30 @@ const baseExtensions = () => [
 ];
 
 /** A Markdown (or plain text) editor. `onChange(text)` runs on every edit. */
-export function createEditor(parent, text, { onChange, resolve, isMarkdown = true, language = null, vault = false, readOnly = false, extra = [] } = {}) {
+/**
+ * Typing `@` offers the vault's people (`people()` gives [{ login, name }], maybe later); picking one writes
+ * `@login`. Not right after a letter, a digit or `.+-_/@`, so an email doesn't open it.
+ */
+function mentionPicker(people) {
+  return autocompletion({
+    icons: false,
+    override: [async (ctx) => {
+      const word = ctx.matchBefore(/@[A-Za-z0-9-]*/);
+      if (!word) return null;
+      const before = ctx.state.sliceDoc(Math.max(0, word.from - 1), word.from);
+      if (before && /[\p{L}\p{N}.+\-_/@`]/u.test(before)) return null;
+      const list = await people().catch(() => []);
+      if (!list.length) return null;
+      return {
+        from: word.from,
+        options: list.map((p) => ({ label: `@${p.login}`, detail: p.name !== p.login ? p.name : undefined, apply: `@${p.login}` })),
+        validFor: /^@[A-Za-z0-9-]*$/,
+      };
+    }],
+  });
+}
+
+export function createEditor(parent, text, { onChange, resolve, isMarkdown = true, language = null, vault = false, readOnly = false, people = null, extra = [] } = {}) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -179,6 +202,7 @@ export function createEditor(parent, text, { onChange, resolve, isMarkdown = tru
         isMarkdown ? [yamlFrontmatter({ content: markdown({ base: markdownLanguage }) }), linkMarks(resolve)] : [],
         !isMarkdown && language ? [language.extension, EditorView.contentAttributes.of({ spellcheck: "false", autocapitalize: "off" })] : [],
         vault ? protectNavBox : [],
+        isMarkdown && people && !readOnly ? mentionPicker(people) : [],
         readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
         EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString()); }),
         extra,

@@ -212,6 +212,64 @@ export function ownInboxPath(notes, login, fallback = "") {
 }
 
 // ================================================================
+// Mentions: `@login` in a note, found for that person's inbox
+// ================================================================
+
+/**
+ * A mention: `@` and a GitHub login (letters, digits and single hyphens, up to 39), not right after a letter,
+ * a digit or one of `.+-_/@` (so not an email or a path), and not followed by more of a login. Group 1 is
+ * what comes before the `@`, group 2 the login.
+ */
+export const MENTION = /(^|[^\p{L}\p{N}.+\-_/@`])@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/gu;
+
+/**
+ * Every mention in a note: [{ login, line, heading, text }], `line` counting from 1 in the whole file,
+ * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
+ * fenced code and inline code don't count. One per login and line.
+ */
+export function findMentions(text) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  const skipped = fm ? src.slice(0, fm.length).split("\n").length - 1 : 0;
+  const lines = (fm ? src.slice(fm.length) : src).split("\n");
+  const out = [];
+  let fence = null, heading = "";
+  lines.forEach((line, i) => {
+    const f = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
+      return;
+    }
+    if (f) { fence = f[1]; return; }
+    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (h) heading = h[1];
+    const plain = line.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
+    const seen = new Set();
+    for (const m of plain.matchAll(MENTION)) {
+      if (seen.has(m[2].toLowerCase())) continue;
+      seen.add(m[2].toLowerCase());
+      const said = line.trim();
+      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said });
+    }
+  });
+  return out;
+}
+
+/**
+ * The people of a vault, from its inboxes ([{ path, props }]): each inbox with a `github` login gives
+ * { login, name, path }, the name from its `owner` (else the login); each login once, sorted by name.
+ */
+export function vaultPeople(notes) {
+  const seen = new Map();
+  for (const n of notes) {
+    const login = String(n.props?.github ?? "").trim().replace(/^@/, "");
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login) || seen.has(login.toLowerCase())) continue;
+    seen.set(login.toLowerCase(), { login, name: String(n.props.owner ?? "").trim() || login, path: n.path });
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name) || a.login.localeCompare(b.login));
+}
+
+// ================================================================
 // Suggested tasks: the top free tasks an inbox shows
 // ================================================================
 

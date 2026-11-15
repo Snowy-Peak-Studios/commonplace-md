@@ -692,3 +692,39 @@ test("a task with an open question needs a decision until it's answered and clea
   assert.equal(taskState(`---\nid: T-1\nquestion:\n---\n${body}`).state, "ready");
   assert.equal(taskState(`---\nid: T-1\nready: yes\nquestion: "Still?"\n---\n${body}`).state, "ready", "ready: yes wins");
 });
+
+test("mentions in a note: @login, not in code, an email or a path; with the heading above and the line", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = [
+    "---", "owner: @Nobody", "---",
+    "# Plan",
+    "Ask @Ann-Lee and @bob, then @Ann-Lee again.",
+    "Mail ann@example.com, see https://medium.com/@writer and `@code`.",
+    "```", "@infence", "```",
+    "## Next ##",
+    "- [ ] @bob: check it (@bo-, @-x, @a--b)",
+  ].join("\n");
+  assert.deepEqual(findMentions(note).map((m) => [m.login, m.line, m.heading]),
+    [["Ann-Lee", 5, "Plan"], ["bob", 5, "Plan"], ["bob", 11, "Next"]]);
+  assert.equal(findMentions(note)[2].text, "- [ ] @bob: check it (@bo-, @-x, @a--b)");
+  assert.deepEqual(findMentions("@start of the file").map((m) => m.login), ["start"]);
+  assert.deepEqual(findMentions("~~~md\n@no\n~~~\n(@yes)").map((m) => m.login), ["yes"]);
+  assert.equal(findMentions("x ".repeat(100) + "@long").at(0).text.length, 160);
+});
+
+test("a vault's people come from its inboxes' github and owner, each login once", async () => {
+  const { vaultPeople } = await import("../src/vault.js");
+  const people = vaultPeople([
+    { path: "Notes/Inbox.md", props: { owner: "Zed Q", github: "zedq" } },
+    { path: "Notes/Inboxes/Ann.md", props: { owner: "Ann Lee", github: "@Ann-Lee" } },
+    { path: "Notes/Inboxes/Copy.md", props: { owner: "Ann again", github: "ann-lee" } },
+    { path: "Notes/Inboxes/Nobody.md", props: { owner: "No Login", github: "" } },
+    { path: "Notes/Inboxes/Bad.md", props: { github: "not a login" } },
+    { path: "Notes/Inboxes/Bob.md", props: { github: "bob" } },
+  ]);
+  assert.deepEqual(people, [
+    { login: "Ann-Lee", name: "Ann Lee", path: "Notes/Inboxes/Ann.md" },
+    { login: "bob", name: "bob", path: "Notes/Inboxes/Bob.md" },
+    { login: "zedq", name: "Zed Q", path: "Notes/Inbox.md" },
+  ]);
+});

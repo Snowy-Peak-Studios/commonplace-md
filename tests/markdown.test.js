@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions, questionsOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, questionsOptions, mentionsOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -108,4 +108,16 @@ test("a questions block becomes a placeholder with its owner, holding its source
   assert.match(render('```questions\nowner: "<b>"\n```\n'), /data-owner="&lt;b&gt;"/);
   assert.deepEqual(questionsOptions("range: 3\n  Owner :  'Bo Park' \n"), { owner: "Bo Park" });
   assert.deepEqual(questionsOptions(""), { owner: "" });
+});
+
+test("@login becomes a mention, but not in code, a link or an email; a mentions block holds its login", () => {
+  assert.equal(render("Ask @Ann-Lee, not ann@example.com or `@code`.\n"),
+    '<p>Ask <span class="mention" data-login="Ann-Lee">@Ann-Lee</span>, not <a href="mailto:ann@example.com">ann@example.com</a> or <code>@code</code>.</p>\n');
+  assert.equal(render("[see @bob](https://example.com) and **@bob**\n"),
+    '<p><a href="https://example.com">see @bob</a> and <strong><span class="mention" data-login="bob">@bob</span></strong></p>\n');
+  assert.match(render("## Ask @bob\n"), /data-heading="Ask @bob"/);
+  assert.equal(render("```mentions\nlogin: @Ann-Lee\n```\n"),
+    '<div class="mentions-block" data-login="Ann-Lee"><pre><code>login: @Ann-Lee\n</code></pre></div>\n');
+  assert.deepEqual(mentionsOptions("login: 'bob'\n"), { login: "bob" });
+  assert.deepEqual(mentionsOptions("owner: Bob\n"), { login: "" });
 });

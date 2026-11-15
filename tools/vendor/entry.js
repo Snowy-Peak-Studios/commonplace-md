@@ -6,6 +6,7 @@ export {
 } from "@codemirror/view";
 export { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 export { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+export { autocompletion } from "@codemirror/autocomplete";
 export { syntaxHighlighting, defaultHighlightStyle, HighlightStyle, indentUnit, StreamLanguage } from "@codemirror/language";
 export { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 export { tags } from "@lezer/highlight";
