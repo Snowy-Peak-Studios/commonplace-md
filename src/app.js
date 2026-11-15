@@ -744,7 +744,9 @@ async function route() {
   }
   if (nav !== app.nav) return;
   if (!path) {
-    const home = [repo.home, repo.inbox, "Home.md", "README.md"].find((p) => p && tree.files.has(p));
+    // No start page (a folder opened as a vault, say): its first note at the top, else its first note anywhere.
+    const notes = [...tree.files.keys()].filter((p) => /\.md$/i.test(p)).sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+    const home = [repo.home, repo.inbox, "Home.md", "README.md"].find((p) => p && tree.files.has(p)) || notes[0];
     if (home) return redirect(hrefFor(repo, home));
     app.pageTitle = repo.label;
     renderHeader();
@@ -3621,56 +3623,119 @@ function showLocalProblem(repo, e) {
 }
 
 /**
- * Asks for a new local vault (a name, where it's kept, and what it starts with), makes it and adds it to the
- * list. In Chrome and Edge it's a folder on the disk by default; elsewhere it's kept in the browser, and the
- * dialog says why. Resolves to the new repo, or null.
+ * Adds a vault on this device, as other Markdown apps do: **Create a new vault** (a name, a location the person picks, where
+ * a new folder of that name is made, and what it starts with) or **Open a folder as a vault** (any folder of notes,
+ * opened as it is). Where the browser can't open folders (Firefox, Safari, phones) only a new vault kept in the
+ * browser is offered, and the dialog says why. Resolves to the new repo, or null.
  */
 async function addLocalVault() {
   const folderOk = canPickFolder();
+  let location = null; // where a new vault's folder is made
+  let opened = null; // the folder opened as a vault
   const name = h("input", { class: "input", value: "My notes", spellcheck: "false", autocomplete: "off", "aria-label": "Name" });
+  let named = false;
+  name.addEventListener("input", () => { named = true; sync(); });
   const choice = (group, value, label, hint, checked = false) => h("label", { class: "check-line" },
     h("input", { type: "radio", name: group, value, checked }),
-    h("span", {}, h("b", {}, label), h("br"), h("small", { class: "muted" }, hint)));
-  const where = folderOk
-    ? h("div", { class: "choices" },
-      choice("local-where", "folder", "A folder on this device",
-        "The notes are real .md files your agent and other tools can read and change. A folder that already holds notes opens as it is.", true),
-      choice("local-where", "browser", "In this browser", "Lost if the browser's data is cleared, so download a copy now and then."))
-    : h("p", { class: "fine" }, "This browser can't open a folder on the disk (only Chrome and Edge on a computer can), so the vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy).");
+    h("span", {}, h("b", {}, label), hint ? [h("br"), h("small", { class: "muted" }, hint)] : null));
+  const picked = (handle, none) => (handle ? h("span", {}, icon("folder"), " ", h("b", {}, handle.name)) : h("span", { class: "muted" }, none));
+  const where = h("small", { class: "hint" });
+  const locationText = h("span", { class: "picked" });
+  const openedText = h("span", { class: "picked" });
+  const mode = h("div", { class: "choices" },
+    choice("local-mode", "create", "Create a new vault", "A new folder for it, in a place you pick.", true),
+    choice("local-mode", "open", "Open a folder as a vault", "A folder that already holds notes, like another app's vault or a repo's clone. It opens as it is."));
+  const keep = h("div", { class: "choices" },
+    choice("local-keep", "folder", "In a folder on this device", "Real .md files your agent and other tools can read and change.", true),
+    choice("local-keep", "browser", "In this browser", "No folder: lost if the browser's data is cleared, so download a copy now and then."));
   const start = h("div", { class: "choices" },
     choice("local-start", "empty", "Empty", "One note to start from.", true),
     choice("local-start", "example", "The example notes", "A note for every feature, to try them out. Needs the connection this once."));
-  const problem = h("p", { class: "fine" });
+  const pickLocation = h("button", { class: "btn small", type: "button", onclick: async () => {
+    const handle = await pickFolder();
+    if (handle) { location = handle; sync(); }
+  } }, icon("folder"), "Pick a location");
+  const pickOpened = h("button", { class: "btn small", type: "button", onclick: async () => {
+    const handle = await pickFolder();
+    if (!handle) return;
+    opened = handle;
+    if (!named) name.value = handle.name;
+    sync();
+  } }, icon("folder"), "Pick the folder");
+  const value = (group) => (group.querySelector("input:checked") || {}).value;
+  const locationField = h("div", { class: "field" }, h("span", {}, "Location"), h("div", { class: "pick-line" }, pickLocation, locationText), where);
+  const openedField = h("div", { class: "field" }, h("span", {}, "Folder"), h("div", { class: "pick-line" }, pickOpened, openedText),
+    h("small", { class: "hint" }, "Nothing is added to it. An empty folder starts with no notes."));
+  const keepField = h("div", { class: "field" }, h("span", {}, "Where it's kept"), keep);
+  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start);
+  const fine = h("p", { class: "fine" }, folderOk
+    ? "The browser shows the app only the folder's name, not its whole path on the disk."
+    : "This browser can't open a folder on the disk (only Chrome and Edge on a computer can), so a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy).");
+  const problem = h("p", { class: "fine bad" });
+  function sync() {
+    const opening = folderOk && value(mode) === "open";
+    const inFolder = folderOk && !opening && value(keep) === "folder";
+    keepField.hidden = !folderOk || opening;
+    locationField.hidden = !inFolder;
+    openedField.hidden = !opening;
+    startField.hidden = opening;
+    fill(locationText, picked(location, "No location picked yet"));
+    fill(openedText, picked(opened, "No folder picked yet"));
+    fill(where, location ? `The vault is made as a new folder, ${cleanName(name.value) || "My notes"}, inside ${location.name}.` : "The vault is made as a new folder with its name, inside the location you pick.");
+    problem.textContent = "";
+  }
+  // A name typed while creating doesn't stick to a folder opened afterwards: the folder names it, unless typed again.
+  mode.addEventListener("change", () => { named = false; sync(); });
+  keep.addEventListener("change", sync);
+  sync();
   return modal({
     title: "Add a vault on this device",
     text: "Its notes stay only on this device: not on GitHub, not on your other devices. Save keeps them here, and nothing is sent anywhere.",
-    body: [
-      h("label", { class: "field" }, h("span", {}, "Name"), name),
-      h("div", { class: "field" }, h("span", {}, "Where it's kept"), where),
-      h("div", { class: "field" }, h("span", {}, "Start with"), start),
-      problem,
-    ],
+    body: [folderOk ? h("div", { class: "field" }, h("span", {}, "What"), mode) : null,
+      h("label", { class: "field" }, h("span", {}, "Name"), name), keepField, locationField, openedField, startField, fine, problem],
     buttons: [
       { label: "Cancel", value: null },
       { label: "Add vault", kind: "primary", onclick: async () => {
-        const label = name.value.trim() || "My notes";
-        const kind = folderOk && where.querySelector("input:checked")?.value === "folder" ? "folder" : "browser";
-        const example = start.querySelector("input:checked")?.value === "example";
+        const opening = folderOk && value(mode) === "open";
+        const kind = opening || (folderOk && value(keep) === "folder") ? "folder" : "browser";
+        const label = name.value.trim() || opened?.name || "My notes";
+        const example = !opening && value(start) === "example";
         let handle = null;
-        if (kind === "folder" && !(handle = await pickFolder())) return false;
+        if (opening) {
+          if (!opened) { problem.textContent = "Pick the vault's folder first."; return false; }
+          handle = opened;
+        } else if (kind === "folder") {
+          if (!location) { problem.textContent = "Pick a location first: the vault's folder is made inside it."; return false; }
+          const folderName = cleanName(label);
+          if (!folderName) { problem.textContent = "The name needs letters or numbers, to name its folder."; return false; }
+          try {
+            let there = null;
+            try { there = await location.getDirectoryHandle(folderName); } catch { /* not there yet: made below */ }
+            if (there) {
+              for await (const [entry] of there.entries()) {
+                if (!entry.startsWith(".")) {
+                  problem.textContent = `${location.name} already has a folder ${folderName} with files in it. Open it instead (Open a folder as a vault), or pick another name.`;
+                  return false;
+                }
+              }
+            }
+            handle = there || await location.getDirectoryHandle(folderName, { create: true });
+          } catch (e) {
+            problem.textContent = `The folder couldn't be made in ${location.name}: ${e?.message || e}`;
+            return false;
+          }
+        }
         problem.textContent = example ? "Getting the example notes…" : "Setting it up…";
         try {
-          const seed = example ? await fetchExample() : emptyVault(label, kind);
+          const seed = opening ? [] : example ? await fetchExample() : emptyVault(label, kind);
           let id = `local-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vault"}`;
           while (app.repos.some((x) => x.id === id)) id += "-2";
           const r = {
             id, local: kind, label, owner: "", repo: "", branch: "", folder: "",
             home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...(example ? EXAMPLE_SETTINGS : {}),
           };
-          if (!(await local.create(r, { handle, seed }))) {
-            Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
-            toast(`${handle?.name || "The folder"} already holds files, so it opens as it is.`, "info", 6000);
-          }
+          const seeded = await local.create(r, { handle, seed });
+          if (opening || !seeded) Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
           app.repos.push(r);
           store.set("repos", app.repos);
           renderRepoPicker();
@@ -3683,6 +3748,9 @@ async function addLocalVault() {
     ],
   });
 }
+
+/** A vault's name as a folder's name: without the characters folders can't have on Windows and elsewhere. */
+const cleanName = (s) => String(s).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+/, "");
 
 /** Removes a local vault from the list, at once: a browser vault's notes are deleted, a folder's stay on the disk. */
 async function removeLocalVault(r) {

@@ -71,7 +71,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 <details>
 <summary>Everything it does</summary>
 
-- **Local vaults:** a vault only on this device, with no GitHub at all: a folder on the disk in Chrome and Edge (real `.md` files your agent can change too), or kept in the browser elsewhere, with **Download a copy** as a zip ([more](#a-local-vault)).
+- **Local vaults:** a vault only on this device, with no GitHub at all: a new folder in a place you pick, or a folder of notes you already have, opened as it is (Chrome and Edge: real `.md` files your agent can change too), or kept in the browser elsewhere, with **Download a copy** as a zip ([more](#a-local-vault)).
 - **Offline:** every GitHub vault is kept on the device too, so it opens with no connection (a line above the note says it's the copy). The copy is kept in the browser, or (Chrome and Edge on a computer) in a folder you pick, like the repo's clone, so other tools and agents read the same files and each commit updates them ([more](#a-copy-on-this-device)).
 - **Up to date:** a Reload button beside Save, and a quiet banner when GitHub has newer notes than the ones you have open (checked when you come back to the tab and every few minutes, cheaply).
 - **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), an Up button to the note's `parent` page, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
@@ -141,10 +141,12 @@ flowchart LR
 Notes only on this device: not on GitHub, not on your other devices. No account and no token.
 
 1. Open the app. On the first page press **Add a vault on this device** (or later: **Settings › Notes repos › Add a vault on this device**).
-2. Give it a name, and pick what it starts with: an empty vault, or the example notes.
-3. Pick where it's kept:
-   - **A folder on this device** (Chrome and Edge on a computer): the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. A folder that already holds notes opens as it is. Each time the browser is opened again, it asks once before it lets the app into the folder.
-   - **In this browser** (and always in Firefox, Safari and on phones, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
+2. Pick one (Chrome and Edge on a computer):
+   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or the example notes). The app makes a new folder with the vault's name inside that location.
+   - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
+3. Either way the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder. The browser shows the app only the folder's name, not its whole path.
+
+A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari and on phones, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
 
 **Save** saves on the device; nothing is sent anywhere. A local vault always says so, in the list of vaults (*on this device*) and in a line above the note.
 

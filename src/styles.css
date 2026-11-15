@@ -1265,3 +1265,8 @@ select.input { padding-right: 8px; }
 /* Tokens for other owners: each with its Remove at the end of its line */
 .owner-tokens li .btn { margin-left: auto; }
 .owner-tokens-add { margin: 14px 0 4px; font-size: 15px; }
+
+/* the add-a-vault dialog: a picked folder beside its button */
+.pick-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pick-line .picked { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
+.pick-line .picked .icon { width: 16px; height: 16px; color: var(--accent); }

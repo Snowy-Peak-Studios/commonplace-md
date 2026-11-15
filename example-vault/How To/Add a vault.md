@@ -37,10 +37,12 @@ Someone who has the repo presses **Copy invite link** in **Settings** and sends 
 A local vault needs no GitHub account and no token. Its notes are not on GitHub and not on your other devices.
 
 1. **Settings › Notes repos › Add a vault on this device** (or on the first page, before you connect GitHub).
-2. Give it a name, and start it empty or with these example notes.
-3. Pick where it's kept:
-   - **A folder on this device** (Chrome and Edge on a computer): real `.md` files your agent can read and change. **Reload** shows their changes. The browser asks once each time it's opened before it lets the app in.
-   - **In this browser** (Firefox, Safari, phones): lost if the browser's data is cleared, so press **Download a copy** now and then.
+2. In Chrome and Edge on a computer, pick one:
+   - **Create a new vault**: a name, **Pick a location**, and empty or these example notes. A new folder with the vault's name is made there.
+   - **Open a folder as a vault**: **Pick the folder** of notes you already have. It opens as it is.
+3. The notes are real `.md` files your agent can read and change. **Reload** shows their changes. The browser asks once each time it's opened before it lets the app in.
+
+In Firefox, Safari and on phones (or if you pick **In this browser**), a new vault is kept in the browser: it's lost if the browser's data is cleared, so press **Download a copy** now and then.
 
 **Save** saves on the device. The vault says *on this device* in the list, and a line above the note says it's only here.
 
