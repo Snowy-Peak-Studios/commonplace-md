@@ -2,6 +2,7 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
@@ -181,7 +182,14 @@ async function loadAccess(repo) {
  */
 const ownerTokens = () => store.get("tokens", {}) || {};
 const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
-let gh = new GitHub(app.token, tokenMap());
+/** The local vaults' files (`src/local.js`): `gh` sends every call about a local vault there, never to GitHub. */
+const local = new LocalSource();
+const client = (token, tokens = {}) => withLocal(new GitHub(token, tokens), local);
+let gh = client(app.token, tokenMap());
+/** Whether the app can open a repo: one on GitHub needs a token, a local vault doesn't. */
+const usable = (repo = app.repo) => !!app.token || isLocal(repo);
+/** Where a repo's notes are saved, for the messages: GitHub, or this device. */
+const savedOn = (repo = app.repo) => (isLocal(repo) ? "this device" : "GitHub");
 
 // Older settings: vault mode also put new notes in Notes/. Those are the repo's own fields now.
 if (app.repos.some((r) => upgradeRepo(r) !== r)) {
@@ -279,7 +287,7 @@ function renderNudge() {
 
 /** Reads the repo again from GitHub, asking first when the open note has unsaved changes. */
 async function reloadFromGitHub() {
-  if (app.file?.dirty && !(await confirmDialog("Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
+  if (app.file?.dirty && !(await confirmDialog(isLocal(app.repo) ? "Reload the notes?" : "Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
   if (app.file) store.remove(draftKey(app.file));
   if (app.repo) {
     app.trees.delete(app.repo.id);
@@ -482,7 +490,7 @@ async function searchText(repo, query, host) {
     fill(host, 
       h("div", { class: "side-label" }, paths.length ? "Found inside" : "Nothing found inside notes"),
       ...paths.map((path) => fileRow(repo, path, iconFor(path), shownName(path), dirName(path) || null)),
-      h("p", { class: "side-empty" }, "GitHub's search can lag a few minutes behind the latest saves."),
+      isLocal(repo) ? null : h("p", { class: "side-empty" }, "GitHub's search can lag a few minutes behind the latest saves."),
     );
     markActive();
   } catch (e) {
@@ -502,7 +510,7 @@ function markActive(path = app.file?.path) {
 }
 
 function renderRepoPicker() {
-  fill($("#repo-select"), ...app.repos.map((r) => h("option", { value: r.id, selected: r.id === app.repo?.id }, r.label)));
+  fill($("#repo-select"), ...app.repos.map((r) => h("option", { value: r.id, selected: r.id === app.repo?.id }, isLocal(r) ? `${r.label} · on this device` : r.label)));
 }
 
 function renderWho() {
@@ -541,14 +549,18 @@ function parentPath(f) {
 
 function renderHeader() {
   const f = app.file;
-  $("#reload-btn").hidden = !app.repo || !app.token;
+  const reload = $("#reload-btn");
+  reload.hidden = !app.repo || !usable();
+  reload.title = isLocal(app.repo) ? "Reload: read the notes on this device again" : "Reload from GitHub";
+  reload.setAttribute("aria-label", reload.title);
+  renderLocalNote();
   renderNudge();
   const up = parentPath(f);
   const upBtn = $("#up-btn");
   upBtn.hidden = !up;
   upBtn.title = up ? `Up to ${shownName(up)}` : "Up";
   upBtn.setAttribute("aria-label", upBtn.title);
-  $("#inbox-btn").hidden = !inboxOf(app.repo) || !app.token;
+  $("#inbox-btn").hidden = !inboxOf(app.repo) || !usable();
   $("#inbox-btn").classList.toggle("on", !!f && f.path === inboxOf(app.repo));
   paintInboxDot();
   if (app.repo) checkInboxDot(app.repo);
@@ -637,7 +649,7 @@ async function route() {
   closeSideOnPhone();
   const { parts, heading, params } = parseHash();
   if (parts[0] === "join") return join(params);
-  if (!app.token) return showWelcome(store.get("join"));
+  if (!app.token && !app.repos.some(isLocal)) return showWelcome(store.get("join"));
   document.body.classList.remove("no-token");
   if (parts[0] === "settings") {
     // #/settings?fields opens the Task fields of the repo the person was in (a note can link to it);
@@ -688,6 +700,7 @@ async function route() {
   } catch (e) {
     if (nav === app.nav) {
       fill($("#tree"));
+      if (isLocal(repo)) return showLocalProblem(repo, e);
       // GitHub answers 404 both for a repo that doesn't exist and for one this token may not see.
       const hint = e.status === 404
         ? `GitHub won't show it to this token. A token opens one owner's repos: if this device's token is for another owner, add one for ${repo.owner}. If you just made it, it may still be waiting for ${repo.owner} to approve it: reload once they have. Otherwise, check on GitHub that the token's resource owner is ${repo.owner} and that ${repo.repo} is selected.`
@@ -726,7 +739,7 @@ async function mayLeave(depthBefore) {
   try {
     choice = await modal({
       title: "Leave without saving?",
-      text: `${shownName(f.path)} has changes that aren't saved to GitHub yet.`,
+      text: `${shownName(f.path)} has changes that aren't saved to ${savedOn(f.repo)} yet.`,
       buttons: [
         { label: "Stay", kind: "ghost", value: "stay" },
         { spacer: true },
@@ -940,8 +953,8 @@ function renderPreview() {
   // A ```new-tasks box gets its Add field, where the note can be changed.
   fillNewTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
-  const setup = app.token ? taskSetupOf(f.repo) : null;
-  if (app.token && !setup) {
+  const setup = usable(f.repo) ? taskSetupOf(f.repo) : null;
+  if (usable(f.repo) && !setup) {
     loadTaskSetup(f.repo).then(() => { if (app.file === f && f.dom?.preview.isConnected && f.kind === "md") renderPreview(); });
   }
   const isTask = setup && isSetupTask(setup, f.path);
@@ -1401,7 +1414,7 @@ async function startNextSprint(f, setup, current, open) {
           return pathOf();
         } catch (e) {
           hint.textContent = e.status === 422 || e.status === 409
-            ? "Not started: GitHub has newer changes. Reload from GitHub and try again."
+            ? (isLocal(repo) ? "Not started: the notes changed on this device. Reload and try again." : "Not started: GitHub has newer changes. Reload from GitHub and try again.")
             : `Not started: ${e.message}`;
           hint.classList.add("bad");
           createBtn.disabled = false;
@@ -1559,7 +1572,7 @@ async function setTaskField(f, field, input, control) {
     }
     toast(`${field.label}: ${saidValue(value, "cleared")}`, "ok");
   } catch (e) {
-    toast(e.isConflict ? `Not changed: ${shownName(f.path)} changed on GitHub. Reload it first.` : `Not changed: ${e.message}`, "error");
+    toast(e.isConflict ? `Not changed: ${shownName(f.path)} changed on ${savedOn(f.repo)}. Reload it first.` : `Not changed: ${e.message}`, "error");
     if (control.isConnected) control.disabled = false;
   }
 }
@@ -1805,7 +1818,7 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     h("span", { class: "suggest-tags" }, state(t)),
     h("span", { class: "attention-text" }, t.question));
   const seenNow = note ? noteProps(note.text)[SEEN_MENTIONS] : [];
-  const canMark = !!note && canWrite(repo) && !!app.token;
+  const canMark = !!note && canWrite(repo) && usable(repo);
   let allFound = [];
   const markSeen = (ms) => markMentionsSeen(note, ms, allFound);
   const mentionRow = (m, seen = false) => h("li", {}, wantQ ? kind("mention") : null,
@@ -1881,7 +1894,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
       h("small", { class: "muted" }, said.join(" · "))),
     list);
-  const editable = canWrite(repo) && !!app.token;
+  const editable = canWrite(repo) && usable(repo);
   let allAreas = [];
   /** A property as a chip, or as a chip-like picker that saves the task when it changes. */
   const tag = (path, t, key, options, cls = "") => {
@@ -2003,7 +2016,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
  */
 async function claimSuggested(repo, path, who, button, move = null) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
-    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to GitHub.`, "Claim")) return;
+    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to ${savedOn(repo)}.`, "Claim")) return;
   button.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
@@ -2339,7 +2352,7 @@ function keepBaseCache(name, repo, keep) {
 async function readNotes(repo, tree, paths) {
   const texts = new Map();
   const bySha = paths.filter((p) => IS_SHA.test(tree.files.get(p)));
-  await inParallel(chunks(bySha, BLOBS_PER_QUERY), 3, async (batch) => {
+  if (!isLocal(repo)) await inParallel(chunks(bySha, BLOBS_PER_QUERY), 3, async (batch) => {
     const fields = batch.map((p, i) => `b${i}: object(oid: "${tree.files.get(p)}") { ... on Blob { text } }`).join("\n");
     try {
       const data = await gh.graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {\n${fields}\n} }`,
@@ -2399,6 +2412,7 @@ async function taskAnswers(repo, tree, paths) {
 async function lastCommitDates(repo, tree, paths) {
   const cache = baseCache("baseDates", repo);
   const key = (p) => `${p}@${tree.files.get(p)}`;
+  if (isLocal(repo)) return new Map(); // no commits on this device
   const missing = paths.filter((p) => !Object.hasOwn(cache, key(p)));
   await inParallel(chunks(missing, HISTORIES_PER_QUERY), 3, async (batch) => {
     const fields = batch.map((p, i) => `h${i}: history(first: 1, path: ${JSON.stringify(fullPath(repo, p))}) { nodes { committedDate } }`).join("\n");
@@ -2762,7 +2776,7 @@ async function save() {
     store.remove(draftKey(f));
     treeChanged(f.repo, f.path, res.sha);
     updateLinkWarning();
-    toast("Saved to GitHub", "ok");
+    toast(`Saved to ${savedOn(f.repo)}`, "ok");
   } catch (e) {
     if (e.isConflict) resolveConflict(f);
     else toast(`Not saved: ${e.message}`, "error");
@@ -2784,13 +2798,13 @@ async function resolveConflict(f) {
   let mv;
   const choice = await modal({
     wide: true,
-    title: "This file changed on GitHub since you opened it",
+    title: `This file changed on ${savedOn(f.repo)} since you opened it`,
     text: "Nothing is lost until you choose. You can still edit your side before saving it.",
-    body: [h("div", { class: "merge-labels" }, h("span", {}, "On GitHub now"), h("span", {}, "Yours")), host],
+    body: [h("div", { class: "merge-labels" }, h("span", {}, isLocal(f.repo) ? "On this device now" : "On GitHub now"), h("span", {}, "Yours")), host],
     buttons: [
       { label: "Decide later", kind: "ghost", value: null },
       { spacer: true },
-      { label: "Use the GitHub version", value: "theirs" },
+      { label: isLocal(f.repo) ? "Use the saved version" : "Use the GitHub version", value: "theirs" },
       { label: "Save my version", kind: "primary", icon: "upload", onclick: () => ({ mine: mv.b.state.doc.toString() }) },
     ],
     onOpen: () => { mv = createMergeView(host, latest.text, f.text, { vault: f.repo.vault && f.kind === "md" }); },
@@ -2802,7 +2816,7 @@ async function resolveConflict(f) {
     f.saved = f.text = latest.text;
     store.remove(draftKey(f));
     afterOutsideChange(f);
-    toast("Showing the version from GitHub", "ok");
+    toast(`Showing the version from ${savedOn(f.repo)}`, "ok");
   } else {
     f.saved = latest.text;
     f.text = choice.mine;
@@ -2841,7 +2855,7 @@ function checkDraft() {
   const when = new Date(d.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const banner = h("div", { class: "banner info" }, icon("history"),
     h("span", { class: "text" }, `You have changes from ${when} that weren't saved.`
-      + (d.sha !== f.sha ? " The file has changed on GitHub since then, so saving will show both versions." : "")),
+      + (d.sha !== f.sha ? ` The file has changed on ${savedOn(f.repo)} since then, so saving will show both versions.` : "")),
     h("span", { class: "actions" },
       h("button", { class: "btn small", onclick: async () => {
         if (!(await confirmDialog("Discard the unsaved changes?", `The changes from ${when} will be gone.`, "Discard", true))) return;
@@ -2999,7 +3013,7 @@ async function connect(token, out) {
   try {
     const u = await probe.user();
     app.token = token;
-    gh = new GitHub(token, tokenMap());
+    gh = client(token, tokenMap());
     store.set("token", token);
     store.set("user", { login: u.login, avatar: u.avatar_url ? `${u.avatar_url}${u.avatar_url.includes("?") ? "&" : "?"}s=64` : "" });
     app.trees.clear();
@@ -3024,7 +3038,7 @@ async function saveOwnerToken(owner, token, out, check = null) {
     const u = await new GitHub(token).user();
     if (check) await new GitHub(token).repo(check);
     store.set("tokens", { ...ownerTokens(), [key]: { token, login: u.login } });
-    gh = new GitHub(app.token, tokenMap());
+    gh = client(app.token, tokenMap());
     for (const r of app.repos) if (r.owner.toLowerCase() === key) { app.trees.delete(r.id); app.access.delete(r.id); }
     fill(out, h("li", { class: "ok" }, icon("success"), `The token for ${owner} works (made by ${u.login}).`));
     return true;
@@ -3041,7 +3055,7 @@ function removeOwnerToken(owner) {
   const all = { ...ownerTokens() };
   delete all[owner];
   store.set("tokens", all);
-  gh = new GitHub(app.token, tokenMap());
+  gh = client(app.token, tokenMap());
   for (const r of app.repos) if (r.owner.toLowerCase() === owner) { app.trees.delete(r.id); app.access.delete(r.id); }
 }
 
@@ -3160,6 +3174,15 @@ async function lookForVaults(now = false, loud = now) {
  * answers a missing file with null rather than a 404.
  */
 async function readMarker(r) {
+  if (isLocal(r)) {
+    try {
+      const { text, sha } = await gh.readText(r, MARKER);
+      return { at: r, text, sha };
+    } catch (e) {
+      if (e.status === 404) return { at: r, text: null, sha: null };
+      throw e;
+    }
+  }
   const data = await gh.graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
     defaultBranchRef { name } object(expression: "HEAD:${MARKER}") { ... on Blob { text oid } } } }`, { owner: r.owner, name: r.repo });
   const info = data.repository;
@@ -3266,10 +3289,10 @@ async function editTaskFields(r) {
         problem.textContent = "";
         try {
           const latest = await readMarker(r);
-          const text = mergeMarker(latest.text, { repo: latest.text ? null : r, tasks: taskSetupJson(next) });
+          const text = mergeMarker(latest.text, { repo: latest.text || isLocal(r) ? null : r, tasks: taskSetupJson(next) });
           await gh.writeText(latest.at, MARKER, text, latest.sha, `Set up task fields in ${MARKER} from ${APP_NAME}`);
           useTaskSetup(r, taskSetup(taskSetupJson(next)));
-          toast(`Task fields saved in ${r.repo}.`, "ok");
+          toast(`Task fields saved in ${r.repo || r.label}.`, "ok");
           return true;
         } catch (e) {
           problem.textContent = e.message;
@@ -3377,14 +3400,165 @@ function showWelcome(joining = null) {
       joining ? guestSteps(joining) : tokenSteps(),
       h("div", { class: "inline-form" }, input, h("button", { class: "btn primary", onclick: go }, "Connect")),
       out,
-      h("p", { class: "fine" }, TOKEN_NOTE))));
+      h("p", { class: "fine" }, TOKEN_NOTE)),
+    joining ? null : h("div", { class: "card" },
+      h("h2", {}, icon("device"), "Or keep notes only on this device"),
+      h("p", {}, "No GitHub needed: the notes stay in a folder on this device (Chrome and Edge on a computer) or in this browser. They're not on your other devices, and you can connect GitHub later."),
+      h("button", { class: "btn", onclick: async () => {
+        const r = await addLocalVault();
+        if (r) redirect(hrefFor(r));
+      } }, icon("plus"), "Add a vault on this device"))));
+}
+
+// ================================================================
+// Local vaults: notes only on this device (src/local.js)
+// ================================================================
+
+/** The line under the toolbar in a local vault: it's only here, and (kept in the browser) how to keep a copy. */
+function renderLocalNote() {
+  const el = $("#local-note");
+  const r = app.repo;
+  el.hidden = !isLocal(r);
+  if (!isLocal(r) || el.dataset.repo === r.id) return;
+  el.dataset.repo = r.id;
+  const browser = r.local === "browser";
+  fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Only on this device:"), " not on GitHub, not on your other devices.",
+    browser ? " Kept in this browser, so it's lost if the browser's data is cleared." : "")),
+  browser ? h("button", { class: "btn small", onclick: () => downloadCopy(r) }, icon("download"), "Download a copy") : null);
+}
+
+/** Every file of a local vault as one zip, downloaded: the way to keep a copy of a vault kept in the browser. */
+async function downloadCopy(r) {
+  try {
+    const url = URL.createObjectURL(new Blob([await local.zip(r)], { type: "application/zip" }));
+    const a = h("a", { href: url, download: `${r.label.replace(/[\\/:*?"<>|]+/g, "-")} ${isoDate()}.zip`, hidden: true });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+/** Chrome's and Edge's folder picker; null when it's closed or refused. */
+async function pickFolder() {
+  try {
+    return await showDirectoryPicker({ id: "commonplace-local", mode: "readwrite" });
+  } catch (e) {
+    if (e?.name !== "AbortError") toast(e?.message || "The browser refused that folder.", "error");
+    return null;
+  }
+}
+
+/** A local vault that can't open yet: its folder needs the browser's OK again, or picking again. */
+function showLocalProblem(repo, e) {
+  closeFile();
+  app.pageTitle = repo.label;
+  renderHeader();
+  const retry = () => { app.trees.delete(repo.id); route(); };
+  if (e.need === "permission") {
+    return showMain(emptyState("folder", `Open ${repo.label}`,
+      `${e.message} Press Allow the folder, then Allow (or Allow on every visit, if the browser offers it).`,
+      h("button", { class: "btn primary", onclick: async () => {
+        if (await local.allow(repo)) retry();
+        else toast("The browser didn't allow the folder.", "error");
+      } }, icon("folder"), "Allow the folder")));
+  }
+  if (e.need === "folder") {
+    return showMain(emptyState("folder", `Pick ${repo.label}'s folder`, e.message,
+      canPickFolder() ? h("button", { class: "btn primary", onclick: async () => {
+        const handle = await pickFolder();
+        if (handle) { await local.create(repo, { handle }); retry(); }
+      } }, icon("folder"), "Pick the folder") : null));
+  }
+  showProblem(`Couldn't open ${repo.label}`, e.message, e);
+}
+
+/**
+ * Asks for a new local vault (a name, where it's kept, and what it starts with), makes it and adds it to the
+ * list. In Chrome and Edge it's a folder on the disk by default; elsewhere it's kept in the browser, and the
+ * dialog says why. Resolves to the new repo, or null.
+ */
+async function addLocalVault() {
+  const folderOk = canPickFolder();
+  const name = h("input", { class: "input", value: "My notes", spellcheck: "false", autocomplete: "off", "aria-label": "Name" });
+  const choice = (group, value, label, hint, checked = false) => h("label", { class: "check-line" },
+    h("input", { type: "radio", name: group, value, checked }),
+    h("span", {}, h("b", {}, label), h("br"), h("small", { class: "muted" }, hint)));
+  const where = folderOk
+    ? h("div", { class: "choices" },
+      choice("local-where", "folder", "A folder on this device",
+        "The notes are real .md files your agent and other tools can read and change. A folder that already holds notes opens as it is.", true),
+      choice("local-where", "browser", "In this browser", "Lost if the browser's data is cleared, so download a copy now and then."))
+    : h("p", { class: "fine" }, "This browser can't open a folder on the disk (only Chrome and Edge on a computer can), so the vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy).");
+  const start = h("div", { class: "choices" },
+    choice("local-start", "empty", "Empty", "One note to start from.", true),
+    choice("local-start", "example", "The example notes", "A note for every feature, to try them out. Needs the connection this once."));
+  const problem = h("p", { class: "fine" });
+  return modal({
+    title: "Add a vault on this device",
+    text: "Its notes stay only on this device: not on GitHub, not on your other devices. Save keeps them here, and nothing is sent anywhere.",
+    body: [
+      h("label", { class: "field" }, h("span", {}, "Name"), name),
+      h("div", { class: "field" }, h("span", {}, "Where it's kept"), where),
+      h("div", { class: "field" }, h("span", {}, "Start with"), start),
+      problem,
+    ],
+    buttons: [
+      { label: "Cancel", value: null },
+      { label: "Add vault", kind: "primary", onclick: async () => {
+        const label = name.value.trim() || "My notes";
+        const kind = folderOk && where.querySelector("input:checked")?.value === "folder" ? "folder" : "browser";
+        const example = start.querySelector("input:checked")?.value === "example";
+        let handle = null;
+        if (kind === "folder" && !(handle = await pickFolder())) return false;
+        problem.textContent = example ? "Getting the example notes…" : "Setting it up…";
+        try {
+          const seed = example ? await fetchExample() : emptyVault(label, kind);
+          let id = `local-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vault"}`;
+          while (app.repos.some((x) => x.id === id)) id += "-2";
+          const r = {
+            id, local: kind, label, owner: "", repo: "", branch: "", folder: "",
+            home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...(example ? EXAMPLE_SETTINGS : {}),
+          };
+          if (!(await local.create(r, { handle, seed }))) {
+            Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
+            toast(`${handle?.name || "The folder"} already holds files, so it opens as it is.`, "info", 6000);
+          }
+          app.repos.push(r);
+          store.set("repos", app.repos);
+          renderRepoPicker();
+          return r;
+        } catch (e) {
+          problem.textContent = e.message;
+          return false;
+        }
+      } },
+    ],
+  });
+}
+
+/** Removes a local vault from the list, at once: a browser vault's notes are deleted, a folder's stay on the disk. */
+async function removeLocalVault(r) {
+  const ok = await confirmDialog(`Remove ${r.label}?`, r.local === "folder"
+    ? "The app forgets it. The folder and its notes stay on the disk, so you can add it again."
+    : "Its notes are deleted from this browser and can't be brought back. Download a copy first to keep them.", "Remove", true);
+  if (!ok) return;
+  try { await local.remove(r); } catch (e) { toast(e.message, "error"); }
+  app.repos = app.repos.filter((x) => x.id !== r.id);
+  store.set("repos", app.repos);
+  app.trees.delete(r.id);
+  if (app.repo?.id === r.id) app.repo = null;
+  renderRepoPicker();
+  showSettings();
 }
 
 /** Opened straight from a link (or after Settings), the sidebar still shows the last repo's files. */
 async function ensureSidebar() {
-  if (app.repo || !app.token) return;
+  if (app.repo) return;
   const repo = app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0];
-  if (!repo) return;
+  if (!repo || !usable(repo)) return;
   app.repo = repo;
   renderRepoPicker();
   try {
@@ -3454,7 +3628,7 @@ function showSettings(adding = false, tokenOwner = "") {
         store.remove("token");
         store.remove("tokens");
         store.remove("user");
-        gh = new GitHub("");
+        gh = client("");
         app.trees.clear();
         app.repo = null;
         renderWho();
@@ -3517,17 +3691,26 @@ function showSettings(adding = false, tokenOwner = "") {
   const field = (label, name, value, hint, full) => h("label", { class: `field${full ? " full" : ""}` }, h("span", {}, label),
     h("input", { class: "input", name, value: value ?? "", spellcheck: "false", autocapitalize: "off", autocomplete: "off" }),
     hint ? h("small", {}, hint) : null);
-  const repoCard = (r, open = false) => h("details", { class: "repo-card", "data-id": r.id || "", open },
-    h("summary", {}, icon(r.vault ? "home" : "folder"),
-      h("span", {}, h("span", { class: "repo-name" }, r.label || "New repo"), h("br"),
-        h("span", { class: "repo-where" }, r.repo ? `${r.owner}/${r.repo} · ${r.branch}${r.folder ? ` · ${r.folder}/` : ""}` : "Fill in the fields below")),
+  const repoCard = (r, open = false) => {
+    const loc = isLocal(r);
+    const whereText = h("span", { class: "repo-where" }, loc ? `On this device · ${r.local === "folder" ? "a folder" : "in this browser"}`
+      : r.repo ? `${r.owner}/${r.repo} · ${r.branch}${r.folder ? ` · ${r.folder}/` : ""}` : "Fill in the fields below");
+    if (r.local === "folder") local.folderName(r).then((n) => { if (n) whereText.textContent = `On this device · the folder ${n}`; });
+    return h("details", { class: "repo-card", "data-id": r.id || "", "data-local": r.local || null, open },
+    h("summary", {}, icon(loc ? "device" : r.vault ? "home" : "folder"),
+      h("span", {}, h("span", { class: "repo-name" }, r.label || "New repo"), h("br"), whereText),
       icon("chevron", "chev")),
     h("div", { class: "repo-fields" },
-      field("Name shown", "label", r.label, "What the repo is called in the list at the top of the files. Empty: owner/repo.", true),
-      field("Owner", "owner", r.owner, "The GitHub user or organization the repo belongs to, as in github.com/owner/repo."),
-      field("Repo", "repo", r.repo, "The repo's name, as in github.com/owner/repo."),
-      field("Branch", "branch", r.branch, "The branch to read and save to. Empty: main."),
-      field("Folder", "folder", r.folder, "Show only this folder of the repo, e.g. notes. Empty: the whole repo. The paths below are inside it."),
+      loc ? h("p", { class: "full fine local-about" }, r.local === "folder"
+        ? "Only on this device: not on GitHub, not on your other devices. The notes are the files in the folder you picked: your agent and other tools can read and change them, and Reload shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder."
+        : "Only on this device, kept in this browser: not on GitHub, not on your other devices. It's lost if the browser's data is cleared (clearing the site's data, some private windows, or the browser making room), so download a copy now and then.") : null,
+      field("Name shown", "label", r.label, loc ? "What the vault is called in the list at the top of the files." : "What the repo is called in the list at the top of the files. Empty: owner/repo.", true),
+      loc ? null : [
+        field("Owner", "owner", r.owner, "The GitHub user or organization the repo belongs to, as in github.com/owner/repo."),
+        field("Repo", "repo", r.repo, "The repo's name, as in github.com/owner/repo."),
+        field("Branch", "branch", r.branch, "The branch to read and save to. Empty: main."),
+        field("Folder", "folder", r.folder, "Show only this folder of the repo, e.g. notes. Empty: the whole repo. The paths below are inside it."),
+      ],
       field("Start page", "home", r.home, "The note that opens first, e.g. Home.md."),
       field("Inbox page", "inbox", r.inbox, "A note for quick notes and tasks, e.g. Notes/Inbox.md. It gets an Inbox button. Empty: no button."),
       field("Inboxes folder", "inboxes", r.inboxes, "A folder with one inbox per person, e.g. Notes/Inboxes. The Inbox button opens the note whose github property is your GitHub login."),
@@ -3536,6 +3719,10 @@ function showSettings(adding = false, tokenOwner = "") {
       h("label", { class: "check-line full" }, h("input", { type: "checkbox", name: "vault", checked: !!r.vault }),
         h("span", {}, "Vault rules: the generated navigation box (between %% nav: … %% and %% /nav %%) is folded and can't be edited, and links that lead to no page are warned about")),
       h("div", { class: "full card-actions" },
+        loc ? h("button", { class: "btn small", type: "button", title: "Every file of this vault in one zip", onclick: () => downloadCopy(r) },
+          icon("download"), "Download a copy") : null,
+        loc ? h("button", { class: "btn small", type: "button", title: "The fields every task in this vault has: type, parent, sprint, estimate, your own",
+          onclick: () => editTaskFields(r) }, icon("todo"), "Task fields") : null,
         r.repo ? h("button", { class: "btn small", type: "button", onclick: async () => {
           try {
             await navigator.clipboard.writeText(inviteLink(r));
@@ -3548,7 +3735,9 @@ function showSettings(adding = false, tokenOwner = "") {
           onclick: () => shareRepoSettings(r) }, icon("upload"), "Share with everyone") : null,
         r.repo ? h("button", { class: "btn small", type: "button", title: "The fields every task in this repo has: type, parent, sprint, estimate, your own",
           onclick: () => editTaskFields(r) }, icon("todo"), "Task fields") : null,
-        h("button", { class: "btn small danger", type: "button", onclick: (e) => e.target.closest("details").remove() }, icon("trash"), "Remove this repo"))));
+        h("button", { class: "btn small danger", type: "button", onclick: (e) => (loc ? removeLocalVault(r) : e.target.closest("details").remove()) },
+          icon("trash"), loc ? "Remove this vault" : "Remove this repo"))));
+  };
   const newCard = () => repoCard({ owner: store.get("user")?.login || "", branch: "main", home: "README.md" }, true);
   forms.append(...app.repos.map((r) => repoCard(r)));
   if (adding || !app.repos.length) forms.append(newCard());
@@ -3556,6 +3745,15 @@ function showSettings(adding = false, tokenOwner = "") {
     const ids = new Set();
     const repos = [...forms.querySelectorAll("details.repo-card")].map((card) => {
       const v = (n) => card.querySelector(`[name=${n}]`).value.trim();
+      if (card.dataset.local) {
+        const old = app.repos.find((x) => x.id === card.dataset.id);
+        if (!old) return null;
+        ids.add(old.id);
+        return {
+          ...old, label: v("label") || old.label, inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
+          notes: cleanDir(v("notes")), template: cleanDir(v("template")), vault: card.querySelector("[name=vault]").checked,
+        };
+      }
       const r = {
         label: v("label"), owner: v("owner"), repo: v("repo"), branch: v("branch") || "main",
         folder: cleanDir(v("folder")), inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
@@ -3566,12 +3764,12 @@ function showSettings(adding = false, tokenOwner = "") {
       while (ids.has(id)) id += "-2";
       ids.add(id);
       return { id, ...r, label: r.label || `${r.owner}/${r.repo}` };
-    }).filter((r) => r.owner && r.repo);
+    }).filter((r) => r && (isLocal(r) || (r.owner && r.repo)));
     // A repo removed by hand isn't added back by the look for vaults on GitHub; one added again is.
     const kept = new Set(repos.map(repoKey));
     const discovery = store.get("discovery") || {};
     const removed = new Set((discovery.removed || []).filter((k) => !kept.has(k)));
-    for (const r of app.repos) if (!kept.has(repoKey(r))) removed.add(repoKey(r));
+    for (const r of app.repos) if (!isLocal(r) && !kept.has(repoKey(r))) removed.add(repoKey(r));
     store.set("discovery", { ...discovery, removed: [...removed] });
     app.repos = repos;
     store.set("repos", repos);
@@ -3584,12 +3782,16 @@ function showSettings(adding = false, tokenOwner = "") {
   const repos = h("section", { class: "card" },
     h("h2", {}, icon("folder"), "Notes repos"),
     h("p", {}, app.repos.length
-      ? "The GitHub repos the app opens. Switch between them at the top of the file list."
+      ? "The GitHub repos and the vaults on this device the app opens. Switch between them at the top of the file list."
       : "No repos yet. Fill in the one that holds your notes (Owner and Repo are enough to start), then press Save repos."),
     h("p", { class: "fine" }, `Repos you can save to that have a ${MARKER} at the top are added by themselves. To share a repo's settings with everyone who can save to it, open it below and press Share with everyone.`),
     forms,
     h("div", { class: "card-actions" },
       h("button", { class: "btn", onclick: () => forms.append(newCard()) }, icon("plus"), "Add a repo"),
+      h("button", { class: "btn", title: "A vault only on this device: in a folder, or in this browser. No GitHub needed.", onclick: async () => {
+        const r = await addLocalVault();
+        if (r) location.hash = hrefFor(r);
+      } }, icon("device"), "Add a vault on this device"),
       h("button", { class: "btn", title: `Adds the repos you can save to that have a ${MARKER}`, onclick: async (e) => {
         const button = e.currentTarget;
         button.disabled = true;

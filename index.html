@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src blob:">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1b1b1f" media="(prefers-color-scheme: dark)">
@@ -67,6 +67,7 @@
       <span data-icon="history">There are newer notes on GitHub than the ones you have open.</span>
       <button id="nudge-reload" class="btn small" data-icon="reload">Reload</button>
     </div>
+    <div id="local-note" class="nudge local-note" hidden role="note"></div>
     <main id="main"></main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>

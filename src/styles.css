@@ -368,6 +368,11 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
 .nudge[hidden] { display: none; }
 .nudge > span { display: inline-flex; align-items: center; gap: 7px; }
 .nudge .icon { width: 16px; height: 16px; color: var(--accent); }
+/* a local vault: only on this device */
+.local-note { background: var(--bg-soft); }
+.local-note > span { text-align: center; }
+.choices { display: grid; gap: 4px; }
+.choices .check-line { margin-bottom: 4px; }
 
 .seg {
   display: inline-flex;
