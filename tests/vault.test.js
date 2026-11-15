@@ -792,9 +792,21 @@ test("a vault's people come from its inboxes' github and owner, each login once"
 test("a new-tasks block: its owner and its items, list marks and checkboxes taken off", async () => {
   const { newTasksBlock } = await import("../src/vault.js");
   assert.deepEqual(newTasksBlock("owner: Ann Lee\n- Buy milk\n\n* [ ] Fix the [[Home]] page\n2. Call @bob\nPlain line: with a colon\n"),
-    { owner: "Ann Lee", items: ["Buy milk", "Fix the [[Home]] page", "Call @bob", "Plain line: with a colon"] });
-  assert.deepEqual(newTasksBlock(""), { owner: "", items: [] });
-  assert.deepEqual(newTasksBlock("  Owner : 'Bo'\n-   \n"), { owner: "Bo", items: [] });
+    { owner: "Ann Lee", items: ["Buy milk", "Fix the [[Home]] page", "Call @bob", "Plain line: with a colon"], lines: [1, 3, 4, 5] });
+  assert.deepEqual(newTasksBlock(""), { owner: "", items: [], lines: [] });
+  assert.deepEqual(newTasksBlock("  Owner : 'Bo'\n-   \n"), { owner: "Bo", items: [], lines: [] });
+});
+
+test("a new-tasks item is changed on its line, keeping its mark, or taken out when empty", async () => {
+  const { editNewTask } = await import("../src/vault.js");
+  const note = "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\nThree\n```\n";
+  assert.equal(editNewTask(note, 4, "One", "  One, said\nbetter "), "# Inbox\n\n```new-tasks\nowner: Ann\n- One, said better\n* [ ] Two\nThree\n```\n");
+  assert.equal(editNewTask(note, 5, "Two", "2"), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] 2\nThree\n```\n");
+  assert.equal(editNewTask(note, 6, "Three", "3"), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\n3\n```\n");
+  assert.equal(editNewTask(note, 5, "Two", "  "), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\nThree\n```\n", "empty: taken out");
+  assert.equal(editNewTask(note.replace(/\n/g, "\r\n"), 4, "One", "1"), "# Inbox\n\n```new-tasks\nowner: Ann\n- 1\n* [ ] Two\nThree\n```\n", "CRLF");
+  assert.equal(editNewTask(note, 4, "Something else", "1"), note, "the line changed since: nothing");
+  assert.equal(editNewTask(note, 99, "One", "1"), note, "no such line");
 });
 
 test("an item added to a new-tasks block goes just above its closing fence, or last when it has none", async () => {

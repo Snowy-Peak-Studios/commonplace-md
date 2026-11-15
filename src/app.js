@@ -10,7 +10,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
@@ -1770,30 +1770,58 @@ function loadMentions(repo, login) {
 // ---- new tasks: a ```new-tasks block's box ----
 
 /**
- * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field: the item
- * goes into the block like a ticked checkbox changes its line (the note changes, Save commits it), and the field
- * keeps the focus, for the next one.
+ * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field, and each
+ * item an Edit and a Remove button. A change goes into the block like a ticked checkbox changes its line (the
+ * note changes, Save commits it). After Add the field keeps the focus, for the next one.
  */
 function fillNewTasks(root, f) {
   if (!canWrite(f.repo)) return;
   const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
+  const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n];
+  // Puts the changed note in place and draws it again where it was; false when nothing changed.
+  const apply = (next) => {
+    if (app.file !== f || next === f.text) return false;
+    f.text = next;
+    if (f.editor) setEditorText(f.editor, f.text);
+    updateDirty();
+    const scroll = $("#main").scrollTop;
+    renderPreview();
+    $("#main").scrollTop = scroll;
+    return true;
+  };
   boxes.forEach((el, n) => {
     const close = Number(el.dataset.close);
     if (!(close >= 0)) return;
+    for (const li of el.querySelectorAll(".newtasks-list li[data-line]")) {
+      const line = Number(li.dataset.line);
+      const was = li.dataset.item;
+      const text = li.querySelector(".newtasks-text");
+      const edit = () => {
+        const input = h("input", { class: "input", value: was, "aria-label": "Change this task", autocomplete: "off", enterkeyhint: "done",
+          onkeydown: (e) => { if (e.key === "Escape") { e.preventDefault(); form.replaceWith(text, tools); } } });
+        const form = h("form", { class: "newtasks-edit", onsubmit: (e) => {
+          e.preventDefault();
+          if (!apply(editNewTask(f.text, line, was, input.value))) form.replaceWith(text, tools);
+        } }, input,
+        h("button", { class: "btn small", type: "submit", title: "Keep the change (empty takes it out)" }, icon("check"), "Done"),
+        h("button", { class: "btn small ghost", type: "button", onclick: () => form.replaceWith(text, tools) }, "Cancel"));
+        tools.remove();
+        text.replaceWith(form);
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      };
+      const tools = h("span", { class: "newtasks-tools" },
+        h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: edit }, icon("edit")),
+        h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out",
+          onclick: () => apply(editNewTask(f.text, line, was, "")) }, icon("x")));
+      li.append(tools);
+    }
     const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
     el.append(h("form", { class: "newtasks-add", onsubmit: (e) => {
       e.preventDefault();
       const said = input.value.trim();
-      if (!said || app.file !== f) return;
-      const next = addNewTask(f.text, close, said);
-      if (next === f.text) return;
-      f.text = next;
-      if (f.editor) setEditorText(f.editor, f.text);
-      updateDirty();
-      const scroll = $("#main").scrollTop;
-      renderPreview();
-      $("#main").scrollTop = scroll;
-      [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n]?.querySelector(".newtasks-add input")?.focus();
+      if (!said || !apply(addNewTask(f.text, close, said))) return;
+      boxAt(n)?.querySelector(".newtasks-add input")?.focus();
     } }, input, h("button", { class: "btn small", type: "submit" }, icon("plus"), "Add")));
   });
 }

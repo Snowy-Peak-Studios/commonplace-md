@@ -234,17 +234,37 @@ export function ownInboxPath(notes, login, fallback = "") {
 
 /**
  * A ```new-tasks block's content: its `owner:` line (whose items they are) and its items, one per other
- * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `).
+ * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `). `lines` has each item's
+ * line in the content (from 0), so the box can change it.
  */
 export function newTasksBlock(src) {
-  const out = { owner: "", items: [] };
-  for (const line of String(src ?? "").split("\n")) {
+  const out = { owner: "", items: [], lines: [] };
+  String(src ?? "").split("\n").forEach((line, n) => {
     const m = line.match(/^\s*owner\s*:\s*(.*?)\s*$/i);
-    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); continue; }
-    const item = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
-    if (item) out.items.push(item);
-  }
+    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); return; }
+    const item = line.replace(ITEM_MARK, "").trim();
+    if (item) { out.items.push(item); out.lines.push(n); }
+  });
   return out;
+}
+
+/** A new-tasks item's leading list mark and checkbox, if it has them. */
+const ITEM_MARK = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/;
+
+/**
+ * The note with the ```new-tasks item on line `line` (from 0) changed to `now`, keeping its list mark and
+ * checkbox, or taken out when `now` is empty. Nothing changes unless that line still holds the item `was`
+ * (the note may have changed since the box was drawn).
+ */
+export function editNewTask(text, line, was, now) {
+  const lines = toLf(text).split("\n");
+  if (!(line >= 0 && line < lines.length)) return text;
+  const mark = lines[line].match(ITEM_MARK)?.[0] ?? "";
+  if (lines[line].slice(mark.length).trim() !== String(was ?? "").trim()) return text;
+  const said = String(now ?? "").replace(/\s*\n\s*/g, " ").trim();
+  if (said) lines[line] = mark + said;
+  else lines.splice(line, 1);
+  return lines.join("\n");
 }
 
 /**

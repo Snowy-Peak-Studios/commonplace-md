@@ -171,7 +171,8 @@ test("a new-tasks block is a box with its items rendered, its owner, and its clo
   const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
   assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
   assert.match(html, /<small class="muted">For Ana Lee · 2 items · Your agent turns them into tasks<\/small>/);
-  assert.match(html, /<ul class="newtasks-list"><li>Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/li><li><strong>Bold<\/strong> one<\/li><\/ul><\/section>/);
+  assert.match(html, /<ul class="newtasks-list"><li data-line="4" data-item="Read \[\[Home\]\]"><span class="newtasks-text">Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/span><\/li>/);
+  assert.match(html, /<li data-line="5" data-item="\*\*Bold\*\* one"><span class="newtasks-text"><strong>Bold<\/strong> one<\/span><\/li><\/ul><\/section>/);
   const none = render("```new-tasks\n```\n");
   assert.match(none, /No owner: line, so no agent sorts these/);
   assert.match(none, /<li class="muted">Nothing yet\.<\/li>/);

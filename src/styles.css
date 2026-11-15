@@ -761,6 +761,12 @@ a.mention:hover { text-decoration: underline; }
 .cm-tooltip-autocomplete .cm-completionDetail { color: var(--muted); font-style: normal; margin-left: 8px; }
 .newtasks-add { display: flex; gap: 8px; margin-top: 10px; }
 .newtasks-add .input { flex: 1; min-width: 0; }
+.preview .newtasks-list li[data-line] { flex-wrap: nowrap; }
+.newtasks-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.newtasks-tools { display: flex; flex: none; margin-left: auto; }
+.newtasks-tools .icon-btn { width: 28px; height: 28px; }
+.newtasks-edit { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.newtasks-edit .input { flex: 1 1 12em; min-width: 0; }
 .newtasks .suggest-head [data-icon] { display: inline-flex; }
 .chip.kind { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .chip.kind-question { color: var(--warn); }

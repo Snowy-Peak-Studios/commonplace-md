@@ -36,7 +36,7 @@ Write `@` and someone's GitHub login to mention them: @your-github-login, have a
 
 ## New tasks anywhere
 
-A ` ```new-tasks ` block catches ideas right where you have them, on any page: write one per line, or use **Add** in the box. Its `owner:` says whose they are; their agent finds every such block in the vault and turns each item into a task.
+A ` ```new-tasks ` block catches ideas right where you have them, on any page: write one per line, or use **Add** in the box; the pencil beside an item changes it, and the cross takes it out. Its `owner:` says whose they are; their agent finds every such block in the vault and turns each item into a task.
 
 ```new-tasks
 owner: Your name

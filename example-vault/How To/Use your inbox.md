@@ -25,7 +25,7 @@ owner: Your name
 - Add three books to the reading list
 ```
 
-In Read mode it's a box with the items, and **Add** puts a new one in (then **Save**). The block works on any page: write ideas down where you have them, like the one in the [Guide](../Guide.md). Your agent looks for every ` ```new-tasks ` block with your name in the whole vault, turns each item into a task, and takes it out of the block.
+In Read mode it's a box with the items: **Add** puts a new one in, the pencil beside an item changes its text (Enter keeps it, Escape leaves it as it was), and the cross takes it out. Then **Save**. The block works on any page: write ideas down where you have them, like the one in the [Guide](../Guide.md). Your agent looks for every ` ```new-tasks ` block with your name in the whole vault, turns each item into a task, and takes it out of the block.
 
 ## Needs attention: questions and mentions
 

@@ -82,7 +82,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).
-  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field; your agent finds every one in the vault and turns them into tasks.
+  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field, and each item can be changed or taken out right in the box; your agent finds every one in the vault and turns them into tasks.
   - A ` ```needs-attention ` block shows what waits on you: the tasks with a question for you, and the places that mention you, in one box or two.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.

@@ -183,14 +183,17 @@ export function createMarkdown() {
         + ` data-sprint="${sprint}" data-owner="${esc(owner)}" data-fields="${esc(fields.join(","))}"${fieldsSet ? "" : ' data-fields-default="1"'}>`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
-    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field. `data-close`
-    // is its closing fence's line, where Add puts a new item.
+    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field, and Edit
+    // and Remove on each item. `data-close` is its closing fence's line, where Add puts a new item; each item
+    // has its own line and text (`data-line`, `data-item`).
     if (lang === "new-tasks") {
-      const { owner, items } = newTasksBlock(token.content);
+      const { owner, items, lines } = newTasksBlock(token.content);
       const close = token.map ? token.map[1] - 1 : -1;
       const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
         : "No owner: line, so no agent sorts these";
-      const list = items.length ? items.map((item) => `<li>${md.renderInline(item, env)}</li>`).join("") : '<li class="muted">Nothing yet.</li>';
+      const at = (i) => (token.map ? ` data-line="${token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
+      const list = items.length ? items.map((item, i) => `<li${at(i)}><span class="newtasks-text">${md.renderInline(item, env)}</span></li>`).join("")
+        : '<li class="muted">Nothing yet.</li>';
       return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
         + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
         + `<ul class="newtasks-list">${list}</ul></section>\n`;
