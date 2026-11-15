@@ -9,8 +9,11 @@ import { GitHubError, blobSha } from "./github.js";
 /** Whether a repo is a local vault: "folder" (a folder on the disk) or "browser" (kept in this browser). */
 export const isLocal = (r) => r?.local === "folder" || r?.local === "browser";
 
-/** Whether this browser can open a folder on the disk (Chrome and Edge on a computer). */
+/** Whether this browser can open a folder on the disk (Chrome and Edge on a computer; Brave once it's turned on). */
 export const canPickFolder = () => typeof globalThis.showDirectoryPicker === "function";
+
+/** Brave: built on Chrome, but it turns opening folders off by default (a flag turns it on). */
+export const isBrave = () => !!globalThis.navigator?.brave;
 
 /** Something a local vault needs before it opens: `need` is "permission" (one tap to allow the folder again) or "folder". */
 export class LocalError extends GitHubError {

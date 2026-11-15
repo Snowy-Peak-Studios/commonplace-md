@@ -2,7 +2,7 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
-import { LocalSource, withLocal, isLocal, canPickFolder, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
@@ -3438,7 +3438,7 @@ function showWelcome(joining = null) {
       h("p", { class: "fine" }, TOKEN_NOTE)),
     joining ? null : h("div", { class: "card" },
       h("h2", {}, icon("device"), "Or keep notes only on this device"),
-      h("p", {}, "No GitHub needed: the notes stay in a folder on this device (Chrome and Edge on a computer) or in this browser. They're not on your other devices, and you can connect GitHub later."),
+      h("p", {}, "No GitHub needed: the notes stay in a folder on this device (Chrome and Edge on a computer, Brave once it's turned on) or in this browser. They're not on your other devices, and you can connect GitHub later."),
       h("button", { class: "btn", onclick: async () => {
         const r = await addLocalVault();
         if (r) redirect(hrefFor(r));
@@ -3548,7 +3548,8 @@ function copyField(r) {
         } }, icon("device"), "Keep it in this browser instead"));
     } else {
       fill(text, "Kept in this browser, so the vault opens with no connection. ",
-        canPickFolder() ? "It can be a folder on the disk instead, like the repo's clone: other tools and agents then read the same files, and each commit updates them." : null);
+        canPickFolder() ? "It can be a folder on the disk instead, like the repo's clone: other tools and agents then read the same files, and each commit updates them."
+          : isBrave() ? noFolderText("it stays in this browser. Once it's on, it can be a folder on the disk instead, like the repo's clone.") : null);
       fill(actions, canPickFolder() ? h("button", { class: "btn small", type: "button", onclick: async () => {
         const handle = await pickCopyFolder(r);
         if (handle) { await mirror.useFolder(r, handle); toast(`The copy is kept in ${handle.name} now.`, "ok"); changed(); }
@@ -3587,6 +3588,18 @@ async function downloadCopy(r) {
     toast(e.message, "error");
   }
 }
+
+/** Brave's own switch for opening folders, which it turns off by default. */
+const BRAVE_FLAG = "brave://flags/#file-system-access-api";
+
+/**
+ * Why a folder can't be opened here, then `rest`: in Brave, how to turn it on (Brave keeps it off by default);
+ * in other browsers, which ones can.
+ */
+const noFolderText = (rest) => (isBrave()
+  ? h("span", {}, "Brave turns off opening folders by default. To turn it on, open ", h("code", {}, BRAVE_FLAG),
+    " (copy it into the address bar), set it to ", h("b", {}, "Enabled"), " and restart Brave. Until then, ", rest)
+  : h("span", {}, "This browser doesn't let pages open a folder on the disk (Chrome, Edge and Brave on a computer do), so ", rest));
 
 /** Chrome's and Edge's folder picker; null when it's closed or refused. */
 async function pickFolder() {
@@ -3670,7 +3683,7 @@ async function addLocalVault() {
   const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start);
   const fine = h("p", { class: "fine" }, folderOk
     ? "The browser shows the app only the folder's name, not its whole path on the disk."
-    : "This browser can't open a folder on the disk (only Chrome and Edge on a computer can), so a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy).");
+    : noFolderText("a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy)."));
   const problem = h("p", { class: "fine bad" });
   function sync() {
     const opening = folderOk && value(mode) === "open";

@@ -141,12 +141,12 @@ flowchart LR
 Notes only on this device: not on GitHub, not on your other devices. No account and no token.
 
 1. Open the app. On the first page press **Add a vault on this device** (or later: **Settings › Notes repos › Add a vault on this device**).
-2. Pick one (Chrome and Edge on a computer):
+2. Pick one (Chrome and Edge on a computer; in Brave, first turn on `brave://flags/#file-system-access-api` and restart it, since Brave keeps opening folders off):
    - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or the example notes). The app makes a new folder with the vault's name inside that location.
    - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
 3. Either way the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder. The browser shows the app only the folder's name, not its whole path.
 
-A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari and on phones, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
+A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari, on phones, and in Brave until it's turned on, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
 
 **Save** saves on the device; nothing is sent anywhere. A local vault always says so, in the list of vaults (*on this device*) and in a line above the note.
 
