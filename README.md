@@ -2,6 +2,8 @@
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
+Don't rely on your agent's memory: make your own vault with all the answers.
+
 ## What it is
 
 A tool for your everyday. The big work tools cost a lot and do so much that most people on a team just don't use them. Commonplace.md is the simple alternative: a wiki, notes and a task board that the whole team actually opens.

@@ -4,6 +4,8 @@ parent: "[[Home]]"
 
 # How To
 
+Don't rely on your agent's memory: make your own vault with all the answers. These pages show how.
+
 Short steps for the things people do in Commonplace.md, one page each. They read the same on GitHub and in the app: the links between them are plain Markdown links, which both follow.
 
 ## Getting started
