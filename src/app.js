@@ -188,6 +188,25 @@ const local = new LocalSource();
 /** Each GitHub vault's copy on this device (`src/mirror.js`): its reads and saves go through it. */
 const mirror = new Mirror();
 const client = (token, tokens = {}) => withLocal(new GitHub(token, tokens), local, mirror);
+mirror.onChange = (r) => {
+  const tree = app.trees.get(r.id);
+  if (tree) {
+    const prefix = r.folder ? r.folder.replace(/\/+$/, "") + "/" : "";
+    tree.changed = new Set([...mirror.changedPaths(r)].filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length)));
+    if (!mirror.info(r).offline) tree.offline = false;
+  }
+  if (app.repo?.id === r.id) { renderHeader(); renderTree(); }
+};
+/** Where a GitHub vault's file stands in its copy: "waiting", "conflict", "gone", "changed" or "". */
+const copyStatus = (repo, path) => (repo && !isLocal(repo) ? mirror.status(repo, fullPath(repo, path)) : "");
+const COPY_BADGE = {
+  waiting: ["Waiting to upload", "Saved on this device; it goes to GitHub when the connection is back."],
+  conflict: ["Changed on GitHub too", "Saved on this device while the note changed on GitHub too. The line above the note compares them."],
+  gone: ["Deleted on GitHub", "Saved on this device while the note was deleted or moved on GitHub. The line above the note can save it as a new note."],
+  changed: ["Not on GitHub", "Changed on this device (by another tool or agent), not on GitHub. Upload sends it; the app never overwrites it."],
+};
+/** A note changed here and not saved to GitHub can be uploaded with Save (as Upload), even with no unsaved changes. */
+const uploadable = (f) => !!f && !viewOnly(f.kind) && ["changed", "waiting", "gone"].includes(copyStatus(f.repo, f.path));
 let gh = client(app.token, tokenMap());
 /** Whether the app can open a repo: one on GitHub needs a token, a local vault doesn't. */
 const usable = (repo = app.repo) => !!app.token || isLocal(repo);
@@ -337,10 +356,13 @@ function treeChanged(repo, path, sha) {
   }
 }
 
-const fileRow = (repo, path, iconName = iconFor(path), label = shownName(path), sub = null, dot = "") =>
-  h("a", { class: "row file", href: hrefFor(repo, path), "data-path": path, title: dot ? `${path}: ${dot}` : path },
+const fileRow = (repo, path, iconName = iconFor(path), label = shownName(path), sub = null, dot = "") => {
+  const wait = !dot && COPY_BADGE[copyStatus(repo, path)]?.[0];
+  return h("a", { class: "row file", href: hrefFor(repo, path), "data-path": path, title: dot ? `${path}: ${dot}` : wait ? `${path}: ${wait}` : path },
     icon(iconName), h("span", { class: "name" }, label, sub ? h("small", {}, sub) : null),
-    dot ? h("span", { class: "inbox-dot", role: "img", "aria-label": dot }) : null);
+    dot ? h("span", { class: "inbox-dot", role: "img", "aria-label": dot }) : null,
+    wait ? h("span", { class: "wait-dot", role: "img", "aria-label": wait }) : null);
+};
 
 // ---- the Inbox dot: something in your own inbox needs you ----
 
@@ -579,8 +601,8 @@ function renderHeader() {
     fill(title, dir ? h("span", { class: "crumbs" }, dir.split("/").join(" / ") + " /") : null,
       h("span", { class: "name" }, shownName(f.path)), f.dirty ? h("span", { class: "dirty", title: "Not saved yet" }) : null,
       writable ? null : h("span", { class: "badge", title: "You can read this repo but not change it" }, "Read only"),
-      app.trees.get(f.repo.id)?.changed?.has(f.path)
-        ? h("span", { class: "badge", title: "Changed on this device (by another tool or agent), not on GitHub. The app shows it as it is here and never overwrites it." }, "Not on GitHub")
+      COPY_BADGE[copyStatus(f.repo, f.path)]
+        ? h("span", { class: "badge", title: COPY_BADGE[copyStatus(f.repo, f.path)][1] }, COPY_BADGE[copyStatus(f.repo, f.path)][0])
         : null);
     title.title = f.path;
   } else {
@@ -599,9 +621,9 @@ function renderHeader() {
   }
   const save = $("#save-btn");
   save.hidden = !f || viewOnly(f.kind) || !writable;
-  save.disabled = !f?.dirty || app.saving;
+  save.disabled = !(f?.dirty || uploadable(f)) || app.saving;
   save.classList.toggle("busy", app.saving);
-  const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : ["check", "Saved"];
+  const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : uploadable(f) ? ["upload", "Upload"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
   document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
 }
@@ -2770,7 +2792,7 @@ function renderTable() {
 
 async function save() {
   const f = app.file;
-  if (!f?.dirty || app.saving || viewOnly(f.kind)) return;
+  if (!(f?.dirty || uploadable(f)) || app.saving || viewOnly(f.kind)) return;
   const text = toLf(f.text);
   app.saving = true;
   renderHeader();
@@ -2785,7 +2807,8 @@ async function save() {
     store.remove(draftKey(f));
     treeChanged(f.repo, f.path, res.sha);
     updateLinkWarning();
-    toast(`Saved to ${savedOn(f.repo)}`, "ok");
+    if (res.waiting) toast("Saved on this device. It goes to GitHub when the connection is back.", "ok", 5000);
+    else toast(`Saved to ${savedOn(f.repo)}`, "ok");
   } catch (e) {
     if (e.isConflict) resolveConflict(f);
     else toast(`Not saved: ${e.message}`, "error");
@@ -2824,6 +2847,7 @@ async function resolveConflict(f) {
   if (choice === "theirs") {
     f.saved = f.text = latest.text;
     store.remove(draftKey(f));
+    if (!isLocal(f.repo)) await mirror.settle(f.repo, fullPath(f.repo, f.path), latest.text, latest.sha);
     afterOutsideChange(f);
     toast(`Showing the version from ${savedOn(f.repo)}`, "ok");
   } else {
@@ -3432,11 +3456,46 @@ function renderLocalNote() {
   const r = app.repo;
   const tree = r && app.trees.get(r.id);
   const copy = r && !isLocal(r) ? mirror.info(r) : null;
-  const kind = isLocal(r) ? "local" : tree?.offline ? `offline:${tree.syncedAt}` : copy?.needsAllow ? "allow" : "";
+  const here = app.file && app.file.repo === r ? copyStatus(r, app.file.path) : "";
+  const waits = copy ? [...mirror.changedPaths(r)].map((p) => mirror.status(r, p)) : [];
+  const count = (st) => waits.filter((w) => w === st).length;
+  const kind = isLocal(r) ? "local" : copy?.needsAllow ? "allow" : here === "conflict" || here === "gone" ? here
+    : tree?.offline ? `offline:${tree.syncedAt}:${count("waiting")}` : count("conflict") || count("gone") ? `trouble:${count("conflict")}:${count("gone")}`
+      : count("waiting") ? `waiting:${count("waiting")}` : "";
   el.hidden = !kind;
-  const key = `${r?.id}|${kind}`;
+  const key = `${r?.id}|${app.file?.path}|${kind}`;
   if (!kind || el.dataset.key === key) return;
   el.dataset.key = key;
+  const upload = async () => {
+    const { uploaded, waiting } = await mirror.flush(r);
+    if (uploaded) toast(`Uploaded ${uploaded} ${uploaded === 1 ? "save" : "saves"} to GitHub.`, "ok");
+    else if (waiting) toast("Not uploaded: GitHub can't be reached yet, or it refused. They keep waiting here.", "error");
+  };
+  if (kind === "conflict") {
+    return fill(el, h("span", {}, icon("warning"), h("span", {}, h("b", {}, "Changed on GitHub too: "),
+      "this note was saved here while it changed on GitHub. Compare them and pick, or merge.")),
+    h("button", { class: "btn small", onclick: () => resolveConflict(app.file) }, icon("columns"), "Compare"));
+  }
+  if (kind === "gone") {
+    return fill(el, h("span", {}, icon("warning"), h("span", {}, h("b", {}, "Deleted on GitHub: "),
+      "this note was deleted or moved on GitHub while your save waited here.")),
+    h("button", { class: "btn small", onclick: async () => {
+      await mirror.recreate(r, fullPath(r, app.file.path));
+      toast(copyStatus(r, app.file.path) ? "Not saved yet: GitHub can't be reached, or it refused." : "Saved to GitHub as a new note.", copyStatus(r, app.file.path) ? "error" : "ok");
+    } }, icon("upload"), "Save it as a new note"));
+  }
+  if (kind.startsWith("trouble:")) {
+    const first = [...mirror.changedPaths(r)].find((p) => ["conflict", "gone"].includes(mirror.status(r, p)));
+    const rel = first && r.folder ? first.slice(r.folder.replace(/\/+$/, "").length + 1) : first;
+    return fill(el, h("span", {}, icon("warning"), h("span", {}, h("b", {}, `${count("conflict") + count("gone")} saved here `),
+      "couldn't go to GitHub: their notes changed or were deleted there meanwhile.")),
+    rel ? h("a", { class: "btn small", href: hrefFor(r, rel) }, icon("file"), `Open ${shownName(rel)}`) : null);
+  }
+  if (kind.startsWith("waiting:")) {
+    return fill(el, h("span", {}, icon("upload"), h("span", {}, h("b", {}, `${count("waiting")} ${count("waiting") === 1 ? "save" : "saves"} waiting `),
+      "to upload to GitHub. They're only on this device until then.")),
+    h("button", { class: "btn small", onclick: upload }, icon("upload"), "Upload now"));
+  }
   if (kind === "allow") {
     return fill(el, h("span", {}, icon("folder"), h("span", {}, "This vault's copy is in the folder ", h("b", {}, copy.needsAllow),
       ". The browser asks for your OK each time it's opened.")),
@@ -3450,9 +3509,11 @@ function renderLocalNote() {
   }
   if (kind !== "local") {
     const when = tree.syncedAt ? new Date(tree.syncedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
+    const n = count("waiting");
     return fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Offline:"),
-      ` showing the copy on this device${when ? ` from ${when}` : ""}. Saving needs a connection.`)),
-    h("button", { class: "btn small", onclick: reloadFromGitHub }, icon("reload"), "Try again"));
+      ` showing the copy on this device${when ? ` from ${when}` : ""}. Saves wait here and go to GitHub when the connection is back`,
+      n ? ` (${n} waiting).` : ".")),
+    h("button", { class: "btn small", onclick: async () => { await upload(); reloadFromGitHub(); } }, icon("reload"), "Try again"));
   }
   const browser = r.local === "browser";
   fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Only on this device:"), " not on GitHub, not on your other devices.",
@@ -3911,8 +3972,30 @@ function showSettings(adding = false, tokenOwner = "") {
       } }, icon("trash"), "Drop the copy") : null);
     });
   }
+  const waitingBox = h("div", { class: "field", hidden: true }, h("span", {}, "Waiting to upload"),
+    h("small", { class: "hint" }, "Saved on this device and not on GitHub yet. Saves made with no connection go by themselves when it's back; files changed by other tools go only when you press Upload. Until then they're only here: clearing the browser's data loses the list (a copy in a folder keeps the files)."));
+  const waitingList = h("ul", { class: "checks copies" });
+  waitingBox.append(waitingList);
+  const WAIT_TEXT = { waiting: "waiting", conflict: "changed on GitHub too: open it to compare", gone: "deleted or moved on GitHub: open it to save it as a new note", changed: "changed by another tool" };
+  for (const r of copyRepos) {
+    mirror.waitingList(r).then((items) => {
+      for (const w of items) {
+        const rel = r.folder && w.path.startsWith(`${r.folder.replace(/\/+$/, "")}/`) ? w.path.slice(r.folder.replace(/\/+$/, "").length + 1) : w.path;
+        waitingList.append(h("li", {}, icon(w.state === "waiting" || w.state === "changed" ? "upload" : "warning"),
+          h("span", {}, h("a", { href: hrefFor(r, rel) }, `${r.label}: ${shownName(rel)}`), ` · ${WAIT_TEXT[w.state]}${w.error ? ` (${w.error})` : ""}`),
+          w.state === "waiting" || w.state === "changed" ? h("button", { class: "btn small", type: "button", onclick: async (e) => {
+            e.currentTarget.disabled = true;
+            const { uploaded } = await mirror.upload(r, w.path, `Edit ${rel} from ${APP_NAME}`);
+            toast(uploaded ? `${shownName(rel)} is on GitHub now.` : `Not uploaded: GitHub can't be reached, or it refused (${WAIT_TEXT[mirror.status(r, w.path)] || "see the note"}).`, uploaded ? "ok" : "error");
+            showSettings();
+          } }, icon("upload"), "Upload") : null));
+        waitingBox.hidden = false;
+      }
+    }).catch(() => {});
+  }
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    waitingBox,
     copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
       h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),
       copies) : null,
@@ -4020,6 +4103,8 @@ function start() {
     }
   });
   addEventListener("hashchange", route);
+  // Back online: the saves that waited in the copies go to GitHub.
+  addEventListener("online", () => { for (const r of app.repos) if (!isLocal(r) && app.trees.has(r.id)) mirror.flush(r).catch(() => {}); });
   addEventListener("pagehide", flushDraft);
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushDraft(); else checkForNewer(); });
   setInterval(checkForNewer, CHECK_EVERY);

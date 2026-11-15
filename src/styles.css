@@ -349,6 +349,8 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   background: var(--danger); box-shadow: 0 0 0 2px var(--bg);
 }
 .row .inbox-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none; }
+/* a file saved on this device and not on GitHub yet */
+.row .wait-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; margin-left: auto; }
 .bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
 /* newer notes on GitHub */

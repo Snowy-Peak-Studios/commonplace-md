@@ -93,7 +93,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes. Leaving a note with unsaved changes asks first: **Save**, **Keep as a draft** or **Discard** (or **Stay**).
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
-- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. Reading works with no connection; saving to GitHub needs one.
+- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width, and with no connection: notes saved offline go to GitHub when it's back.
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
@@ -150,11 +150,12 @@ Notes only on this device: not on GitHub, not on your other devices. No account 
 
 ### A copy on this device
 
-Every vault on GitHub is also kept on the device you open it on, so it opens with no connection, on a train or when GitHub is down. A line above the note then says you're reading the copy, and from when. GitHub keeps the main copy; saving needs a connection.
+Every vault on GitHub is also kept on the device you open it on, so it opens with no connection, on a train or when GitHub is down. A line above the note then says you're reading the copy, and from when. GitHub keeps the main copy.
 
 - **Where:** in the browser by default. In Chrome and Edge on a computer, the repo's card in **Settings** has **Keep it in a folder**: pick the repo's own folder (its clone, the one with `.git`) or an empty one. The notes are then real files that other Markdown editors and your agent read, and each commit (yours or anyone's) updates them when the vault opens or reloads.
-- **Changed on the disk:** a file changed there by another tool shows as it is, marked **Not on GitHub**, and is never overwritten by GitHub's version.
+- **Changed on the disk:** a file changed there by another tool shows as it is, marked **Not on GitHub**, and is never overwritten by GitHub's version. It's uploaded only when you press **Upload** (Save, on that note) or **Upload** in **Settings › This device**, which lists everything that waits.
 - **A clone:** the app commits through GitHub, so your clone's git sees the app's saves as changed files until it pulls. Pull with `git pull --rebase --autostash`; a plain `git pull` can stop.
+- **Saving offline:** Save keeps the note in the copy, marked **Waiting to upload** (a dot in the file list, and a count above the note). When the connection is back (or you press **Upload now**), each waiting save goes to GitHub as its own commit, the oldest first. If the note changed on GitHub meanwhile, GitHub refuses it and the app shows both versions to pick or merge; if it was deleted there, it offers **Save it as a new note**. Nothing waiting is dropped, but it's only on this device until it's uploaded.
 - **Only what's needed:** each open asks GitHub for the list of files (one request) and downloads only the ones that changed. Images and PDFs are kept once you open them.
 
 ### Set it up with GitHub
@@ -491,7 +492,6 @@ What it doesn't do:
 - base views other than tables (the app says so, and shows the base's other views)
 - other template variables (`{{time}}`, custom date formats); they stay as written
 - editing images or other binary files
-- saving with no connection (reading works: [a copy on this device](#a-copy-on-this-device))
 
 Folders and files starting with a dot (like `.trash/`) are left out of the tree.
 

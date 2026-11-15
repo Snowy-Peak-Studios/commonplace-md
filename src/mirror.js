@@ -3,6 +3,7 @@
 // whenever the vault opens or reloads: only the files whose sha changed are downloaded. GitHub stays the main copy.
 // A file changed on the disk (an agent, another editor) is never overwritten: it shows as it is, marked as not on
 // GitHub. `withLocal` (src/local.js) sends a GitHub vault's reads and saves here; this passes them on to GitHub.
+// A save made while GitHub can't be reached waits in the copy and is uploaded, as its own commit, once it can.
 
 import { GitHubError, blobSha } from "./github.js";
 import { BrowserFiles, FolderFiles, folderOf, keepFolder, forgetFolder, idb } from "./local.js";
@@ -73,6 +74,12 @@ function persist() {
 export class Mirror {
   constructor() {
     this.repos = new Map(); // repo id -> state, below
+    /** Called with a repo when what waits or what changed here moves on (the app redraws its marks). */
+    this.onChange = null;
+  }
+
+  notify(r) {
+    try { this.onChange?.(r); } catch { /* the app's business */ }
   }
 
   state(r) {
@@ -91,6 +98,10 @@ export class Mirror {
         changed: new Set(),
         offline: false,
         syncing: null,
+        github: null, // the GitHub client last used, to upload with later
+        remoteKnown: false, // `remote` comes from GitHub's tree this session
+        pending: new Map(), // path -> { base, at, message, state: "" | "conflict" | "gone", error }: saves waiting to upload
+        flushing: null,
       });
     }
     return this.repos.get(r.id);
@@ -128,6 +139,7 @@ export class Mirror {
       const meta = await idb("meta", "readonly", (s) => s.get(`bases:${mirrorId(r)}`)).catch(() => null);
       st.bases = new Map(Object.entries(meta?.bases || {}));
       st.syncedAt = meta?.syncedAt ?? null;
+      st.pending = new Map(Object.entries(meta?.pending || {}));
     }
     const list = await files.list(false, prefixOf(r));
     st.local = new Map();
@@ -147,7 +159,9 @@ export class Mirror {
 
   async saveBases(r) {
     const st = this.state(r);
-    await idb("meta", "readwrite", (s) => s.put({ bases: Object.fromEntries(st.bases), syncedAt: st.syncedAt }, `bases:${mirrorId(r)}`)).catch(() => {});
+    await idb("meta", "readwrite", (s) => s.put({
+      bases: Object.fromEntries(st.bases), syncedAt: st.syncedAt, pending: Object.fromEntries(st.pending),
+    }, `bases:${mirrorId(r)}`)).catch(() => {});
   }
 
   /** GitHub's tree with the copy's changes in it; with no connection, the copy's own tree (`offline: true`). */
@@ -155,6 +169,7 @@ export class Mirror {
     const files = await this.files(r);
     if (!files) return github.tree(r, ref);
     const st = this.state(r);
+    st.github = github;
     let data;
     try {
       data = await github.tree(r, ref);
@@ -183,12 +198,13 @@ export class Mirror {
       .map((e) => [e.path, e]));
     const p = plan(remote, st.local, st.bases);
     st.remote = new Map([...remote].map(([path, e]) => [path, e.sha]));
+    st.remoteKnown = true;
     st.remoteBySha = new Map([...remote].map(([path, e]) => [e.sha, path]));
     st.changed = p.changed;
     for (const [path, sha] of p.adopt) st.bases.set(path, sha);
     const tree = data.tree.map((e) => (p.shas.has(e.path) ? { ...e, sha: p.shas.get(e.path) } : e));
     for (const path of p.changed) if (!remote.has(path)) tree.push({ path, type: "blob", sha: p.shas.get(path) });
-    st.syncing = this.sync(github, r, files, p, remote).catch(() => {});
+    st.syncing = this.sync(github, r, files, p, remote).catch(() => {}).then(() => this.flush(r)).catch(() => {});
     return { ...data, tree, changed: p.changed, syncedAt: st.syncedAt };
   }
 
@@ -327,19 +343,180 @@ export class Mirror {
     st.bySha.set(local, path);
     st.remote.set(path, local);
     st.changed.delete(path);
+    st.pending.delete(path);
     await this.saveBases(r);
+    this.notify(r);
+  }
+
+  /** Inside the vault's folder, and not hidden: the files the copy keeps. */
+  inVault(r, path) {
+    const prefix = prefixOf(r);
+    return path.startsWith(prefix) && !hidden(path.slice(prefix.length));
+  }
+
+  /**
+   * Keeps a save in the copy to upload later (GitHub can't be reached): the file is written, and the save waits
+   * with the sha it was based on (the first one, if it waited already), its time and its commit message.
+   */
+  async wait(r, files, path, text, base, message) {
+    const st = this.state(r);
+    const bytes = enc(text);
+    await files.write(path, bytes);
+    const sha = await blobSha(bytes);
+    st.local.set(path, sha);
+    st.bySha.set(sha, path);
+    st.changed.add(path);
+    const before = st.pending.get(path);
+    // Saved again before it went: one commit, with each different message (a claim, then an edit) kept.
+    const said = before && !before.message.split("; ").includes(message) ? `${before.message}; ${message}` : before?.message ?? message;
+    st.pending.set(path, { base: before ? before.base : base ?? null, at: before?.at ?? Date.now(), message: said, state: "" });
+    st.offline = true;
+    await this.saveBases(r);
+    this.notify(r);
+    return sha;
   }
 
   async writeText(github, r, path, text, sha, message) {
-    const res = await github.writeText(r, path, text, sha, message);
+    let res;
+    try {
+      res = await github.writeText(r, path, text, sha, message);
+    } catch (e) {
+      const files = unreachable(e) && this.inVault(r, path) && (await this.files(r));
+      if (!files) throw e;
+      return { sha: await this.wait(r, files, path, text, sha, message), commit: null, parent: null, waiting: true };
+    }
     await this.written(r, path, text, res.sha).catch(() => {});
     return res;
   }
 
   async commitFiles(github, r, list, message) {
-    const res = await github.commitFiles(r, list, message);
+    let res;
+    try {
+      res = await github.commitFiles(r, list, message);
+    } catch (e) {
+      const files = unreachable(e) && list.every((f) => this.inVault(r, f.path)) && (await this.files(r));
+      if (!files) throw e;
+      const shas = {};
+      for (const f of list) shas[f.path] = await this.wait(r, files, f.path, f.text, this.state(r).bases.get(f.path) ?? null, message);
+      return { commit: null, parent: null, shas, waiting: true };
+    }
     for (const f of list) await this.written(r, f.path, f.text, res.shas?.[f.path]).catch(() => {});
     return res;
+  }
+
+  // ---- saves waiting to upload ----
+
+  /**
+   * Uploads the saves that wait, the oldest first, each as its own commit with the sha it was based on. GitHub
+   * refuses one whose note changed there meanwhile ("conflict": the app shows both versions) and one whose note
+   * is gone ("gone": it offers to save it as a new note); both keep waiting, nothing is dropped. Stops when
+   * GitHub can't be reached. Resolves to { uploaded, waiting }.
+   */
+  flush(r) {
+    const st = this.state(r);
+    st.flushing ??= (async () => {
+      const files = await this.files(r);
+      const github = st.github;
+      let uploaded = 0;
+      if (!files || !github) return { uploaded, waiting: st.pending.size };
+      if (!st.bases) await this.load(r, files);
+      const list = [...st.pending].filter(([, p]) => !p.state).sort((a, b) => a[1].at - b[1].at);
+      if (list.length && !st.remoteKnown) {
+        try {
+          const data = await github.tree(r, r.branch);
+          st.remote = new Map(data.tree.filter((e) => e.type === "blob").map((e) => [e.path, e.sha]));
+          st.remoteKnown = true;
+        } catch (e) {
+          if (unreachable(e)) return { uploaded, waiting: st.pending.size };
+        }
+      }
+      for (const [path, p] of list) {
+        let bytes;
+        try { bytes = await files.read(path); } catch { st.pending.delete(path); continue; } // gone from the copy
+        if (p.base && st.remoteKnown && !st.remote.has(path)) { p.state = "gone"; continue; }
+        try {
+          await github.writeText(r, path, dec(bytes), p.base, p.message);
+        } catch (e) {
+          if (unreachable(e)) { st.offline = true; break; }
+          if (e.isConflict) p.state = "conflict";
+          else if (e.status === 404) p.state = "gone";
+          else p.error = e.message;
+          continue;
+        }
+        const sha = await blobSha(bytes);
+        st.pending.delete(path);
+        st.bases.set(path, sha);
+        st.remote.set(path, sha);
+        st.local.set(path, sha);
+        st.changed.delete(path);
+        st.offline = false;
+        uploaded++;
+      }
+      await this.saveBases(r);
+      this.notify(r);
+      return { uploaded, waiting: st.pending.size };
+    })().finally(() => { st.flushing = null; });
+    return st.flushing;
+  }
+
+  /**
+   * Where a file stands: "waiting" (saved here, waiting to upload), "conflict" (changed on GitHub too), "gone"
+   * (deleted or moved on GitHub), "changed" (changed here by another tool), or "".
+   */
+  status(r, path) {
+    const st = this.state(r);
+    const p = st.pending.get(path);
+    if (p) return p.state || "waiting";
+    return st.changed.has(path) ? "changed" : "";
+  }
+
+  /** The files changed here (waiting or by another tool), as full paths. */
+  changedPaths(r) {
+    const st = this.state(r);
+    return new Set([...st.changed, ...st.pending.keys()]);
+  }
+
+  /** What waits, for the line above the note and Settings: [{ path, state, at }], waiting saves first. */
+  async waitingList(r) {
+    const files = await this.files(r);
+    if (!files) return [];
+    const st = this.state(r);
+    if (!st.bases) await this.load(r, files).catch(() => {});
+    const saves = [...st.pending].sort((a, b) => a[1].at - b[1].at).map(([path, p]) => ({ path, state: p.state || "waiting", at: p.at, error: p.error }));
+    const others = [...st.changed].filter((path) => !st.pending.has(path)).sort().map((path) => ({ path, state: "changed" }));
+    return [...saves, ...others];
+  }
+
+  /** Uploads a file changed here by another tool (or waiting) now: it's checked against its base like any save. */
+  async upload(r, path, message) {
+    const st = this.state(r);
+    if (!st.pending.has(path)) st.pending.set(path, { base: st.bases.get(path) ?? null, at: Date.now(), message, state: "" });
+    else st.pending.get(path).state = "";
+    return this.flush(r);
+  }
+
+  /** A note deleted or moved on GitHub while its save waited: uploads it again, as a new note at the same path. */
+  async recreate(r, path) {
+    const p = this.state(r).pending.get(path);
+    if (p) Object.assign(p, { base: null, state: "" });
+    return this.flush(r);
+  }
+
+  /** The person took GitHub's version over what waited here: the copy gets it, and nothing waits any more. */
+  async settle(r, path, text, sha) {
+    const files = await this.files(r);
+    const st = this.state(r);
+    st.pending.delete(path);
+    st.changed.delete(path);
+    if (files && this.inVault(r, path)) {
+      const bytes = enc(text);
+      try { await files.write(path, bytes); } catch { /* the next sync tries again */ }
+      st.bases.set(path, sha);
+      st.local.set(path, await blobSha(bytes));
+      st.remote.set(path, sha);
+    }
+    await this.saveBases(r);
+    this.notify(r);
   }
 
   /** Whether "search inside notes" searches the copy (it's been brought up to date once, or GitHub can't be reached). */

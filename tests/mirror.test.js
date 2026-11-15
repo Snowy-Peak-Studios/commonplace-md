@@ -178,9 +178,107 @@ test("a save goes to GitHub, then into the copy", async () => {
   const res = await m.writeText(gh, repo, "Wiki/Home.md", `${text}more\n`, sha, "Edit");
   assert.equal(dec(mem.files.get("Wiki/Home.md").bytes), "home\nmore\n");
   assert.equal(m.state(repo).bases.get("Wiki/Home.md"), res.sha);
-  // Offline, a save still needs GitHub (saving offline is a task of its own).
+  // A file outside the vault's folder can't wait in the copy: offline, its save fails as before.
   gh.online = false;
-  await assert.rejects(m.writeText(gh, repo, "Wiki/Home.md", "x", res.sha, "Edit"), (e) => unreachable(e));
+  await assert.rejects(m.writeText(gh, repo, "README.md", "x", null, "Edit"), (e) => unreachable(e));
+});
+
+async function synced(start, local = {}) {
+  const gh = await fakeGitHub(start);
+  const mem = memoryFiles(local);
+  const m = mirrorWith(mem);
+  await m.tree(gh, repo, "main");
+  await m.state(repo).syncing;
+  return { gh, mem, m };
+}
+
+test("offline, a save waits in the copy and is uploaded when GitHub is back, the oldest first", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n", "Wiki/A.md": "a\n" });
+  const commits = [];
+  const write = gh.writeText.bind(gh);
+  gh.writeText = async (...args) => { const res = await write(...args); commits.push(`${args[1]}: ${args[4]}`); return res; };
+  gh.online = false;
+  const home = await m.readText(gh, repo, "Wiki/Home.md");
+  const res = await m.writeText(gh, repo, "Wiki/Home.md", "home, offline\n", home.sha, "Edit Home");
+  assert.equal(res.waiting, true);
+  assert.equal(dec(mem.files.get("Wiki/Home.md").bytes), "home, offline\n");
+  // Saved twice offline: still one waiting save, based on GitHub's version it started from.
+  const again = await m.readText(gh, repo, "Wiki/Home.md");
+  assert.equal(again.text, "home, offline\n");
+  await m.writeText(gh, repo, "Wiki/Home.md", "home, offline twice\n", again.sha, "Edit Home again");
+  await m.writeText(gh, repo, "Wiki/Notes/New.md", "made offline\n", null, "Add New");
+  assert.equal(m.status(repo, "Wiki/Home.md"), "waiting");
+  assert.deepEqual((await m.waitingList(repo)).map((w) => w.path), ["Wiki/Home.md", "Wiki/Notes/New.md"]);
+  // Still offline: nothing goes, nothing is lost.
+  assert.deepEqual(await m.flush(repo), { uploaded: 0, waiting: 2 });
+  gh.online = true;
+  assert.deepEqual(await m.flush(repo), { uploaded: 2, waiting: 0 });
+  assert.deepEqual(commits, ["Wiki/Home.md: Edit Home; Edit Home again", "Wiki/Notes/New.md: Add New"]);
+  assert.equal(gh.files.get("Wiki/Home.md").text, "home, offline twice\n");
+  assert.equal(gh.files.get("Wiki/Notes/New.md").text, "made offline\n");
+  assert.equal(m.status(repo, "Wiki/Home.md"), "");
+});
+
+test("a waiting save whose note changed on GitHub keeps waiting, and the person picks", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n" });
+  gh.online = false;
+  const home = await m.readText(gh, repo, "Wiki/Home.md");
+  await m.writeText(gh, repo, "Wiki/Home.md", "mine\n", home.sha, "Edit");
+  gh.online = true;
+  await gh.set("Wiki/Home.md", "theirs\n");
+  // The next open: the copy keeps the waiting save, and GitHub refuses the upload.
+  const t = await m.tree(gh, repo, "main");
+  await m.state(repo).syncing;
+  assert.ok(t.changed.has("Wiki/Home.md"));
+  assert.equal(m.status(repo, "Wiki/Home.md"), "conflict");
+  assert.equal(dec(mem.files.get("Wiki/Home.md").bytes), "mine\n");
+  assert.equal(gh.files.get("Wiki/Home.md").text, "theirs\n");
+  // The merge view: GitHub's own version, then the person saves over it (the app saves with GitHub's sha).
+  const latest = await m.readText(gh, repo, "Wiki/Home.md", { fresh: true });
+  await m.writeText(gh, repo, "Wiki/Home.md", "mine and theirs\n", latest.sha, "Edit");
+  assert.equal(m.status(repo, "Wiki/Home.md"), "");
+  assert.equal(dec(mem.files.get("Wiki/Home.md").bytes), "mine and theirs\n");
+});
+
+test("taking GitHub's version settles a waiting save", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n" });
+  gh.online = false;
+  await m.writeText(gh, repo, "Wiki/Home.md", "mine\n", gh.files.get("Wiki/Home.md").sha, "Edit");
+  gh.online = true;
+  await gh.set("Wiki/Home.md", "theirs\n");
+  await m.flush(repo);
+  assert.equal(m.status(repo, "Wiki/Home.md"), "conflict");
+  const latest = await m.readText(gh, repo, "Wiki/Home.md", { fresh: true });
+  await m.settle(repo, "Wiki/Home.md", latest.text, latest.sha);
+  assert.equal(m.status(repo, "Wiki/Home.md"), "");
+  assert.equal(dec(mem.files.get("Wiki/Home.md").bytes), "theirs\n");
+});
+
+test("a waiting save whose note was deleted on GitHub can be saved as a new note", async () => {
+  const { gh, m } = await synced({ "Wiki/Home.md": "home\n", "Wiki/Old.md": "old\n" });
+  gh.online = false;
+  await m.writeText(gh, repo, "Wiki/Old.md", "old, edited\n", gh.files.get("Wiki/Old.md").sha, "Edit");
+  gh.online = true;
+  gh.files.delete("Wiki/Old.md");
+  await m.tree(gh, repo, "main");
+  await m.state(repo).syncing;
+  assert.equal(m.status(repo, "Wiki/Old.md"), "gone");
+  assert.equal(gh.files.has("Wiki/Old.md"), false);
+  await m.recreate(repo, "Wiki/Old.md");
+  assert.equal(gh.files.get("Wiki/Old.md").text, "old, edited\n");
+  assert.equal(m.status(repo, "Wiki/Old.md"), "");
+});
+
+test("a file changed by another tool is uploaded only when asked", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n" });
+  mem.edit("Wiki/Home.md", "home, by an agent\n");
+  await m.tree(gh, repo, "main");
+  await m.state(repo).syncing;
+  assert.equal(m.status(repo, "Wiki/Home.md"), "changed");
+  assert.equal(gh.files.get("Wiki/Home.md").text, "home\n", "never uploaded by itself");
+  await m.upload(repo, "Wiki/Home.md", "Upload Home");
+  assert.equal(gh.files.get("Wiki/Home.md").text, "home, by an agent\n");
+  assert.equal(m.status(repo, "Wiki/Home.md"), "");
 });
 
 test("a clone's files are used as they are: nothing downloaded that's the same", async () => {

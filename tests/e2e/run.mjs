@@ -1407,7 +1407,16 @@ const offContext = await browser.createBrowserContext();
 const off = await offContext.newPage();
 let cutOff = false;
 await off.setRequestInterception(true);
-off.on("request", (req) => (cutOff && req.url().startsWith(API) ? req.abort("internetdisconnected") : req.continue()));
+const offPuts = [];
+off.on("request", (req) => {
+  if (cutOff && req.url().startsWith(API)) return req.abort("internetdisconnected");
+  if (req.method() === "PUT" && req.url().startsWith(API)) {
+    const body = JSON.parse(req.postData());
+    offPuts.push({ url: req.url(), body, text: Buffer.from(body.content, "base64").toString("utf8") });
+    return req.respond(json(200, { content: { sha: "offfake" + offPuts.length }, commit: { sha: "offc" + offPuts.length } }));
+  }
+  return req.continue();
+});
 await off.setViewport({ width: 1280, height: 860 });
 await off.goto(BASE, { waitUntil: "networkidle0" });
 const copyRepo = { id: "copy", label: "Copy", owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md" };
@@ -1441,6 +1450,28 @@ await off.click("#tree a.file[data-path='Task Board.md']").catch(() => {});
 check(await until(() => /Task Board/.test(document.querySelector(".preview h1")?.textContent || "") && !!document.querySelector(".preview table tbody tr"), 20000, off),
   "a link opens another note from the copy, and its base view is filled from the copy");
 await off.screenshot({ path: `${OUT}/17-offline-copy.png` });
+// Saving offline: it waits in the copy, then goes to GitHub as one commit when the connection is back.
+const offTask = "Tasks/Try the app on a phone.md";
+await off.goto(BASE + "#/copy/" + encPath(offTask));
+await off.waitForSelector(".preview input.task:not([checked])", { timeout: 15000 }).catch(() => {});
+await off.click(".preview input.task:not([checked])").catch(() => {});
+await wait(200);
+await off.click("#save-btn").catch(() => {});
+check(await until(() => /Saved on this device/.test(document.querySelector("#toast").textContent), 5000, off), "offline, Save keeps the note on this device, to upload later");
+check(await until(() => /Waiting to upload/.test(document.querySelector("#title").textContent) && /1 waiting/.test(document.querySelector("#local-note").textContent), 5000, off),
+  "the note says it's waiting to upload, and the line above it counts it");
+check(await off.evaluate((path) => !!document.querySelector(`#tree a.file[data-path="${path}"] .wait-dot`), offTask), "and the file list marks it");
+await off.screenshot({ path: `${OUT}/17b-offline-waiting.png` });
+check(offPuts.length === 0, "nothing reached GitHub while it was out of reach");
+cutOff = false;
+await off.evaluate(() => window.dispatchEvent(new Event("online")));
+for (const end = Date.now() + 10000; Date.now() < end && !offPuts.length; await wait(150));
+const offReal = await realFile(offTask);
+check(offPuts.length === 1 && offPuts[0].url === contentsUrl(offTask) && offPuts[0].body.sha === offReal.sha
+  && offPuts[0].body.message === `Edit ${offTask} from ${APP}` && offPuts[0].text.split("\n").filter((l, i) => l !== offReal.text.split("\n")[i]).length === 1,
+  "back online, it's uploaded as one commit, based on the version it started from: " + JSON.stringify(offPuts.map((x) => x.body.message)));
+check(await until(() => !/Waiting to upload/.test(document.querySelector("#title").textContent) && document.querySelector("#local-note").hidden, 5000, off),
+  "and nothing is marked as waiting any more");
 await offContext.close();
 
 // 11. Service worker registered.

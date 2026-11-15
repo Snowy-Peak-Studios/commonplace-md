@@ -46,7 +46,9 @@ A local vault needs no GitHub account and no token. Its notes are not on GitHub 
 
 ## A copy on this device
 
-Every vault on GitHub is also kept on the device, so it opens with no connection; a line above the note says so. In Chrome and Edge on a computer, **Settings**, open the repo, **Keep it in a folder** keeps that copy in a folder instead (like the repo's clone): other tools read the same files, and each commit updates them. A file changed there by another tool is marked **Not on GitHub** and never overwritten.
+Every vault on GitHub is also kept on the device, so it opens with no connection; a line above the note says so. In Chrome and Edge on a computer, **Settings**, open the repo, **Keep it in a folder** keeps that copy in a folder instead (like the repo's clone): other tools read the same files, and each commit updates them. A file changed there by another tool is marked **Not on GitHub** and never overwritten; **Upload** sends it.
+
+With no connection, **Save** keeps the note on the device, marked **Waiting to upload**, and it goes to GitHub by itself when the connection is back. See [Save, drafts and conflicts](Save%2C%20drafts%20and%20conflicts.md).
 
 ## What you see
 
