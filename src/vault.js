@@ -319,7 +319,8 @@ export function questionTasks(notes, owner = "") {
 
 /**
  * The answer written on a task: what follows its `**Answer:**` line (or an *Answer* heading), up to the next
- * heading, trimmed; "" when nothing is written there yet, or there's no such line.
+ * heading, a `---` line or the acceptance criteria (a checkbox line, for a task with no heading over them),
+ * trimmed; "" when nothing is written there yet, or there's no such line.
  */
 export function taskAnswer(text) {
   const src = toLf(text);
@@ -330,7 +331,7 @@ export function taskAnswer(text) {
   const first = lines[at].replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
   const rest = [];
   for (const l of lines.slice(at + 1)) {
-    if (/^#{1,6}\s/.test(l)) break;
+    if (/^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(l)) break;
     rest.push(l);
   }
   return [first, ...rest].join("\n").trim();

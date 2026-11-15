@@ -676,6 +676,10 @@ test("the answer written on a task: after its Answer line or heading, up to the 
   assert.equal(taskAnswer(task("**Answer:**\n\nArticles too.\nAnd films.\n")), "Articles too.\nAnd films.");
   assert.equal(taskAnswer(task("### ✍️ Answer\n\nb\n")), "b");
   assert.equal(taskAnswer("---\nid: T-2\n---\n# No question\n"), "");
+  const bare = (answer) => `---\nid: T-3\n---\n# Bare\n\n## ❓ Question\n\n- **(a)** this\n\n**Answer:**${answer}\n\n- [ ] Fill it in\n- [x] Started\n`;
+  assert.equal(taskAnswer(bare("")), "", "no heading over the criteria: they aren't the answer");
+  assert.equal(taskAnswer(bare(" (a)")), "(a)");
+  assert.equal(taskAnswer("# T\n\n**Answer:**\n\n---\n\nMore notes\n"), "", "a --- line ends it too");
 });
 
 test("a task with an open question needs a decision until it's answered and cleared", async () => {
