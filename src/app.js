@@ -902,6 +902,13 @@ function renderFile() {
   view.append(f.dom.banners, h("div", { class: "panes" }, f.dom.editorPane, f.dom.preview));
   showMain(view);
   f.dom.preview.addEventListener("click", onPreviewClick);
+  // Wide tables are fitted again when the window changes size, and when a base view's rows arrive.
+  app.wideWatch?.disconnect();
+  if (f.kind === "md" && "ResizeObserver" in window) {
+    app.wideWatch = new ResizeObserver(() => fitWide(f));
+    app.wideWatch.observe($("#main"));
+    app.wideWatch.observe(f.dom.preview);
+  }
   applyMode();
 }
 
@@ -1005,6 +1012,44 @@ function renderPreview() {
     sprint: isSprint && (() => sprintBox(f, setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  fitWide(f);
+}
+
+/** How wide a table or base view may grow on a big screen. */
+const WIDE_MAX = 1400;
+
+/**
+ * On a big screen, a table or base view too wide for the note's column grows out of it, centered, as far as the
+ * page has room (up to WIDE_MAX); one that fits stays as it is. On a phone there's no room beside the column, so
+ * it scrolls inside its own box. Only those right in the note (not in an embedded page, a callout or a list), and
+ * not while the editor is beside the preview.
+ */
+function fitWide(f) {
+  const body = f?.dom?.preview?.querySelector(":scope > .note-body");
+  if (!body?.isConnected) return;
+  const items = [...body.querySelectorAll(":scope > table, :scope > .base-view")];
+  for (const el of items) Object.assign(el.style, { width: "", maxWidth: "", marginLeft: "" });
+  if (f.dom.view.classList.contains("editing")) return;
+  const col = body.clientWidth;
+  const doc = getComputedStyle(f.dom.view);
+  const room = Math.min(WIDE_MAX, $("#main").clientWidth - parseFloat(doc.paddingLeft) - parseFloat(doc.paddingRight));
+  if (!(col > 0) || room <= col + 1) return;
+  for (const el of items) {
+    // A Markdown table whose text wraps fits; it grows only when it can't fit (it scrolls). A base view, once its
+    // rows are in, takes the width its columns want (long cells stop at their own max-width).
+    let need;
+    if (el.matches("table")) need = el.scrollWidth + (el.offsetWidth - el.clientWidth);
+    else {
+      if (!el.querySelector(".base-scroll")) continue;
+      Object.assign(el.style, { width: "max-content", maxWidth: "none" });
+      need = el.offsetWidth;
+      Object.assign(el.style, { width: "", maxWidth: "" });
+    }
+    need = Math.ceil(need);
+    if (need <= col + 1) continue;
+    const width = Math.min(need, room);
+    Object.assign(el.style, { width: `${width}px`, maxWidth: "none", marginLeft: `${Math.round((col - width) / 2)}px` });
+  }
 }
 
 /**
