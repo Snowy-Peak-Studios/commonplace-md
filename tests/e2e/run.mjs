@@ -1143,6 +1143,20 @@ check(await until(() => document.querySelector(".subtasks .st-count")?.textConte
 // 8g. Sprints: a sprint's page lists its tasks by status with how much is done; the picker puts the current sprint
 // first; Start the next sprint makes the next one and moves what's left, in one commit; the board shows the current one.
 const realSprints = await Promise.all(["Sprints/Sprint 1.md", "Sprints/Sprint 2.md"].map(async (p) => ({ path: p, props: noteProps((await realFile(p)).text) })));
+// Home's ```sprint block with sprint: current shows the sprint going on today, naming it, with no Start button.
+const nowSprint = sprints(realSprints, isoDate()).find((s) => s.when === "now") ?? null;
+await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
+await until(() => !!document.querySelector(".note-body .sprint-box"), 15000);
+const homeSprint = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .sprint-box");
+  return { code: !!document.querySelector(".note-body .app-block"), of: box?.querySelector(".st-of")?.textContent ?? "",
+    href: decodeURIComponent(box?.querySelector(".st-of")?.getAttribute("href") ?? ""), when: box?.querySelector(".sprint-when")?.textContent ?? "",
+    empty: box?.querySelector(".sprint-empty")?.textContent ?? "", start: !!box?.querySelector("button") };
+});
+check(!homeSprint.code && !homeSprint.start && (nowSprint
+  ? homeSprint.of === nowSprint.name && homeSprint.href.endsWith(`/${nowSprint.path}`) && homeSprint.when === "Now"
+  : homeSprint.empty === "No sprint is going on today."),
+  `Home's sprint block with sprint: current shows ${nowSprint?.name ?? "that no sprint is going on"}: ` + JSON.stringify(homeSprint));
 await page.goto(at("Sprints/Sprint 1.md"), { waitUntil: "networkidle0" });
 await page.evaluate(() => document.querySelector("#mode").children[0].click()); // Read: Add subtask left it in Edit
 check(await until(() => document.querySelectorAll(".sprint-box .sprint-group").length === 3, 15000), "a sprint's page lists its tasks by status");

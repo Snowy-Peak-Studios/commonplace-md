@@ -481,6 +481,22 @@ test("sprints: the latest first, and which is now and next", () => {
   assert.equal(sprints(SPRINTS, "2026-11-16").find((s) => s.when === "now").name, "Sprint 2");
 });
 
+test("a sprint block's sprint: current, next, a name or a link", async () => {
+  const { pickSprint } = await import("../src/vault.js");
+  const list = sprints(SPRINTS, "2026-11-14");
+  const name = (said, resolve) => pickSprint(list, said, resolve)?.name ?? null;
+  assert.equal(name("current"), "Sprint 1");
+  assert.equal(name("Now"), "Sprint 1");
+  assert.equal(name("next"), "Sprint 2");
+  assert.equal(name("sprint 3"), "Sprint 3");
+  assert.equal(name("[[Sprint 0]]"), "Sprint 0");
+  assert.equal(name("[[S0]]", (t) => (t === "S0" ? list[3].path : null)), "Sprint 0", "a link is found by where it leads");
+  assert.equal(name("Sprint 9"), null);
+  assert.equal(name(""), null);
+  assert.equal(pickSprint(sprints(SPRINTS, "2030-01-01"), "current"), null, "no sprint going on");
+  assert.equal(pickSprint(sprints(SPRINTS, "2030-01-01"), "next"), null);
+});
+
 test("the next sprint counts on, starts after the last ends (or today), and lasts the setup's length", () => {
   const last = sprints(SPRINTS, "2026-11-14")[0];
   assert.deepEqual(nextSprint(last, 14, "2026-11-14"), { name: "Sprint 4", start: "2026-12-14", end: "2026-12-27" });

@@ -9,7 +9,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -957,7 +957,7 @@ function renderPreview() {
     relations: isTask && (() => relationsBox(f, setup)),
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && (() => sprintBox(f, setup)),
-  }, setup && ((kind, input) => otherTaskBox(f, setup, kind, input, isTask ? props : null)));
+  }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
 }
 
@@ -969,8 +969,8 @@ function renderPreview() {
 function fillAppBlocks(body, boxes, other = null) {
   for (const el of body.querySelectorAll(".app-block")) {
     if (el.parentElement.closest(".embed-page")) continue;
-    // A block with a `task:` line shows that task's box, on any page.
-    const box = el.dataset.task && other ? other(el.dataset.block, el.dataset.task) : undefined;
+    // A block with a `task:` (or, for a sprint, `sprint:`) line shows that task's or sprint's box, on any page.
+    const box = (el.dataset.task || el.dataset.sprint) && other ? other(el.dataset.block, el.dataset) : undefined;
     if (box !== undefined) { el.replaceWith(box ?? ""); continue; }
     const make = boxes[el.dataset.block];
     if (make) el.replaceWith(make() ?? "");
@@ -986,7 +986,7 @@ const TASK_BOX_KINDS = ["subtasks", "relations", "commits"];
  * that leads to no task says so. Undefined for a kind that takes no `task:`, so the block is drawn as before.
  */
 function otherTaskBox(f, setup, kind, input, ownProps) {
-  if (!TASK_BOX_KINDS.includes(kind)) return undefined;
+  if (!TASK_BOX_KINDS.includes(kind) || !input) return undefined;
   const entry = taskNotes(f.repo, setup);
   if (!entry.notes) return h("div", { class: "subtasks none" }, h("span", { class: "muted" }, "Looking for the task…"));
   const t = findTask(entry.notes, input);
@@ -1269,22 +1269,49 @@ const amount = (n, unit = "") => `${n} ${n === 1 ? unit.replace(/s$/, "") : unit
  * A sprint's page: its dates and where it stands, its tasks by status, how many are done (and how much of
  * the estimate), and on the latest sprint, Start the next sprint.
  */
-function sprintBox(f, setup) {
+/**
+ * A ```sprint block's box for the sprint its `sprint:` line names (`current`, `next`, a name or a link), on any
+ * page, naming it and linking to it. When there's no such sprint it says so; Start the next sprint stays on the
+ * sprint's own page. Undefined without a `sprint:` line, so the block is drawn as before.
+ */
+function otherSprintBox(f, setup, input) {
+  if (!input) return undefined;
+  const none = (said) => h("section", { class: "sprint-box", "aria-label": "Sprint" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint")), h("p", { class: "muted sprint-empty" }, said));
+  if (!sprintField(setup)) return none("Sprints are off in this repo's Task fields.");
+  const tasks = taskNotes(f.repo, setup).notes;
+  const all = sprintNotes(f.repo, setup).notes;
+  if (!tasks || !all) return h("div", { class: "subtasks none" }, h("span", { class: "muted" }, "Looking for the sprint…"));
+  const tree = app.trees.get(f.repo.id);
+  const pick = pickSprint(sprints(all, isoDate()), input, (t) => tree.index.resolve(t, f.path));
+  if (!pick) {
+    const word = linkName(input).toLowerCase();
+    return none(word === "current" || word === "now" ? "No sprint is going on today."
+      : word === "next" ? "No sprint is planned after this one yet." : `No sprint is called “${linkName(input)}”.`);
+  }
+  return sprintBox(f, setup, pick.path);
+}
+
+function sprintBox(f, setup, path = null) {
   const tasks = taskNotes(f.repo, setup).notes;
   const all = sprintNotes(f.repo, setup).notes;
   if (!tasks || !all) return null;
   const tree = app.trees.get(f.repo.id);
   const list = sprints(all, isoDate());
-  const me = list.find((s) => s.path === f.path);
+  // `path` is another sprint's, from a `sprint:` line: then the box names it, and only reads.
+  const away = !!path && path !== f.path;
+  const me = list.find((s) => s.path === (path ?? f.path));
   if (!me) return null;
-  const s = sprintTasks(tasks, f.path, { setup, resolve: (t, from) => tree.index.resolve(t, from) });
-  const start = canWrite(f.repo) && list[0]?.path === f.path
+  const s = sprintTasks(tasks, me.path, { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  const start = !away && canWrite(f.repo) && list[0]?.path === f.path
     ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
   const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
   const done = `${s.done} of ${s.total} task${s.total === 1 ? "" : "s"} done`
     + (s.points ? ` · ${s.points.done} of ${amount(s.points.total, s.points.unit)}` : "");
   return h("section", { class: "sprint-box", "aria-label": "Sprint" },
-    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"), h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"),
+      away ? h("a", { class: "st-of", href: hrefFor(f.repo, me.path), title: `Open ${me.name}` }, me.name) : null,
+      h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
       h("span", { class: "st-count" }, dates), start),
     me.goal ? h("p", { class: "sprint-goal" }, h("strong", {}, "Goal: "), me.goal) : null,
     s.total ? [

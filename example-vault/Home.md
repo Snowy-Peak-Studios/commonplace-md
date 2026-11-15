@@ -26,6 +26,14 @@ The goals live on the Task Board; this is that section, embedded here:
 
 ![[Task Board#Current goals]]
 
+## This sprint
+
+The sprint going on today, with its tasks by status: a ` ```sprint ` block with `sprint: current`. It can also say `next`, or a sprint's name or link; without the line it only works on a sprint's own page.
+
+```sprint
+sprint: current
+```
+
 ## What to start next
 
 The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block. Everything it shows is written in it, one option per line:

@@ -121,10 +121,13 @@ test("a task's and a sprint's blocks become placeholders that keep their code", 
 });
 
 test("a task's block options: task names another task by its ID, name or link; other lines are ignored", () => {
-  assert.deepEqual(appBlockOptions(""), { task: "" });
-  assert.deepEqual(appBlockOptions("Task: T-12\nnote: hi"), { task: "T-12" });
-  assert.deepEqual(appBlockOptions("task: '[[Get set up]]'"), { task: "[[Get set up]]" });
-  assert.deepEqual(appBlockOptions("task:"), { task: "" });
+  assert.deepEqual(appBlockOptions(""), { task: "", sprint: "" });
+  assert.deepEqual(appBlockOptions("Task: T-12\nnote: hi"), { task: "T-12", sprint: "" });
+  assert.deepEqual(appBlockOptions("task: '[[Get set up]]'"), { task: "[[Get set up]]", sprint: "" });
+  assert.deepEqual(appBlockOptions("task:"), { task: "", sprint: "" });
+  assert.deepEqual(appBlockOptions("Sprint: current"), { task: "", sprint: "current" });
+  assert.equal(render("```sprint\nsprint: next\n```\n"),
+    '<div class="app-block" data-block="sprint" data-sprint="next"><pre><code>sprint: next\n</code></pre></div>\n');
 });
 
 test("a needs-attention block becomes a placeholder with what it shows, its owner and login, holding its source", () => {

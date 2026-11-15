@@ -1019,6 +1019,20 @@ export function sprints(notes, today) {
   return list.map((s) => ({ ...s, when: now(s) ? "now" : s === next ? "next" : s.start > today ? "later" : "past" }));
 }
 
+/**
+ * The sprint a ```sprint block's `sprint:` line names, from `sprints()`: `current` (or `now`) is the one going on
+ * today, `next` the next one to start, else a sprint's name or `[[link]]` (any case; `resolve` turns a link into
+ * a path, when given). Null when there's none.
+ */
+export function pickSprint(list, said, resolve = null) {
+  const s = linkName(said).toLowerCase();
+  if (!s) return null;
+  if (s === "current" || s === "now") return list.find((x) => x.when === "now") ?? null;
+  if (s === "next") return list.find((x) => x.when === "next") ?? null;
+  const path = resolve?.(linkName(said));
+  return list.find((x) => x.path === path) ?? list.find((x) => x.name.toLowerCase() === s) ?? null;
+}
+
 /** The sprint picker's order: the current sprint, the next one, then the rest, the latest first. */
 export function sprintChoices(list) {
   const rank = { now: 0, next: 1 };

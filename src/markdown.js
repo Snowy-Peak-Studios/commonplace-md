@@ -202,8 +202,8 @@ export function createMarkdown() {
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     // A `task:` line shows another task's box, on any page.
     if (APP_BLOCKS.includes(lang)) {
-      const { task } = appBlockOptions(token.content);
-      return `<div class="app-block" data-block="${lang}"${task ? ` data-task="${esc(task)}"` : ""}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+      const { task, sprint } = appBlockOptions(token.content);
+      return `<div class="app-block" data-block="${lang}"${task ? ` data-task="${esc(task)}"` : ""}${sprint ? ` data-sprint="${esc(sprint)}"` : ""}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
@@ -272,14 +272,14 @@ export function topTasksOptions(src) {
 
 /**
  * The options of a task's or a sprint's block (```subtasks, ```relations, ```commits, ```sprint), one per line:
- * `task: C-12` (a task's ID, name or `[[link]]`: show that task's box, on any page). Left out, the page's own.
- * Other lines are ignored.
+ * `task: C-12` (a task's ID, name or `[[link]]`: show that task's box, on any page) and, for ```sprint,
+ * `sprint: current` (or `next`, or a sprint's name or link). Left out, the page's own. Other lines are ignored.
  */
 export function appBlockOptions(src) {
-  const out = { task: "" };
+  const out = { task: "", sprint: "" };
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(task)\s*:\s*(.*?)\s*$/i);
-    if (m) out.task = m[2].trim().replace(/^["']|["']$/g, "").trim();
+    const m = line.match(/^\s*(task|sprint)\s*:\s*(.*?)\s*$/i);
+    if (m) out[m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, "").trim();
   }
   return out;
 }
