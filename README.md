@@ -104,6 +104,33 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 ## Quick start
 
+> **tl;dr:** Just you, on one device: a local vault, with no account at all (coming soon). A team, or several devices: keep the vault in a GitHub repo, the project's own or one of its own, and everyone syncs through it.
+
+### Which way fits you
+
+The app is the same for everyone: the released app at its address, which updates by itself. What you pick is where your vault lives.
+
+```mermaid
+flowchart TD
+    q1{"Just you, on one device?"}
+    q1 -- Yes --> local["A local vault on your device<br/>(coming soon)"]
+    q1 -- "No: a team, or several devices" --> q2{"Does the project have its own repo?"}
+    q2 -- "Yes: keep the notes with the code" --> project["In the project's repo"]
+    q2 -- "No, or keep them apart" --> own["In a repo of its own"]
+```
+
+| Way | What it gives | What it costs | Steps |
+| --- | --- | --- | --- |
+| **A local vault** on your device (*coming soon*) | Nothing to set up: no GitHub account, no token, only the app. | It's only on that one device: no team, no other devices, no history. Kept in the browser, it's lost if the browser's data is cleared. | Not ready yet. Until then, use a repo of its own (it can be private). |
+| **In the project's repo**, in a folder next to the code | One repo: the notes move with the code, a commit can change both, and your agent sees both. Everyone on the project gets the vault. | Whoever can see the code sees the notes: a public project's notes are public. | The steps below, with a **Folder** ([step 2](#2-make-a-notes-repo)); [one per project](#one-per-project-or-one-for-the-whole-organization) for a team. |
+| **In a repo of its own** | Private notes even for a public project, and room for several projects, or your own notes and recipes. | One more repo, and each device's token must open it. | The steps below. |
+
+**Without a GitHub account?** Not yet: today every way needs a GitHub account and a token you make. The local vault, coming soon, needs neither.
+
+**Your own copy of the app?** You don't need one: whichever way you pick, your notes are in your own place and the app only reads and saves them. You can still host a copy ([step 1](#1-open-the-app), B), but it doesn't take the app's updates by itself.
+
+### Set it up with GitHub
+
 **Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
 
 Not sure yet? [Ask your agent first](#not-sure-its-for-you).
@@ -155,7 +182,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 </details>
 
-### 1. Open the app
+#### 1. Open the app
 
 Either:
 
@@ -169,7 +196,7 @@ Either:
 
    To serve the version in development too, fork with every branch (untick *Copy the main branch only*), and pick Source *GitHub Actions* in step 2 instead: `.github/workflows/pages.yml` then serves `main` at the address and `dev` under `dev/`, each time either branch moves. In **Settings › Environments › github-pages**, let the `dev` branch deploy too.
 
-### 2. Make a notes repo
+#### 2. Make a notes repo
 
 Make a new repo on GitHub for your notes ([github.com/new](https://github.com/new)), or use one you already have, such as a project's own repo (then put the vault in a folder, see below). **Private is fine**, and usually what you want. Then fill it with the example vault, so you start with something that shows every feature.
 
@@ -195,7 +222,7 @@ This puts the vault at the top of the repo. To keep it in a folder instead (say 
 
 The vault comes with `AGENTS.md` and `CLAUDE.md`, rules for AI agents, and their skills in `.agents/` and `.claude/`. Keep them if you work with agents (see [Working with AI agents](#working-with-ai-agents-optional)); otherwise delete them.
 
-### 3. Make a token
+#### 3. Make a token
 
 Make a fine-grained token at [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new):
 
@@ -209,7 +236,7 @@ Make one token per device, so you can revoke one without the others.
 
 **Notes with more than one owner** (your own account and an organization, say): a fine-grained token opens one owner's repos, so the device keeps one per owner. The token you connect with opens the rest; for each other owner, **Settings › Tokens for other owners** has **Make it on GitHub**, a link to GitHub's form with the owner, *Contents: Read and write* and a year already filled in: pick the repos, press **Generate token**, and paste it back. An invite link (or a repo the device's token can't open) asks for that owner's token by itself, with the same link. Each repo then goes with its owner's token.
 
-### 4. Connect and add the repo
+#### 4. Connect and add the repo
 
 1. Open the app, paste the token and press **Connect**.
 2. The app takes you to **Settings › Notes repos** with a new repo to fill in. **Owner** and **Repo** are enough to start; for the example vault, also set:
@@ -223,7 +250,7 @@ Make one token per device, so you can revoke one without the others.
 
 That's it: pick the repo at the top of the file list and start writing.
 
-### 5. Install it as an app (optional)
+#### 5. Install it as an app (optional)
 
 Commonplace.md can be installed like any other app: it gets its own window and icon, and opens straight to your notes.
 

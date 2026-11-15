@@ -4,6 +4,8 @@ parent: "[[How To]]"
 
 # Write and link notes
 
+> **tl;dr:** Press **Edit**, write Markdown, press **Save**. Link with `[[Page]]`, and show a page or a picture inside a note with `![[...]]`.
+
 ## Write
 
 1. Open a note and press **Edit** (or Ctrl+E). On a wide screen, the preview shows beside the editor as you type.

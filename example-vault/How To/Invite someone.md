@@ -4,6 +4,8 @@ parent: "[[How To]]"
 
 # Invite someone
 
+> **tl;dr:** Give them access to the repo on GitHub, then send them an invite link from **Settings**. They make their own token, and the repo is set up for them.
+
 Notes are shared the GitHub way: whoever can open the repo on GitHub can open it in the app.
 
 ## Steps

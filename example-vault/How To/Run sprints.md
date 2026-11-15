@@ -4,6 +4,8 @@ parent: "[[How To]]"
 
 # Run sprints
 
+> **tl;dr:** A sprint is a note in `Sprints/`. Pick it in a task's **Sprint** field, follow it on its page, and press **Start the next sprint** when it ends.
+
 A sprint is a note in `Sprints/` with a `start`, an `end` and a `goal`, like [Sprint 1](../Sprints/Sprint%201.md). Sprints are a field of the task setup ([Set up tasks](../Set%20up%20tasks.md)), with their folder and how many days one lasts. A vault that has no setup yet, like this one, uses `Sprints/`.
 
 ## Put a task in a sprint

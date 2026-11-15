@@ -4,6 +4,8 @@ parent: "[[How To]]"
 
 # Save, drafts and conflicts
 
+> **tl;dr:** **Save** is one commit. Unsaved changes stay on the device as a draft. If someone saved the same note first, you see both versions and pick: nothing is lost.
+
 ## Save
 
 Press **Save** (or Ctrl+S). Each save is one commit in your repo. A note with unsaved changes has a dot in its title.
