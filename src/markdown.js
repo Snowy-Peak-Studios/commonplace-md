@@ -117,6 +117,11 @@ function headingRule(state) {
 
 export function createMarkdown() {
   const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
+  // `.md` is a web domain (Moldova's), so a note's file name like `art.md#heading` would become a link to
+  // http://art.md/. A bare address (no `http://`, no `www.`) whose host ends in `.md` stays text.
+  const match = md.linkify.match.bind(md.linkify);
+  md.linkify.match = (text) => (match(text) || [])
+    .filter((m) => m.schema || /^www\./i.test(m.raw) || !/\.md$/i.test(m.raw.split(/[/?#:]/)[0]));
   const esc = md.utils.escapeHtml;
   md.inline.ruler.before("link", "wikilink", wikilinkRule);
   md.core.ruler.after("block", "callouts", calloutRule);

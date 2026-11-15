@@ -157,6 +157,16 @@ test("@login becomes a mention, but not in code, a link or an email", () => {
   assert.match(render("## Ask @bob\n"), /data-heading="Ask @bob"/);
 });
 
+test("a file name ending in .md stays text, while web addresses still become links", () => {
+  assert.equal(md.renderInline("Tasks/A README with art.md#9ef43fbd, Notes.md and notes.md/x", env),
+    "Tasks/A README with art.md#9ef43fbd, Notes.md and notes.md/x");
+  const html = md.renderInline("example.com, www.site.md, https://site.md/a.md and ann@mail.md", env);
+  assert.match(html, /<a href="http:\/\/example.com">example.com<\/a>/);
+  assert.match(html, /<a href="http:\/\/www.site.md">www.site.md<\/a>/);
+  assert.match(html, /<a href="https:\/\/site.md\/a.md">https:\/\/site.md\/a.md<\/a>/);
+  assert.match(html, /<a href="mailto:ann@mail.md">ann@mail.md<\/a>/);
+});
+
 test("a new-tasks block is a box with its items rendered, its owner, and its closing fence's line", () => {
   const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
   assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
