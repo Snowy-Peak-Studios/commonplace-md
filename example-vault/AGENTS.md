@@ -34,7 +34,7 @@ If your person says the rules are already set up, just delete this section.
 3. Read **your own person's inbox**, and no one else's: the note in `Notes/Inboxes/` whose `owner` is your `git config user.name` (`grep -rl "^owner: <name>$" Notes`); if there's none, the shared `Notes/Inbox.md`.
    - **New tasks:** turn each item into a task note (or add it to a task that already covers it), with `requested_by` the inbox's owner. Then clear the item.
    - **Notes:** leave them as they are.
-   - **Needs attention:** act on the answers to your own questions (or to questions on a task you've claimed), then clear them.
+   - **Needs attention:** act on the answers to your own questions (or to questions on a task you've claimed), written on their tasks (see Questions), then clear them.
    - Commit and push the sorted inbox and the new tasks at once.
 
 ## Tasks
@@ -50,7 +50,7 @@ If your person says the rules are already set up, just delete this section.
   2. **Free tasks**: no `assignee`, not *Waiting* (your person put it off: leave it until they bring it back), the highest priority that serves the current goals, and within a priority the **newest first** (the highest ID).
 - If `Task Board.md` has an **Areas** table, pick only free tasks whose `area` belongs to your person.
 - A task with an agent in its `assignee` (e.g. `Ann Example (Claude)`) is taken, whatever its status: another session is on it. So is a task with someone else's name.
-- **Is it ready?** Don't build a task that needs a decision first: an open criterion about deciding ("Decided with ..."), "TBD", or `ready: decision`. Ask the decision under **Needs attention** in your person's inbox, with the options, and pick another task meanwhile. Skip a placeholder (a title starting with "Placeholder" or ending in "- placeholder", the `placeholder` tag, `ready: placeholder`, or criteria still "..."): it isn't written out yet. The app's inbox shows each task's state the same way.
+- **Is it ready?** Don't build a task that needs a decision first: an open criterion about deciding ("Decided with ..."), "TBD", or `ready: decision`. Ask the decision on the task (see Questions), and pick another task meanwhile. Skip a placeholder (a title starting with "Placeholder" or ending in "- placeholder", the `placeholder` tag, `ready: placeholder`, or criteria still "..."): it isn't written out yet. The app's inbox shows each task's state the same way.
 - Before you build an old task, check that it still fits the notes and the goals. If it doesn't, rewrite or narrow it, or ask (see Questions). Never build a stale task as written.
 
 ### Claim before any other change
@@ -72,8 +72,30 @@ If your person says the rules are already set up, just delete this section.
 
 ## Questions
 
-- A question that needs your person's decision goes under **Needs attention** in your person's inbox: one item, with the task's link and the options. Add it to the task's notes too.
-- Then move on to another task while it waits.
+A question lives on the task it's about, with its answer next to it. The inbox only points to it.
+
+1. **On the task**, two things:
+   - `question:` in its properties: the question in a few words, e.g. `question: "Books only, or articles too?"`. The app finds the open questions by it.
+   - A *Question* part right under the user story, before the acceptance criteria: who asks and the date, the question, the options (your pick first, with why), and an empty **Answer:** line for your person:
+
+     ```markdown
+     ## ❓ Question
+
+     *(Claude, 2026-05-01)* Should the list hold only books, or articles too?
+
+     - **(a) Books only** (my pick): the list stays short.
+     - **(b) Articles too**: ...
+
+     **Answer:**
+     ```
+
+     One question per task at a time; several open ones go in the same part as (1), (2).
+2. **In your person's inbox**, under **Needs attention**: one line, `- [[<task title>]]: <the question in a few words>`, nothing more.
+3. **The answer** is written under **Answer:** on the task. An answer written under the inbox's line counts the same.
+4. **Acting on it**: do what the answer says, then move it into the task's notes as a record (who, the date, the options in short, their words), take out the *Question* part, empty `question:`, take out the inbox's line, and tick the criterion it settles (and drop `ready: decision`).
+5. **A question with no task**: make the task first if it's work for this vault; if it isn't, ask it in the inbox as a whole item.
+
+Then move on to another task while it waits.
 
 ## Keep the vault in step
 

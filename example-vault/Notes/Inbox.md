@@ -33,6 +33,6 @@ owner: Your name
 
 ## Needs attention
 
-*Questions waiting for an answer, one per item, with its task. Answer under the item.*
+*Questions waiting for you, one line each, linking to the task it is on. Answer on the task.*
 
 - [[Add a reading list]]: should the list hold only books, or articles too?

@@ -471,7 +471,7 @@ AI agents that can run git (Claude Code, Codex and others) can work in your vaul
 - reads **your inbox** and turns what you wrote under **New tasks** into task notes, with IDs and acceptance criteria;
 - picks a free task and **claims** it (status and assignee, committed and pushed) before it changes anything, so two agents never work on the same task;
 - keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
-- asks you under **Needs attention** in your inbox when it needs a decision, and works on something else while it waits.
+- asks you on the task when it needs a decision, with a line under **Needs attention** in your inbox that links to it, and works on something else while it waits.
 
 This is how the makers of Commonplace.md use it with their own agents: these are our rules and skills, made general. Change them to fit how you work.
 
@@ -501,7 +501,7 @@ Not using the example vault? Copy the `.agents` and `.claude` folders and [`AGEN
 
 1. You write in your inbox from the app, on your phone or anywhere: new tasks, notes, answers.
 2. The agent pulls, sorts the inbox into tasks, claims one and works on it.
-3. When it needs you, it leaves a question under **Needs attention**. You answer under the item, and the agent picks it up next time.
+3. When it needs you, it writes the question on the task, with a line under **Needs attention** linking to it. You answer on the task, and the agent picks it up next time.
 4. The agent pushes after every commit, so the app shows its changes on your phone at once.
 
 To start a session, open the agent in the notes repo and paste:

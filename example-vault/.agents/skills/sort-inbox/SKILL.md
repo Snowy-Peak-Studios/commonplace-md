@@ -32,7 +32,7 @@ For each item under **New tasks**:
    - `requested_by`: the inbox's owner. `status: To Do`, `assignee: ""`.
    - `area`: from the Areas table on `Task Board.md`, if there is one. `priority`: by the current goals.
    - In its notes, quote the item word for word, with the date: `From <owner>'s inbox, <date>: "..."`.
-3. **Unclear?** Make the task with what you know, and ask the rest under **Needs attention** (one item, with the task's link and the options).
+3. **Unclear?** Make the task with what you know, and ask the rest on it: `question:` in its properties, a *Question* part with the options and an **Answer:** line, and one line under **Needs attention** linking to the task (`AGENTS.md`, Questions).
 4. Delete the item from the inbox.
 
 ## 5. Notes
@@ -41,12 +41,12 @@ Leave the **Notes** section as it is: they're thoughts, not tasks.
 
 ## 6. Needs attention
 
-For each item that has an answer under it and is yours (your own question, or one on a task you've claimed):
+Each line links to a task with a question. For each one that's yours (your own question, or one on a task you've claimed), open the task: is there an answer under **Answer:** (or under the inbox's line)?
 
 - Act on the answer: write it in the task's notes (quoted, with the date), tick the criterion it settles, change the pages it changes.
-- Then delete the item and its answer.
+- Then take out the task's *Question* part, empty its `question:`, and delete the inbox's line.
 
-Leave items with no answer, and other people's, as they are.
+Leave questions with no answer, and other people's, as they are.
 
 ## 7. Commit and push
 

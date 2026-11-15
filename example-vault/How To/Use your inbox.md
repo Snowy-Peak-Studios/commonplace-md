@@ -10,7 +10,7 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 
 - **New tasks**: anything that should become a task. You, or your AI agent, turn each into a task note later.
 - **Notes**: thoughts that aren't tasks. They stay.
-- **Needs attention**: questions waiting for your answer, one per item. Answer under the item.
+- **Needs attention**: questions waiting for your answer, one line each, linking to the task the question is on. Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
 
 ## Your own inbox
 
