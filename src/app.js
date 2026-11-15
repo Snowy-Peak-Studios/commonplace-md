@@ -1035,17 +1035,12 @@ function fitWide(f) {
   const room = Math.min(WIDE_MAX, $("#main").clientWidth - parseFloat(doc.paddingLeft) - parseFloat(doc.paddingRight));
   if (!(col > 0) || room <= col + 1) return;
   for (const el of items) {
-    // A Markdown table whose text wraps fits; it grows only when it can't fit (it scrolls). A base view, once its
-    // rows are in, takes the width its columns want (long cells stop at their own max-width).
-    let need;
-    if (el.matches("table")) need = el.scrollWidth + (el.offsetWidth - el.clientWidth);
-    else {
-      if (!el.querySelector(".base-scroll")) continue;
-      Object.assign(el.style, { width: "max-content", maxWidth: "none" });
-      need = el.offsetWidth;
-      Object.assign(el.style, { width: "", maxWidth: "" });
-    }
-    need = Math.ceil(need);
+    // A Markdown table whose text wraps fits, and stays; one that can't fit (it scrolls) grows. A base view grows
+    // once its rows are in. Either takes the width its columns want (a base's long cells stop at their max-width).
+    if (el.matches("table") ? el.scrollWidth <= el.clientWidth + 1 : !el.querySelector(".base-scroll")) continue;
+    Object.assign(el.style, { width: "max-content", maxWidth: "none" });
+    const need = Math.ceil(el.offsetWidth);
+    Object.assign(el.style, { width: "", maxWidth: "" });
     if (need <= col + 1) continue;
     const width = Math.min(need, room);
     Object.assign(el.style, { width: `${width}px`, maxWidth: "none", marginLeft: `${Math.round((col - width) / 2)}px` });
