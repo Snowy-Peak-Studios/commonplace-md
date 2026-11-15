@@ -2602,6 +2602,8 @@ function baseView(repo, path, block = null) {
     count.textContent = `${result.count} ${result.count === 1 ? "note" : "notes"}`;
     const scroller = baseTable(repo, path, result);
     fill(body, scroller);
+    // On a big screen, a view too wide for the note's column grows out of it now that its rows are in.
+    if (view.isConnected && app.file?.kind === "md") fitWide(app.file);
     scroller.scrollLeft = left;
     if (usesFileMtime(base, tab) && !loaded.dates) loadDates();
   };
@@ -4234,6 +4236,8 @@ function start() {
   $("#settings-btn").addEventListener("click", () => { closeMenu(); location.hash = "#/settings"; });
   $("#side-settings").addEventListener("click", () => { location.hash = "#/settings"; });
   $("#filter").addEventListener("input", debounce(renderTree, 120));
+  // Wide tables are fitted again when the window changes size (a ResizeObserver on the page does it too, where it runs).
+  window.addEventListener("resize", debounce(() => { if (app.file?.kind === "md") fitWide(app.file); }, 100));
   $("#side").addEventListener("click", (e) => { if (e.target.closest("a.file, #who")) closeSideOnPhone(); });
   document.addEventListener("keydown", (e) => {
     const mod = e.ctrlKey || e.metaKey;
