@@ -460,6 +460,18 @@ await page.click(`.note-body a[href="${toVault.href}"]`);
 await page.waitForFunction(() => location.hash.endsWith("/Add%20a%20vault.md") && document.querySelector(".preview h1")?.textContent === "Add a vault", { timeout: 15000 }).catch(() => {});
 check(hashPath(page.url()) === `/${ID}/How To/Add a vault.md`, "following one opens that note: " + hashPath(page.url()));
 
+// 3d. Two ```needs-attention blocks, one per kind, make two separate boxes ("Your name"'s inbox).
+await page.goto(at("Notes/Inboxes/Your name.md"), { waitUntil: "networkidle0" });
+await page.waitForFunction(() => document.querySelectorAll(".note-body .attention .attention-list a.suggest-name").length >= 2, { timeout: 20000 }).catch(() => {});
+const twoBoxes = await page.$$eval(".note-body .attention", (boxes) => boxes.map((b) => ({
+  title: b.querySelector(".suggest-head strong")?.textContent ?? "",
+  rows: [...b.querySelectorAll(".attention-list a.suggest-name")].map((a) => a.textContent),
+  kinds: b.querySelectorAll(".chip.kind").length,
+})));
+check(twoBoxes.length === 2 && twoBoxes[0].title === "Questions for you" && twoBoxes[0].rows.some((r) => r.includes("Add a reading list"))
+  && twoBoxes[1].title === "Mentions of you" && twoBoxes[1].rows.some((r) => r.startsWith("Guide")) && twoBoxes.every((b) => b.kinds === 0),
+  "two needs-attention blocks, show: questions and show: mentions, make two separate boxes: " + JSON.stringify(twoBoxes));
+
 // 4. The Guide: folded nav box, no %% left, links with headings and aliases.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
 await page.waitForSelector(".preview h1");
