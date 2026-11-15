@@ -11,7 +11,7 @@ import {
   hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions,
 } from "./vault.js";
-import { createMarkdown, renderNote, TOP_TASKS_COUNT, attentionOptions } from "./markdown.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
@@ -1518,7 +1518,8 @@ function loadSuggestions(repo, areas, who, count, sprintMode, order) {
         const sprint = sprintMode === "off" ? null : await suggestSprints(repo, tree).catch(() => null);
         const resolve = (t, from) => tree.index.resolve(t, from);
         // A task blocked by an open task waits for it: it isn't suggested.
-        const blocked = blockedTasks(notes, { setup: await loadTaskSetup(repo).catch(() => null), resolve });
+        const setup = await loadTaskSetup(repo).catch(() => null);
+        const blocked = blockedTasks(notes, { setup, resolve });
         // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
         const only = sprintMode === "current-only";
         const fromSprint = !sprint ? null : only && !sprint.now ? []
@@ -1527,7 +1528,7 @@ function loadSuggestions(repo, areas, who, count, sprintMode, order) {
           mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked, order }),
           waiting: waitingTasks(notes, { areas, owner: who, order }), allAreas: taskAreas(notes),
           sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
-          noSprintNow: !!fromSprint && only && !sprint.now,
+          noSprintNow: !!fromSprint && only && !sprint.now, setup,
         };
         // Only the tasks shown are read whole, to tell whether each can be started now.
         const paths = [...shown.mine, ...shown.free, ...shown.waiting].map((n) => n.path);
@@ -1565,7 +1566,8 @@ function fillTopTasks(root, f) {
     const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
     const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
       count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault,
-      order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off" });
+      order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off",
+      fields: el.dataset.fieldsDefault ? [...TOP_TASKS_FIELDS] : (el.dataset.fields || "").split(",").filter(Boolean), fieldsSet: !el.dataset.fieldsDefault });
     if (box) el.replaceWith(box);
   }
 }
@@ -1805,12 +1807,15 @@ const ORDER_SAID = { "priority-newest": "By priority, newest first", "priority-o
  * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
  * says to add an owner. The head says every option in use, and when the range or the order is the default.
  */
-function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off" }) {
+function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off",
+  fields = TOP_TASKS_FIELDS, fieldsSet = true }) {
   const tree = app.trees.get(repo.id);
   if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
   const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
+  const fieldsSaid = fields.length ? `Shows ${fields.join(", ")}` : "Shows the names only";
   const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
-    orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode], who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
+    orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode],
+    fieldsSet ? fieldsSaid : `${fieldsSaid} (the block sets no fields)`, who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
   const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
       h("small", { class: "muted" }, said.join(" · "))),
@@ -1838,11 +1843,30 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     return h("button", { type: "button", class: `chip state state-${s.state}`, title: s.reason,
       onclick: () => toast(`${shownName(path)}: ${s.reason}`, "info", 6000) }, STATE_LABEL[s.state]);
   };
+  let setup = null;
+  /** The task's parent task (`part_of`, or the property the setup keeps it in), as a link to it. */
+  const parentChip = (path, t) => {
+    const target = linkTarget(t[fieldProp(setup, "part_of")]);
+    if (!target) return null;
+    const to = tree.index.resolve(target, path);
+    return to ? h("a", { class: "chip parent-chip", href: hrefFor(repo, to), title: `Part of ${shownName(to)}` }, icon("up"), shownName(to))
+      : h("span", { class: "chip parent-chip", title: `Part of ${target}: no such page` }, target);
+  };
+  /** Any other property, as a chip with its value (links by their page's name); nothing when it's empty. */
+  const valueChip = (t, name) => {
+    const raw = t[fieldProp(setup, name)];
+    const parts = (Array.isArray(raw) ? raw : [raw]).map((v) => (v instanceof Date ? isoDate(v) : linkName(v) || String(v ?? "").trim())).filter(Boolean);
+    return parts.length ? h("span", { class: "chip", title: `${name}: ${parts.join(", ")}` }, parts.join(", ")) : null;
+  };
+  /** What each task shows besides its name and Claim: the block's `fields`, in its order. */
+  const fieldChip = (path, t, name) => name === "state" ? stateChip(path)
+    : name === "parent" ? parentChip(path, t)
+    : name === "priority" ? tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : "")
+    : name === "area" ? tag(path, t, "area", allAreas)
+    : valueChip(t, name);
   const row = ({ path, props: t }, extra) => h("li", {},
     h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
-    h("span", { class: "suggest-tags" }, stateChip(path),
-      tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : ""),
-      tag(path, t, "area", allAreas)),
+    h("span", { class: "suggest-tags" }, fields.map((name) => fieldChip(path, t, name))),
     extra);
   /** Sets a task's status from the box: "Not now" puts it on the waiting list, "Bring back" takes it off. */
   const statusButton = (path, label, value, title) => editable
@@ -1850,9 +1874,10 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
   const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
-  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow }) => {
+  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
     allAreas = found;
     states = told;
+    setup = s;
     /**
      * Putting a task off. With sprints, it's pushed to the next sprint (one commit of its sprint line); when
      * there's no sprint after the one it's in, the button says so and offers the waiting list instead.

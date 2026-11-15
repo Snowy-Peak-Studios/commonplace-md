@@ -18,6 +18,7 @@ areas: Sharing, Notes
 order: priority-newest
 sprint: current-then-next
 owner: Your name
+fields: parent, state, priority
 ```
 
 ## Needs attention

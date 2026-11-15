@@ -198,6 +198,17 @@ const homeBox = await page.evaluate(() => ({
   rows: document.querySelectorAll(".note-body .suggest .suggest-list a.suggest-name").length,
 }));
 check(homeBox.box && !homeBox.code && homeBox.rows >= 1, "Home's top-tasks block shows the top tasks box: " + JSON.stringify(homeBox));
+// Its fields: line puts each task's parent first, as a link to it: "Try the app on a phone" is part of "Get set up".
+const homeFields = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .suggest");
+  const li = [...(box?.querySelectorAll(".suggest-list li") ?? [])].find((x) => x.querySelector("a.suggest-name")?.textContent.includes("Try the app on a phone"));
+  const tags = li?.querySelector(".suggest-tags");
+  return { head: box?.querySelector(".suggest-head small")?.textContent ?? "", first: tags?.firstElementChild?.className ?? "",
+    parent: tags?.querySelector("a.parent-chip")?.textContent ?? "", href: decodeURIComponent(tags?.querySelector("a.parent-chip")?.getAttribute("href") ?? "") };
+});
+check(homeFields.head.includes("Shows parent, state, priority, area") && /parent-chip/.test(homeFields.first)
+  && homeFields.parent === "Get set up" && homeFields.href.endsWith("/Tasks/Get set up.md"),
+  "Home's fields: line shows each task's parent first, linking to it: " + JSON.stringify(homeFields));
 await page.evaluate(() => document.querySelector(".note-body .suggest")?.scrollIntoView({ block: "center" }));
 await shot("1c-home-top-tasks");
 await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));

@@ -172,10 +172,10 @@ export function createMarkdown() {
     const token = tokens[idx];
     const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
     if (lang === "top-tasks") {
-      const { areas, count, countSet, order, orderSet, sprint, owner } = topTasksOptions(token.content);
+      const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
         + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
-        + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
+        + ` data-sprint="${sprint}" data-owner="${esc(owner)}" data-fields="${esc(fields.join(","))}"${fieldsSet ? "" : ' data-fields-default="1"'}>`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
     // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field. `data-close`
@@ -221,20 +221,33 @@ export const TOP_TASKS_SPRINTS = ["current-only", "current-then-next", "off"];
 const SPRINT_WORDS = { current: "current-only", "current-and-next": "current-then-next", next: "current-then-next", none: "off", no: "off", all: "off" };
 
 /**
+ * What each task in a top tasks box shows besides its name and Claim, when the block has no `fields:` line:
+ * whether it can be started now, its priority and its area. `state` and `parent` are the box's own; any other
+ * name is a task property (or a Task field, kept in the property the project's setup names).
+ */
+export const TOP_TASKS_FIELDS = ["state", "priority", "area"];
+
+/**
  * The options of a ```top-tasks block, one per line, all written in the block, nothing taken from elsewhere:
  * `range: 3` (how many tasks; `count` in older blocks), `areas: Features, Docs` (or `[Features, Docs]`),
- * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and
- * `owner: Your Name` (whom Claim claims for). Other lines are ignored. A missing or odd range is three, and a
- * missing or odd order `priority-newest`, with `countSet` or `orderSet` false so the box can say so.
+ * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`),
+ * `owner: Your Name` (whom Claim claims for) and `fields: parent, state, priority, area` (what each task shows
+ * besides its name and Claim, in that order; lower case, each once; an empty line shows nothing more). Other lines
+ * are ignored. A missing or odd range is three, a missing or odd order `priority-newest`, and missing fields
+ * `TOP_TASKS_FIELDS`, with `countSet`, `orderSet` or `fieldsSet` false so the box can say so.
  */
 export function topTasksOptions(src) {
-  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
+  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "",
+    fields: [...TOP_TASKS_FIELDS], fieldsSet: false };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(areas|count|range|order|sprint|owner)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(areas|count|range|order|sprint|owner|fields)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
     const key = m[1].toLowerCase();
-    if (key === "areas") {
+    if (key === "fields") {
+      const names = m[2].replace(/^\[|\]$/g, "").split(",").map((f) => unquote(f).toLowerCase()).filter((f) => f && f !== "name" && f !== "claim");
+      Object.assign(out, { fields: [...new Set(names)], fieldsSet: true });
+    } else if (key === "areas") {
       out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
     } else if (key === "sprint") {
       const v = unquote(m[2]).toLowerCase().replace(/[\s_]+/g, "-");

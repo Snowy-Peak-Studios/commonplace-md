@@ -64,6 +64,7 @@ areas: Sharing, Notes
 order: priority-newest
 sprint: current-then-next
 owner: Your name
+fields: parent, state, priority, area
 ```
 
 - `range`: how many (up to 20).
@@ -71,6 +72,7 @@ owner: Your name
 - `order`: `priority-newest`, `priority-oldest`, `newest` or `oldest`.
 - `sprint`: `current-only`, `current-then-next`, or `off` for every task.
 - `owner`: whom **Claim** claims a task for.
+- `fields`: what each task shows besides its name and **Claim**, in that order: `parent` (a link to the task it's part of), `state`, `priority`, `area`, or any other property. Left out: `state, priority, area`.
 
 **Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Each task's priority and area can be changed right there, and **Not now** puts one off. The block works on any page: [Home](../Home.md) has one.
 
