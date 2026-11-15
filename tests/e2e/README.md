@@ -7,16 +7,19 @@
 - reading: the start page, an embedded section, an image, callouts, properties, the Inbox button and shortcut;
 - links: following a wikilink, links with headings and aliases, no missing links;
 - the navigation box: folded in the preview, and refused edits in the editor; a link to no page is warned about;
-- ticking a checkbox and saving it, drafts after a reload, and the conflict view when a save is refused;
+- ticking a checkbox and saving it, drafts after a reload, the conflict view when a save is refused, and the question when leaving unsaved changes (Stay, Keep as a draft, Discard, Save);
 - a new note: only a title, in `Notes/`, started from `Templates/Note.md`;
 - CSV tables: the reading list, and editing and saving a test table;
+- parent tasks and subtasks: the example epic's list and progress bar, the parent picker refusing a loop, and Add subtask; a task's commits, from its `commits` property, with no search;
+- sprints: a sprint's page, the sprint picker's order, Start the next sprint (one commit through the Git data API, answered by the script) and the board's Current sprint view;
+- other kinds of files: a TSV as a table, JSON and Python with colours, a PDF (in the page, or Open and Download on a phone), and a Download for a file the app can't show;
 - the Task Board's base views, with every tab's count checked against the notes' real properties and the real `Bases/Tasks.base`;
 - the Guide's Mermaid diagrams in light and dark, the phone layout, and read-only mode;
 - Task fields: a repo with no setup opens with a new project's fields, and saving writes them to `.commonplace.json`;
 - a new device without an invite (it looks for vaults on GitHub quietly, then is sent to add a repo), one that finds a vault through a `.commonplace.json` and gets it added, and an older device whose `notes-app:` settings move to `commonplace:`.
 
 It only reads from GitHub: every save (`PUT`) is caught and answered by the script, and a fake
-`Data/Test table.csv` is added to the tree for the CSV checks.
+`Data/Test table.csv` is added to the tree for the CSV checks, and `Data/Test song.mp3` for the download.
 
 ```sh
 python -m http.server 8765 --bind 127.0.0.1      # in the repo root, left running
@@ -24,8 +27,10 @@ cd tests/e2e && npm install
 GH_TOKEN=<a token that can read the repo> node run.mjs <folder for screenshots>
 ```
 
-With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The one console error
-expected is the `409 (Conflict)` the script fakes.
+With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. Every failed request is listed
+at the end with its address; the one expected is the `409 (Conflict)` the script fakes.
+
+Every write is answered by the script: PUTs, and the Git data API's trees, commits and refs (Start the next sprint). Any other write is refused, so the check never changes the repo.
 
 Settings, all optional:
 

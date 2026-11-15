@@ -108,7 +108,15 @@ function tokenize(src) {
 }
 
 const BINARY = { "||": 1, "&&": 2, "==": 3, "!=": 3, "<": 4, "<=": 4, ">": 4, ">=": 4, "+": 5, "-": 5, "*": 6, "/": 6, "%": 6 };
-const FUNCTIONS = new Set(["if"]);
+const FUNCTIONS = new Set(["if", "today", "date"]);
+
+/**
+ * Today's date as YAML reads a date property (`2026-11-14` is midnight UTC that day), so `end >= today()`
+ * compares days, not times. `now` is for the tests.
+ */
+export function todayDate(now = new Date()) {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
 const METHODS = new Set(["inFolder", "hasTag", "contains", "startsWith", "endsWith", "lower", "isEmpty"]);
 
 /** Parses an expression into a tree of { t, ... } nodes (precedence climbing). */
@@ -344,7 +352,14 @@ function evaluate(node, ctx) {
       return member(obj, textOf(i), ctx);
     }
     case "method": return method(evaluate(node.obj, ctx), node.name, node.args.map((a) => evaluate(a, ctx)), ctx);
-    case "fn": { // only if(), checked when parsed
+    case "fn": { // the names are checked when parsed
+      if (node.name === "today") return todayDate(ctx.now);
+      if (node.name === "date") {
+        const v = evaluate(node.args[0] ?? { t: "lit", v: null }, ctx);
+        if (v instanceof Date) return v;
+        const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(textOf(v).trim());
+        return m ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3])) : null;
+      }
       if (node.args.length < 2 || node.args.length > 3) throw new BaseError("if() takes a condition, a value, and maybe a value for “else”.");
       if (truthy(evaluate(node.args[0], ctx))) return evaluate(node.args[1], ctx);
       return node.args[2] ? evaluate(node.args[2], ctx) : null;
@@ -374,8 +389,8 @@ function evaluate(node, ctx) {
 const context = (base, note, dates) => ({ base, note, dates, formulas: new Map(), evaluating: new Set() });
 
 /** Evaluates one expression for one note ({ path, props }); for tests and formulas. */
-export function evalExpr(src, note, { base = { formulas: {} }, dates = null } = {}) {
-  return evaluate(parseCached(String(src)), context(base, note, dates));
+export function evalExpr(src, note, { base = { formulas: {} }, dates = null, now = undefined } = {}) {
+  return evaluate(parseCached(String(src)), { ...context(base, note, dates), now });
 }
 
 // ---- filters ----

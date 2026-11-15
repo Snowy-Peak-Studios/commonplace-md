@@ -2,11 +2,19 @@
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
-Made for people and AI agents working together: you write and decide, your agent sorts the inbox, works on tasks and keeps the board up to date. Your days get a bit easier and more productive. ([How it works with agents](#working-with-ai-agents-optional))
+## What it is
+
+A tool for your everyday. The big work tools cost a lot and do so much that most people on a team just don't use them. Commonplace.md is the simple alternative: a wiki, notes and a task board that the whole team actually opens.
+
+It's made for a team and AI together. Your notes are plain files, kept local and easy to reach. You set up your project's rules in the vault: AI agents follow their own rules, people follow theirs, and both work on the same pages. ([How it works with agents](#working-with-ai-agents-optional))
 
 No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
 
 Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
+
+## Why
+
+I was frustrated with the work tools I had to use, so I started making this for my own daily use. It grew until it became my main focus. Now I'm sharing it with everyone who has struggled with those tools like I did.
 
 ## What it does
 
@@ -26,18 +34,28 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
   - `![[image.png]]` embeds show, and so do callouts and the front matter as properties.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
+  - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
+  - `@login` mentions a person (typing `@` offers everyone with an inbox).
+  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field; your agent finds every one in the vault and turns them into tasks.
+  - A ` ```needs-attention ` block shows what waits on you: the tasks with a question for you, and the places that mention you, in one box or two.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
-- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas; "Last modified" is the date of the note's last commit.
-- **CSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as CSV.
+  - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
+- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
+- **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
+- **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
-- **Drafts:** unsaved changes stay in the browser and are offered back after the page closes.
+- **Drafts:** unsaved changes stay in the browser and are offered back after the page closes. Leaving a note with unsaved changes asks first: **Save**, **Keep as a draft** or **Discard** (or **Stay**).
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
 - **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. It needs a connection.
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
-- **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
+- **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, relations, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](#task-fields)).
+- **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
+- **Relations:** a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
+- **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](#task-fields)).
+- **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
 - **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
@@ -47,6 +65,8 @@ Commonplace.md is a static web page (served by GitHub Pages) that talks straight
 **What's next:** the [roadmap](ROADMAP.md) shows what we're working on now and what comes after.
 
 ## Quick start
+
+**Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
 
@@ -99,13 +119,15 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 Either:
 
-- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, and reaches `main` (and the site) at the next release.
+- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, served beside it at <https://snowy-peak-studios.github.io/commonplace-md/dev/>, and reaches `main` at the next release. **Settings › This device › App version** picks which one your device opens: *Released* or *In development* (the newest work, which may break). The choice is kept, so the usual address and the installed app open the one you picked; both use the same token and settings.
 - **B. Host your own copy:**
   1. Fork [github.com/Snowy-Peak-Studios/commonplace-md](https://github.com/Snowy-Peak-Studios/commonplace-md) (keep the name `commonplace-md`, or change the address below to match).
   2. In your fork: **Settings › Pages › Build and deployment**: Source *Deploy from a branch*, branch `main`, folder `/ (root)`. Save.
   3. After a minute or two, open `https://<your-github-name>.github.io/commonplace-md/`.
 
    Free GitHub Pages serves public repos only. That's fine: the app's repo holds code, never notes.
+
+   To serve the version in development too, fork with every branch (untick *Copy the main branch only*), and pick Source *GitHub Actions* in step 2 instead: `.github/workflows/pages.yml` then serves `main` at the address and `dev` under `dev/`, each time either branch moves. In **Settings › Environments › github-pages**, let the `dev` branch deploy too.
 
 ### 2. Make a notes repo
 
@@ -144,6 +166,8 @@ Make a fine-grained token at [github.com/settings/personal-access-tokens/new](ht
 For a repo owned by an organization, the organization may hold new tokens until an owner approves them (organization **Settings › Personal access tokens › Pending requests**). The token works once it's approved.
 
 Make one token per device, so you can revoke one without the others.
+
+**Notes with more than one owner** (your own account and an organization, say): a fine-grained token opens one owner's repos, so the device keeps one per owner. The token you connect with opens the rest; for each other owner, **Settings › Tokens for other owners** has **Make it on GitHub**, a link to GitHub's form with the owner, *Contents: Read and write* and a year already filled in: pick the repos, press **Generate token**, and paste it back. An invite link (or a repo the device's token can't open) asks for that owner's token by itself, with the same link. Each repo then goes with its owner's token.
 
 ### 4. Connect and add the repo
 
@@ -216,7 +240,7 @@ Settings live in this browser's storage, so each device has its own. An invite l
 
 A task is a note in the tasks folder (`Tasks/` unless you change it), and its fields are properties in its front matter. In **Settings**, open the repo and press **Task fields**:
 
-- **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Type (Epic, Story, Task, Bug), Parent task, Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all ten on.
+- **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, the four relations (Blocked by, Related, Comes after, Comes before), Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all of them on but Reviewer, the person who checks and approves the work, which a project turns on if it wants one. A new task's reviewer is who asked for it (its Requested by), else whoever makes it, and can be changed.
 - **Change the lists** (statuses, priorities, types), the **property** each field is kept in (the parent task is `part_of`, since `parent` places a page in the vault's tree), the sprints folder and length, and the estimate's unit (points, hours or days).
 - **Add a field of your own:** a name, its property, and its kind: text, number, date, a choice from a list, a person or a link to a page.
 - **Save to the repo** writes it into the repo's `.commonplace.json`, under `tasks`, in one commit. Everyone on the project shares it, and **Share with everyone** keeps it:
@@ -242,7 +266,48 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 **A link to the setup:** any note can link to `#/settings?fields`, which opens Task fields for the repo you're in, e.g. `[Set up task fields](#/settings?fields)`. The example vault's [Set up tasks](example-vault/Set%20up%20tasks.md) page does, and its Task Board links to it.
 
-Coming next: parent tasks with their subtasks, and sprints.
+**Boxes are blocks in the note:** a task's Subtasks, Relations and Commits boxes, and a sprint's Sprint box, show where the note has a block for them, so nothing shows that the note doesn't ask for:
+
+````markdown
+```subtasks
+```
+````
+
+- The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
+- A new task gets the three task blocks under its title, unless its template already has any of them; a new sprint gets ` ```sprint `.
+- In other Markdown editors, and on a page that isn't a task or a sprint, a block shows as a short code block.
+
+**Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
+
+- A task with subtasks lists them on its page, each with its status, under a bar of how many are done (*Done*, *Cancelled*, *Won't do* and the last status in your list count as done).
+- **Add subtask** on a task makes a new task in the tasks folder, linked to it, with its area and sprint, and opens it.
+
+**Relations:** a task can link other tasks as **Blocked by** (`blocked_by`), **Related** (`related`), **Comes after** (`after`) and **Comes before** (`before`), each a list of links: `blocked_by: ["[[Get set up]]"]` (other Markdown editors show plain links).
+
+- A task's **Relations** box shows them both ways, each task with its status: its own links, and the other tasks' links to it, the other way round (a task blocked by B shows on B under *Blocks*; one that comes after B shows on B under *Comes before*).
+- **Add relation** picks how they're related and the other task, by its ID or name; the x by one of the task's own links takes it out. Each is one commit of that one line.
+- A task blocked by a task that isn't done isn't suggested in the top tasks; it is again once that task is done.
+- The parent picker lists the tasks by ID and name (type either). A task can't be its own parent, or sit under one of its own subtasks.
+- On the board, a base can group by the parent: the example vault's *By parent* view does (`groupBy: part_of`).
+
+**Commits:** a task lists the commits in its `commits` property, the newest first, each linking to GitHub. The example vault's *Get set up* has two. The app reads them from the note, so it asks GitHub for nothing.
+
+A GitHub Action fills them in by itself. After each push, it adds every commit whose message starts with a task's ID (`T-6: ...`, or `T-5, T-6: ...` for several tasks) to that task, as one line: `"[abc1234](https://github.com/you/notes/commit/...) T-6: the first line"`. To set it up in the repo that holds your vault:
+
+1. Copy [`tools/task-commits/task-commits.yml`](tools/task-commits/task-commits.yml) to `.github/workflows/task-commits.yml`, with your vault's branch in it, and [`tools/task-commits/task_commits.py`](tools/task-commits/task_commits.py) to `.github/task_commits.py`.
+2. To fill in the tasks you already have, run `python .github/task_commits.py --all` once at the repo's root, then commit.
+
+- It adds its own commit after each push that has a task's ID, so pull before your next push.
+- Commits made from the app (a save, a claim, a field change) are left out, and so is a push made only of them: those cost no Actions minutes.
+- It sees the repo it runs in. Commits in other repos can still go in by hand, as a line like the ones above or a bare commit address.
+
+**Sprints:** a sprint is a note in the sprints folder (`Sprints/` unless the setup says otherwise) with `start`, `end` and `goal`; a task joins it with `sprint: "[[Sprint 12]]"`.
+
+- A sprint's page lists its tasks by status, with how many are done and, when estimates are on, how much of the estimate.
+- The sprint picker on a task offers the current sprint first, then the next one.
+- **A new task** (a new note in the tasks folder) goes on the next sprint, if there is one, so the current sprint's plan stays as agreed; change it in its Sprint field. **Add subtask** gives it its parent's sprint instead, when the parent has one.
+- **Start the next sprint** (on the latest sprint) makes the next note, its name counted on and its dates from the setup's length, and moves the unfinished tasks you keep ticked: one commit for all of it.
+- A base can show the sprint going on today with `start <= today()` and `end >= today()`: the example vault's *Current sprint* view.
 
 </details>
 
@@ -255,28 +320,39 @@ Coming next: parent tasks with their subtasks, and sprints.
 
 ```text
 example-vault/
-├── Home.md                      start page: links, a table, a callout, an embedded section, a Mermaid diagram, an image
-├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, diagrams
-├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], and an optional Areas table
+├── Home.md                      start page: links, a table, a callout, an embedded section, the top tasks, a Mermaid diagram, an image
+├── Guide.md                     the navigation box, wikilinks with headings and aliases, embeds, callouts, checkboxes, folding lists, diagrams
+├── Task Board.md                current goals, the tasks' base embedded with ![[Tasks.base]], the sprints, and an optional Areas table
 ├── Set up tasks.md              how to set up your tasks' fields, with a link that opens Task fields
+├── How To/                      short how-to pages, one per thing people do, linked with plain Markdown links (they read the same on GitHub)
+├── Other kinds of files.md      what opens how: tables, text with colours, PDFs, pictures, and downloads for the rest
 ├── AGENTS.md                    optional: the rules for AI agents working in the vault
 ├── CLAUDE.md                    optional: loads AGENTS.md for Claude Code
 ├── .agents/skills/              optional: step-by-step skills for AI agents (sort-inbox, start-task, wrap-up-task, public-check)
 ├── .claude/skills/              optional: pointers to those skills, so Claude Code finds them
 ├── Bases/
-│   └── Tasks.base               a base with three views (By status, Open, Done), a formula, groups, sorts and filters
-├── Tasks/                       five task notes with id, status, priority, area, assignee and requested_by properties, and checklists
+│   ├── Tasks.base               a base with four views (By status, By parent, Open, Done), a formula, groups, sorts and filters
+│   └── Sprints.base             the sprints, with a Current sprint view (start <= today() and end >= today())
+├── Tasks/                       six task notes with id, status, priority, area, assignee and requested_by properties, and checklists;
+│                                an epic, Get set up, with three of them under it (part_of); sprints and estimates
+├── Sprints/
+│   ├── Sprint 1.md              a sprint: start, end and goal; its page lists its tasks by status
+│   └── Sprint 2.md              the next one
 ├── Notes/
-│   ├── Inbox.md                 the shared inbox: owner and github properties, New tasks, Notes and Needs attention sections
+│   ├── Inbox.md                 the shared inbox: owner and github properties, Top tasks, Needs attention, New tasks and Notes sections
 │   └── Inboxes/
 │       └── Your name.md         a personal inbox: copy it, rename it, put your GitHub login in github
 ├── Templates/
 │   ├── Note.md                  the note template, with {{title}} and {{date}}
 │   └── Task.md                  the task template: a user story, acceptance criteria and the task's properties
 ├── Data/
-│   └── Reading list.csv         a CSV file, opened as a table
+│   ├── Reading list.csv         a CSV file, opened as a table
+│   ├── Pantry.tsv               a TSV file: tabs between the cells, commas inside them
+│   ├── settings.json            JSON, opened as text with colours
+│   └── word_count.py            a Python script, opened as text with colours
 └── Attachments/
-    └── commonplace.svg          an image, embedded with ![[commonplace.svg|160]]
+    ├── commonplace.svg          an image, embedded with ![[commonplace.svg|160]]
+    └── An example PDF.pdf       a PDF, shown in the page, with Open in a new tab and Download
 ```
 
 Every page but `Home.md` has a `parent` property that links to the page above it.
@@ -293,12 +369,18 @@ The navigation box in `Guide.md` is the kind a script writes and keeps up to dat
 The notes are plain Markdown files, so the same folder opens in any Markdown editor, and desktop note apps that use `[[wikilinks]]` read it as it is. What the app supports:
 
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
+- plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths
 - ` ```mermaid ` diagrams
+- ` ```top-tasks ` blocks: the top tasks to start, on any page
+- `@login` mentions
+- ` ```new-tasks ` blocks: ideas to turn into tasks, on any page
+- ` ```needs-attention ` blocks: the questions waiting for someone and the places that mention them
 - checkboxes, ticked in Read mode
+- lists whose subpoints fold away in Read mode
 - `%% comments %%`, hidden in the preview
 - note templates with `{{title}}` and `{{date}}`
 
@@ -370,7 +452,35 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
-- **Top tasks to start:** every inbox shows, above its text, the three free tasks you could start now: notes in a `Tasks` folder with no `assignee` and not *In Progress* or *Done*, highest `priority` first (*High*, *Medium*, *Low*), then the newest (highest `id`). An `areas` property on the inbox keeps only those areas (e.g. `areas: [Features, Docs]`); without it, every area counts. **Claim** sets the task's `status` to *In Progress* and its `assignee` to the inbox's `owner`, in one commit. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand.
+- **Top tasks to start:** a ` ```top-tasks ` block (in your inbox, or on any page) shows the free tasks you could start now: notes in a `Tasks` folder with no `assignee` and not *In Progress*, *Blocked* (any case) or *Done*, in the block's `order` (by default the highest `priority` first, *High*, *Medium*, *Low*, then the newest, highest `id`). Everything the box shows is written in the block, one option per line, and nothing is taken from anywhere else:
+
+  ```top-tasks
+  range: 3
+  areas: Features, Docs
+  order: priority-newest
+  sprint: current-only
+  owner: Your Name
+  ```
+
+  `range` is how many (up to 20; three when the block doesn't say, and the box says so; older blocks' `count` still works). `areas` keeps only those areas (empty or left out: every area). `order` is `priority-newest` (High, Medium, Low, then none; the newest first within each: also when left out, and the box says so), `priority-oldest`, `newest` or `oldest` (by the number in the task's `id`, priority not counted); it sorts the waiting list too. `sprint` is `current-only`, `current-then-next` or `off` (every task, also when left out). `owner` is whom **Claim** claims for: it sets the task's `status` to *In Progress* and its `assignee` to the owner, in one commit; with no `owner`, nothing can be claimed. The box's head says every option in use. A page without the block, an inbox too, has no box. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints** (and `sprint: current-then-next`), the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit. With sprints, **Not now** becomes **Push to the next sprint**: it moves the task into the next sprint (one commit of its sprint line); when there's no sprint after the task's yet, it says so and offers the waiting list instead. With `sprint: current-only`, it never reaches into the next sprint, and says so when no sprint is running. **On any page** (your Home, a project page, a sprint) the same block shows the same box. Other Markdown editors show the block as plain code.
+- **New tasks:** a ` ```new-tasks ` block (in your inbox's *New tasks*, or on any page) holds ideas that should become tasks, one per line (a leading `- ` or `- [ ] ` is fine), and an `owner:` line saying whose they are:
+
+  ```new-tasks
+  owner: Your Name
+  - Try the app on a second device
+  ```
+
+  In Read mode it's a *New tasks* box with the items (links and formatting work) and how many; without `owner:` it says no agent will sort them. With write access, **Add** puts a new item at the end of the block, like ticking a checkbox: the note changes, and **Save** commits it. With the example vault's agent rules, your agent finds every block with your name in the vault, turns each item into a task, and takes it out of the block.
+- **Mentions:** write `@` and a GitHub login in any note to mention that person; in Edit mode, typing `@` offers the people of the vault (every inbox with a `github` login, by its `owner`). In Read mode, the mention is a link to their inbox. Not in code, and not in an email address or a path.
+- **Needs attention:** a ` ```needs-attention ` block (in your inbox, under the top tasks, or on any page) shows what waits on you. Everything it shows is written in it, one line each:
+
+  ```needs-attention
+  show: questions, mentions
+  owner: Your Name
+  login: your-github-login
+  ```
+
+  `show` is `questions, mentions` for one box, *Needs your attention*, with both (also when left out, and the box says so), or just `questions` (*Questions for you*) or `mentions` (*Mentions of you*): two blocks make two separate boxes. **Questions** are the tasks with an open question (a `question` property with the question in a few words) for `owner`: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them (`assignee`). Each links to its task, where the question's options are, and shows *Waiting for your answer* or *Answered, waiting for the agent* (something is written under the task's `**Answer:**` line); those waiting come first. Such a task shows *Needs a decision* among the top tasks, until the agent acts on the answer and empties `question`. **Mentions** are every place in the vault that mentions `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first, after the questions. The box reads every note once and keeps what it found per note version on the device, so later looks only read what changed. Nothing is written into the inbox: a mention stays listed while the note says it. Without `owner` or `login`, the box says which is missing.
 
 </details>
 
@@ -382,10 +492,10 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
 AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code, plus [step-by-step skills](#the-skills) for the jobs they do. With them, an agent:
 
 - pulls first, and reads the **current goals** on the Task Board, so what it picks and proposes serves them;
-- reads **your inbox** and turns what you wrote under **New tasks** into task notes, with IDs and acceptance criteria;
+- reads **your inbox**, and every ` ```new-tasks ` block with your name anywhere in the vault, and turns what you wrote there into task notes, with IDs and acceptance criteria;
 - picks a free task and **claims** it (status and assignee, committed and pushed) before it changes anything, so two agents never work on the same task;
 - keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
-- asks you under **Needs attention** in your inbox when it needs a decision, and works on something else while it waits.
+- asks you on the task when it needs a decision, with a line under **Needs attention** in your inbox that links to it, and works on something else while it waits.
 
 This is how the makers of Commonplace.md use it with their own agents: these are our rules and skills, made general. Change them to fit how you work.
 
@@ -415,7 +525,7 @@ Not using the example vault? Copy the `.agents` and `.claude` folders and [`AGEN
 
 1. You write in your inbox from the app, on your phone or anywhere: new tasks, notes, answers.
 2. The agent pulls, sorts the inbox into tasks, claims one and works on it.
-3. When it needs you, it leaves a question under **Needs attention**. You answer under the item, and the agent picks it up next time.
+3. When it needs you, it writes the question on the task, with a line under **Needs attention** linking to it. You answer on the task, and the agent picks it up next time.
 4. The agent pushes after every commit, so the app shows its changes on your phone at once.
 
 To start a session, open the agent in the notes repo and paste:
@@ -432,11 +542,11 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 <details>
 <summary>Where your token lives, and what the app talks to</summary>
 
-- The token is kept in this browser's storage (`localStorage`) on this device, and is sent only to `api.github.com`. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
+- The tokens are kept in this browser's storage (`localStorage`) on this device, and are sent only to `api.github.com`; each repo's requests carry its owner's token. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
-- The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site.)
+- The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
-- Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**).
+- Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**). The released version and the one in development share this browser's storage (the same token, settings and drafts), and each keeps its own offline copy of the app.
 
 </details>
 
@@ -498,17 +608,18 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
-| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it |
+| `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it, a task's commits |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
-| `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view |
-| `src/csv.js` | CSV parsing and writing |
+| `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view, colours for code and other text files |
+| `src/csv.js` | CSV and TSV parsing and writing |
 | `src/store.js` | This browser's storage, and moving older settings forward |
 | `src/icons.js` | The icons (Lucide), as SVG elements |
 | `sw.js`, `manifest.webmanifest`, `icons/` | The installable app |
 | `vendor/vendor.js` | Third-party code in one bundled file, made by `tools/vendor` |
 | `vendor/mermaid.min.js` | Mermaid, copied by `tools/vendor`; loaded only when a page has a diagram |
 | `example-vault/` | The example vault to copy into a notes repo |
+| `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
 

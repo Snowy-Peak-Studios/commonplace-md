@@ -1,14 +1,17 @@
 // The app: routing, the sidebar, one view per kind of file, saving, drafts, dialogs and settings.
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
-import { GitHub } from "./github.js";
+import { GitHub, newTokenUrl } from "./github.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
-  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
+  sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
 } from "./vault.js";
-import { createMarkdown, renderNote } from "./markdown.js";
-import { createEditor, setEditorText, createMergeView } from "./editor.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
+import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
 import { store, upgradeRepo } from "./store.js";
@@ -19,6 +22,18 @@ import { icon, fillIcons } from "./icons.js";
 // ================================================================
 
 const APP_NAME = "Commonplace.md";
+
+// ---- which version: released (the main branch) or in development (the dev branch, served under dev/) ----
+
+/** This is the development version, served under dev/ beside the released one, on the same origin. */
+const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
+/** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
+const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
+/** The address of the released (`dev` false) or development version, at the same page. */
+const versionHref = (dev) =>
+  new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
+/** Set in this tab just before the released version sends it on to the development one. */
+const TO_DEV = "commonplace:to-dev";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -60,16 +75,23 @@ const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const isPhone = () => !matchMedia("(min-width: 861px)").matches;
 const isWide = () => matchMedia("(min-width: 1180px)").matches;
 
-const TEXT_KINDS = { md: "md", markdown: "md", csv: "csv", tsv: "csv", base: "base" };
-const BINARY = /\.(pdf|zip|7z|gz|tar|mp3|mp4|wav|ogg|mov|webm|ttf|otf|woff2?|exe|dll|psd|blend|ico)$/i;
+const TEXT_KINDS = { md: "md", markdown: "md", csv: "csv", tsv: "csv", base: "base", pdf: "pdf" };
+// Files that aren't text: offered as a download. Anything else opens as text (and turns out binary if it holds a NUL).
+const BINARY = new RegExp("\\.(zip|7z|rar|gz|tgz|bz2|xz|tar|jar|apk|dmg|iso|msi|exe|dll|so|dylib|bin|wasm|class|pyc"
+  + "|mp3|m4a|aac|flac|wav|ogg|opus|mid|mp4|m4v|mov|webm|mkv|avi|wmv|ttf|otf|woff2?|eot"
+  + "|doc|docx|xls|xlsx|xlsm|ppt|pptx|odt|ods|odp|epub|psd|ai|sketch|fig|xcf|kra|blend|fbx|glb|ico|sqlite|db|pck)$", "i");
 function kindOf(path) {
   if (isImagePath(path)) return "image";
   if (BINARY.test(path)) return "binary";
   return TEXT_KINDS[(/\.(\w+)$/.exec(path)?.[1] || "").toLowerCase()] || "text";
 }
-const iconFor = (path) => ({ md: "file", csv: "table", base: "table", image: "image" })[kindOf(path)] || "blank";
+function iconFor(path) {
+  const kind = kindOf(path);
+  if (kind === "text") return hasLanguage(path) ? "code" : "file";
+  return { md: "file", csv: "table", base: "table", image: "image", pdf: "file" }[kind] || "blank";
+}
 /** Files the app shows but never edits. */
-const viewOnly = (kind) => kind === "image" || kind === "binary" || kind === "base";
+const viewOnly = (kind) => kind === "image" || kind === "binary" || kind === "pdf" || kind === "base";
 
 function emptyState(iconName, title, text, ...actions) {
   return h("div", { class: "empty" }, icon(iconName, "big"), h("h2", {}, title), text ? h("p", {}, text) : null, ...actions);
@@ -151,7 +173,14 @@ async function loadAccess(repo) {
     app.access.set(repo.id, info.permissions ? !!info.permissions.push : true);
   } catch { /* unknown: let saving say what's wrong */ }
 }
-let gh = new GitHub(app.token);
+/**
+ * This device's tokens for other owners, beside the main token: { owner in lower case: { token, login } }.
+ * A fine-grained token opens one owner's repos, so a personal account's vault and an organization's each
+ * need their own; the GitHub client picks the one for each repo's owner.
+ */
+const ownerTokens = () => store.get("tokens", {}) || {};
+const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
+let gh = new GitHub(app.token, tokenMap());
 
 // Older settings: vault mode also put new notes in Notes/. Those are the repo's own fields now.
 if (app.repos.some((r) => upgradeRepo(r) !== r)) {
@@ -490,7 +519,7 @@ function renderHeader() {
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
-  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${APP_NAME}` : app.pageTitle ? `${app.pageTitle} · ${APP_NAME}` : APP_NAME;
+  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
 }
 
 // ================================================================
@@ -527,8 +556,20 @@ function goBack() {
   else location.hash = "#/";
 }
 
+/** Set while the history is moved back to where it was, so that move doesn't route again. */
+let skipRoute = false;
+/** Set while the unsaved-changes question is open. */
+let askingLeave = false;
+
 async function route() {
+  if (skipRoute) {
+    skipRoute = false;
+    trackHistory();
+    return;
+  }
+  const depthBefore = navDepth;
   trackHistory();
+  if (!(await mayLeave(depthBefore))) return;
   flushDraft();
   closeSideOnPhone();
   const { parts, heading, params } = parseHash();
@@ -541,7 +582,7 @@ async function route() {
     const fieldsOf = params.has("fields")
       ? app.repos.find((r) => r.id === params.get("fields")) || app.repo || app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0]
       : null;
-    showSettings(params.get("add") === "1");
+    showSettings(params.get("add") === "1", params.get("token") || "");
     if (fieldsOf) editTaskFields(fieldsOf);
     return;
   }
@@ -586,9 +627,11 @@ async function route() {
       fill($("#tree"));
       // GitHub answers 404 both for a repo that doesn't exist and for one this token may not see.
       const hint = e.status === 404
-        ? `GitHub won't show it to this token. If you just made the token, it may still be waiting for ${repo.owner} to approve it: reload once they have. Otherwise, check on GitHub that the token's resource owner is ${repo.owner} and that ${repo.repo} is selected.`
+        ? `GitHub won't show it to this token. A token opens one owner's repos: if this device's token is for another owner, add one for ${repo.owner}. If you just made it, it may still be waiting for ${repo.owner} to approve it: reload once they have. Otherwise, check on GitHub that the token's resource owner is ${repo.owner} and that ${repo.repo} is selected.`
         : e.message;
-      showProblem(`Couldn't open ${repo.owner}/${repo.repo}`, hint, e);
+      const addToken = e.status === 404 || e.status === 401 || e.status === 403
+        ? h("a", { class: "btn primary", href: `#/settings?token=${encodeURIComponent(repo.owner)}` }, icon("key"), `Add a token for ${repo.owner}`) : null;
+      showProblem(`Couldn't open ${repo.owner}/${repo.repo}`, hint, e, addToken);
     }
     return;
   }
@@ -604,6 +647,54 @@ async function route() {
   await openFile(repo, tree, path, heading, nav);
 }
 
+/**
+ * Moving away from a file with unsaved changes (a link, Back, Settings, another repo) asks first: Save,
+ * Keep as a draft (kept on this device, offered back when the file is opened again), or Discard. Stay, or
+ * Escape, puts the address back. Resolves to whether the move goes on.
+ */
+async function mayLeave(depthBefore) {
+  const f = app.file;
+  if (!f?.dirty) return true;
+  const { parts } = parseHash();
+  if (parts[0] === f.repo.id && parts.slice(1).join("/") === f.path) return true;
+  if (askingLeave) return false;
+  askingLeave = true;
+  let choice;
+  try {
+    choice = await modal({
+      title: "Leave without saving?",
+      text: `${shownName(f.path)} has changes that aren't saved to GitHub yet.`,
+      buttons: [
+        { label: "Stay", kind: "ghost", value: "stay" },
+        { spacer: true },
+        { label: "Discard", kind: "danger", value: "discard" },
+        { label: "Keep as a draft", value: "draft" },
+        { label: "Save", kind: "primary", icon: "upload", value: "save" },
+      ],
+    });
+  } finally {
+    askingLeave = false;
+  }
+  if (app.file !== f) return true;
+  if (choice === "save") await save();
+  else if (choice === "discard") {
+    f.text = f.saved;
+    f.dirty = false;
+    store.remove(draftKey(f));
+  }
+  // Saved, discarded or kept as a draft: on to the new page. Stay, or a save that didn't go through
+  // (refused, or someone else's change to sort out first): back to the file.
+  if ((choice === "save" && !f.dirty) || choice === "discard" || choice === "draft") return true;
+  if (navDepth !== depthBefore) {
+    skipRoute = true;
+    if (navDepth > depthBefore) history.back();
+    else history.forward();
+  } else {
+    try { history.replaceState({ ...(history.state ?? {}), navDepth }, "", hrefFor(f.repo, f.path)); } catch { /* the address stays */ }
+  }
+  return false;
+}
+
 function closeFile() {
   app.file?.editor?.destroy();
   app.file = null;
@@ -614,12 +705,12 @@ function showMain(...children) {
   $("#main").scrollTop = 0;
 }
 
-function showProblem(title, message, error) {
+function showProblem(title, message, error, action = null) {
   closeFile();
   app.pageTitle = "";
   renderHeader();
   const toSettings = error?.status === 401 || error?.status === 403 || error?.status === 404;
-  showMain(emptyState("warning", title, message,
+  showMain(emptyState("warning", title, message, action,
     toSettings ? h("a", { class: "btn", href: "#/settings" }, icon("settings"), "Check the token and repos") : null));
 }
 
@@ -631,10 +722,10 @@ async function openFile(repo, tree, path, heading, nav) {
   if (!tree.files.has(path)) return showProblem("No such file", `There's no ${path} in ${repo.label}.`);
   const kind = kindOf(path);
   markActive(path);
-  if (kind === "image" || kind === "binary") {
+  if (kind === "image" || kind === "binary" || kind === "pdf") {
     app.file = { repo, path, kind, sha: tree.files.get(path) };
     renderHeader();
-    if (kind === "binary") return showMain(emptyState("blank", baseName(path), "The app can't show this kind of file."));
+    if (kind !== "image") return showMain(fileView(repo, path, tree.files.get(path), kind));
     const img = h("img", { class: "image-view", alt: path });
     showMain(h("div", { class: "image-wrap" }, img));
     blobUrl(repo, tree.files.get(path), path).then((url) => { img.src = url; }, (e) => toast(e.message, "error"));
@@ -648,6 +739,12 @@ async function openFile(repo, tree, path, heading, nav) {
     return;
   }
   if (nav !== app.nav) return;
+  // A file with an unknown name that turns out not to be text: offer it as a download instead.
+  if (kind === "text" && data.text.includes("\u0000")) {
+    app.file = { repo, path, kind: "binary", sha: data.sha };
+    renderHeader();
+    return showMain(fileView(repo, path, data.sha, "binary"));
+  }
   app.file = { repo, path, kind, sha: data.sha, saved: data.text, text: data.text, dirty: false };
   if (tree.files.get(path) !== data.sha) {
     tree.files.set(path, data.sha);
@@ -658,6 +755,28 @@ async function openFile(repo, tree, path, heading, nav) {
   renderFile();
   checkDraft();
   if (heading) scrollToHeading(heading);
+}
+
+/**
+ * A PDF shows in the browser's own viewer where it has one in a page (not on phones, whose browsers
+ * only open or download it); any other file the app can't show is offered as a download.
+ */
+function fileView(repo, path, sha, kind) {
+  const name = baseName(path);
+  const download = h("a", { class: "btn primary", download: name, "aria-disabled": "true" }, icon("download"), "Download");
+  const open = kind === "pdf"
+    ? h("a", { class: "btn", target: "_blank", rel: "noopener", "aria-disabled": "true" }, icon("external"), "Open in a new tab")
+    : null;
+  const frame = kind === "pdf" && navigator.pdfViewerEnabled && !isPhone() ? h("iframe", { class: "pdf-view", title: name }) : null;
+  blobUrl(repo, sha, path).then((url) => {
+    for (const a of [download, open]) if (a) { a.href = url; a.removeAttribute("aria-disabled"); }
+    if (frame) frame.src = url;
+  }, (e) => toast(`Couldn't load ${name}: ${e.message}`, "error"));
+  if (frame) return h("div", { class: "pdf-wrap" }, h("div", { class: "file-actions" }, open, download), frame);
+  const text = kind === "pdf"
+    ? "This browser can't show a PDF inside the page. Open it in a new tab, or download it."
+    : "The app can't show this kind of file. Download it to open it on this device.";
+  return emptyState(kind === "pdf" ? "file" : "blank", name, text, h("div", { class: "file-actions" }, open, download));
 }
 
 function renderFile() {
@@ -692,8 +811,10 @@ function applyMode(focus = false) {
       onChange: onTextChanged,
       resolve: (target) => tree.index.resolve(target, f.path),
       isMarkdown: f.kind === "md",
+      language: f.kind === "text" ? languageFor(f.path) : null,
       vault: f.repo.vault && f.kind === "md",
       readOnly: !canWrite(f.repo),
+      people: () => loadPeople(f.repo),
     });
   }
   if (f.editor) setEditorText(f.editor, f.text);
@@ -749,14 +870,45 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo);
+  // The top tasks show only where a ```top-tasks block is, an inbox's too.
+  fillTopTasks(body, f);
+  // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
+  fillAttention(body, f);
+  // A ```new-tasks box gets its Add field, where the note can be changed.
+  fillNewTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
     loadTaskSetup(f.repo).then(() => { if (app.file === f && f.dom?.preview.isConnected && f.kind === "md") renderPreview(); });
   }
-  const form = setup && canWrite(f.repo) && isSetupTask(setup, f.path) ? taskForm(f, setup) : null;
-  const inForm = form ? new Set(setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase())) : null;
-  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", isInbox(f.repo, f.path) ? suggestBox(f) : "", body);
+  const isTask = setup && isSetupTask(setup, f.path);
+  const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
+  // A task with a ```commits block shows its commits there, not again among its properties.
+  const ownCommits = isTask && hasBlock(f.text, "commits");
+  const inForm = isTask ? new Set([...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
+  let props = null;
+  if (isTask && frontMatter) try { props = yamlLoad(frontMatter); } catch { /* the properties box shows what's wrong */ }
+  const isSprint = setup && !isTask && isSprintNote(setup, f.path);
+  fillAppBlocks(body, {
+    subtasks: isTask && (() => subtasksBox(f, setup)),
+    relations: isTask && (() => relationsBox(f, setup)),
+    commits: isTask && (() => commitsBox(f, props)),
+    sprint: isSprint && (() => sprintBox(f, setup)),
+  });
+  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+}
+
+/**
+ * Puts each box where its block is written in the note (```subtasks, ```relations, ```commits, ```sprint).
+ * A box with nothing to show leaves no trace; a block on a page that isn't a task (or a sprint), or one
+ * inside an embedded page, keeps its code, as it does outside the app. No block, no box.
+ */
+function fillAppBlocks(body, boxes) {
+  for (const el of body.querySelectorAll(".app-block")) {
+    const make = boxes[el.dataset.block];
+    if (!make || el.parentElement.closest(".embed-page")) continue;
+    el.replaceWith(make() ?? "");
+  }
 }
 
 // ---- a task's fields as a form (the project's task setup) ----
@@ -784,6 +936,374 @@ function useTaskSetup(repo, setup) {
   setups.set(repo.id, { setup, load: Promise.resolve(setup) });
 }
 
+/**
+ * Some notes' properties (every task, or every sprint), read once per tree version from the bases' cache:
+ * `${repo id}:${what}` -> { version, notes, load }. Until a new version is read, the last one's notes are
+ * shown; the open note is drawn again when it's in.
+ */
+const propLoads = new Map();
+function notesWithProps(repo, what, wanted) {
+  const tree = app.trees.get(repo.id);
+  const key = `${repo.id}:${what}`;
+  const known = propLoads.get(key);
+  if (!tree) return { notes: null };
+  if (known?.version === tree.version) return known;
+  const entry = { version: tree.version, notes: known?.notes ?? null };
+  entry.load = baseNotes(repo, tree, [...tree.files.keys()].filter(wanted))
+    .then((notes) => { entry.notes = notes; redrawNote(); }, () => { propLoads.delete(key); });
+  propLoads.set(key, entry);
+  return entry;
+}
+const taskNotes = (repo, setup) => notesWithProps(repo, "tasks", (p) => isSetupTask(setup, p));
+const sprintNotes = (repo, setup) => notesWithProps(repo, "sprints", (p) => isSprintNote(setup, p));
+
+/** The setup's sprint field, when sprints are on (or there's no setup, and the folder is `Sprints`). */
+function sprintField(setup) {
+  const field = setup?.fields.find((f) => f.key === "sprint");
+  return field && (field.on || !setup.configured) ? field : null;
+}
+/** A sprint note: a Markdown note in the setup's sprints folder. */
+function isSprintNote(setup, path) {
+  const field = sprintField(setup);
+  return !!field && /\.md$/i.test(path) && path.toLowerCase().startsWith(`${field.folder.toLowerCase()}/`);
+}
+
+/** Draws the open note's preview again, where it was scrolled to. */
+function redrawNote() {
+  if (app.file?.kind !== "md" || !app.file.dom?.preview.isConnected) return;
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+}
+
+/** A task's subtasks, each with its status, and a bar of how many are done; Add subtask makes a new one under it. */
+function subtasksBox(f, setup) {
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const tree = app.trees.get(f.repo.id);
+  const { tasks, done, total } = subtasksOf(entry.notes, f.path,
+    { prop: fieldProp(setup, "part_of"), resolve: (t, from) => tree.index.resolve(t, from), setup });
+  const add = canWrite(f.repo) ? h("button", { class: "btn small ghost", onclick: () => addSubtask(f, setup) }, icon("plus"), "Add subtask") : null;
+  if (!total) return add ? h("div", { class: "subtasks none" }, add) : null;
+  return h("section", { class: "subtasks", "aria-label": "Subtasks" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Subtasks"), h("span", { class: "st-count" }, `${done} of ${total} done`), add),
+    h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(total), "aria-valuenow": String(done),
+      "aria-label": `${done} of ${total} subtasks done` }, h("span", { style: `width: ${Math.round((done / total) * 100)}%` })),
+    h("ul", { class: "st-list" }, tasks.map((t) => h("li", { class: t.done ? "done" : null },
+      h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
+      t.status ? h("span", { class: "st-status" }, t.status) : null))));
+}
+
+// ---- a task's relations ----
+
+/**
+ * A task's relations both ways, grouped: Blocked by, Blocks, Comes after, Comes before, Related; each task
+ * with its status. The task's own links can be taken out here, and Add relation links another task.
+ */
+function relationsBox(f, setup) {
+  const fields = relationFields(setup);
+  if (!fields.length) return null;
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const tree = app.trees.get(f.repo.id);
+  const groups = taskRelations(entry.notes, f.path, noteProps(f.text), { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  const editable = canWrite(f.repo);
+  const add = editable ? h("button", { class: "btn small ghost", type: "button", onclick: () => addRelation(f, setup, fields) }, icon("plus"), "Add relation") : null;
+  if (!groups.length) return add ? h("div", { class: "subtasks none" }, add) : null;
+  const remove = (t, button) => {
+    const field = setup.fields.find((x) => x.key === t.key);
+    const left = linkList(noteProps(f.text)[field.prop]).filter((n) => n.toLowerCase() !== t.name.toLowerCase());
+    setTaskField(f, field, left, button);
+  };
+  const name = (t) => (t.path ? shownName(t.path) : t.name);
+  return h("section", { class: "subtasks relations", "aria-label": "Relations" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Relations"), add),
+    groups.map((g) => h("div", { class: "rel-group" },
+      h("div", { class: "rel-label" }, g.label),
+      h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
+        t.path
+          ? h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path))
+          : h("span", { class: "rel-missing", title: "No page has this name" }, t.name),
+        t.status ? h("span", { class: "st-status" }, t.status) : null,
+        editable && t.own ? h("button", { class: "icon-btn", type: "button", title: `Take ${name(t)} out of ${g.label}`,
+          "aria-label": `Take ${name(t)} out of ${g.label}`, onclick: (e) => remove(t, e.currentTarget) }, icon("x")) : null))))));
+}
+
+/** Links another task to this one: how they're related, and which task (by its ID or name). One commit. */
+async function addRelation(f, setup, fields) {
+  const tree = app.trees.get(f.repo.id);
+  const notes = taskNotes(f.repo, setup).notes || [];
+  const resolve = (n) => tree.index.resolve(n, f.path);
+  const kind = h("select", { class: "input", "aria-label": "How they're related" }, fields.map((x) => h("option", { value: x.key }, x.label)));
+  const options = notes.filter((n) => n.path !== f.path)
+    .map((n) => { const tid = String(n.props.id ?? "").trim(); return tid ? `${tid} ${shownName(n.path)}` : shownName(n.path); })
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const task = h("input", { class: "input", list: "rel-task-list", autocomplete: "off", spellcheck: "false", placeholder: "A task's ID or name",
+    "aria-label": "The other task" });
+  const hint = h("small", {});
+  const pick = () => {
+    const s = task.value.trim();
+    if (!s) return { error: "" };
+    const found = findTask(notes, s);
+    if (!found) return { error: `No task is called “${linkName(s)}”.` };
+    if (found.path === f.path) return { error: "A task can't be related to itself." };
+    const field = setup.fields.find((x) => x.key === kind.value);
+    const now = linkList(noteProps(f.text)[field.prop]);
+    if (now.some((n) => resolve(n) === found.path)) return { error: `${shownName(found.path)} is already under ${field.label}.` };
+    return { found, field, now };
+  };
+  const update = () => {
+    const p = pick();
+    hint.textContent = p.error || (p.found ? `${shownName(f.path)}: ${p.field.label.toLowerCase()} ${shownName(p.found.path)}` : "");
+    hint.classList.toggle("bad", !!p.error);
+  };
+  task.addEventListener("input", update);
+  kind.addEventListener("change", update);
+  const ok = await modal({
+    title: "Add relation",
+    text: `How ${shownName(f.path)} is related to another task. It shows on that task too, the other way round.`,
+    body: [h("div", { class: "rel-add" }, kind, task), h("datalist", { id: "rel-task-list" }, options.map((v) => h("option", { value: v }))), hint],
+    buttons: [{ label: "Cancel", value: false }, { label: "Add", kind: "primary", icon: "plus", value: true }],
+    onOpen: () => task.focus(),
+  });
+  if (!ok) return;
+  const p = pick();
+  if (!p.found) return p.error && toast(p.error, "error");
+  await setTaskField(f, p.field, [...p.now, shownName(p.found.path)], h("button"));
+}
+
+// ---- a task's commits ----
+
+/**
+ * The commits made for a task, from its `commits` property: the Task commits Action adds each pushed commit
+ * whose message starts with the task's ID. Nothing is asked of GitHub; links open the commits there.
+ */
+function commitsBox(f, props) {
+  const list = taskCommitLinks(props?.commits);
+  if (!list.length) return null;
+  const own = `${f.repo.owner}/${f.repo.repo}`.toLowerCase();
+  return h("section", { class: "commits", "aria-label": "Commits" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Commits"),
+      h("span", { class: "st-count" }, `${list.length} ${list.length === 1 ? "commit" : "commits"}`)),
+    h("ul", { class: "st-list" }, list.map((c) => h("li", {},
+      h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", title: c.title || c.short },
+        h("span", { class: "st-id" }, c.short), c.title || c.url),
+      c.repo !== own ? h("span", { class: "st-status" }, c.repo.slice(c.repo.indexOf("/") + 1)) : null))));
+}
+
+/** A new task under this one, in the tasks folder: linked to it, with its area and sprint, from the note template. */
+async function addSubtask(parent, setup) {
+  const { repo } = parent;
+  const tree = await loadTree(repo);
+  const folder = setup.configured ? setup.folder : dirName(parent.path);
+  const name = h("input", { class: "input", autocomplete: "off", placeholder: "What's to be done?" });
+  const hint = h("small", {});
+  let createBtn;
+  const plan = () => {
+    const title = name.value.trim();
+    if (!title) return {};
+    const problem = titleProblem(title);
+    if (problem) return { error: problem };
+    const path = `${folder ? folder + "/" : ""}${title}.md`;
+    if (tree.index.has(path)) return { error: `${path} already exists.` };
+    const existing = repo.vault && tree.index.resolve(title);
+    if (existing) return { error: `A page called “${title}” already exists: ${existing}` };
+    return { path, title, kind: "md" };
+  };
+  const update = () => {
+    const p = plan();
+    hint.textContent = p.error || (p.path ? `It will be ${p.path}, under ${shownName(parent.path)}` : "");
+    hint.classList.toggle("bad", !!p.error);
+    if (createBtn) createBtn.disabled = !p.path;
+  };
+  name.addEventListener("input", update);
+  name.addEventListener("keydown", (e) => { if (e.key === "Enter" && !createBtn.disabled) { e.preventDefault(); createBtn.click(); } });
+  const props = noteProps(parent.text);
+  const inherit = ["area", "sprint"].map((k) => fieldProp(setup, k)).filter((k) => String(props[k] ?? "").trim());
+  const created = await modal({
+    title: "Add subtask",
+    text: `A new task under ${shownName(parent.path)}${inherit.length ? `, with the same ${inherit.join(" and ")}` : ""}.`,
+    body: [h("label", { class: "field" }, h("span", {}, "Title"), name, hint)],
+    buttons: [
+      { label: "Cancel", value: null },
+      { label: "Add subtask", kind: "primary", icon: "plus", onclick: async () => {
+        const p = plan();
+        if (!p.path) return false;
+        createBtn.disabled = true;
+        try {
+          // In the tree of pages it sits where its parent task does, whatever the note template says.
+          const place = typeof props.parent === "string" && props.parent.trim() ? [["parent", props.parent.trim()]] : [];
+          const own = [...place, [fieldProp(setup, "part_of"), `[[${shownName(parent.path)}]]`], ...inherit.map((k) => [k, String(props[k]).trim()])];
+          const text = withProps(await startingText(repo, tree, p), own);
+          const id = String(props.id ?? "").trim();
+          const res = await gh.writeText(repo, fullPath(repo, p.path), text, null,
+            `${id ? id + ": add" : "Add"} ${p.path} as a subtask of ${shownName(parent.path)} from ${APP_NAME}`);
+          wroteCommit(repo, res);
+          baseCache("baseProps", repo)[res.sha] = noteProps(text);
+          treeChanged(repo, p.path, res.sha);
+          return p.path;
+        } catch (e) {
+          hint.textContent = `It wasn't added: ${e.message}`;
+          hint.classList.add("bad");
+          createBtn.disabled = false;
+          return false;
+        }
+      } },
+    ],
+    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); name.focus(); },
+  });
+  if (!created) return;
+  app.mode = "edit";
+  store.set("mode", "edit");
+  location.hash = hrefFor(repo, created);
+  toast(`Added ${shownName(created)} under ${shownName(parent.path)}`, "ok");
+}
+
+// ---- sprints ----
+
+const shortDay = (day, year = false) => (day
+  ? new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: year ? "numeric" : undefined, timeZone: "UTC" })
+  : "");
+const WHEN = { now: "Now", next: "Next", later: "Later", past: "Ended" };
+/** "1 point", "3 points", "0.5 days": an estimate with its unit. */
+const amount = (n, unit = "") => `${n} ${n === 1 ? unit.replace(/s$/, "") : unit}`.trim();
+
+/**
+ * A sprint's page: its dates and where it stands, its tasks by status, how many are done (and how much of
+ * the estimate), and on the latest sprint, Start the next sprint.
+ */
+function sprintBox(f, setup) {
+  const tasks = taskNotes(f.repo, setup).notes;
+  const all = sprintNotes(f.repo, setup).notes;
+  if (!tasks || !all) return null;
+  const tree = app.trees.get(f.repo.id);
+  const list = sprints(all, isoDate());
+  const me = list.find((s) => s.path === f.path);
+  if (!me) return null;
+  const s = sprintTasks(tasks, f.path, { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  const start = canWrite(f.repo) && list[0]?.path === f.path
+    ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
+  const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
+  const done = `${s.done} of ${s.total} task${s.total === 1 ? "" : "s"} done`
+    + (s.points ? ` · ${s.points.done} of ${amount(s.points.total, s.points.unit)}` : "");
+  return h("section", { class: "sprint-box", "aria-label": "Sprint" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"), h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
+      h("span", { class: "st-count" }, dates), start),
+    me.goal ? h("p", { class: "sprint-goal" }, h("strong", {}, "Goal: "), me.goal) : null,
+    s.total ? [
+      h("div", { class: "st-count sprint-done" }, done),
+      h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(s.total), "aria-valuenow": String(s.done),
+        "aria-label": done }, h("span", { style: `width: ${Math.round((s.done / s.total) * 100)}%` })),
+      ...s.groups.map((g) => h("div", { class: "sprint-group" },
+        h("div", { class: "sprint-status" }, g.status || "No status", h("span", { class: "muted" }, ` ${g.tasks.length}`)),
+        h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
+          h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
+          t.points != null ? h("span", { class: "st-status" }, amount(t.points, s.points?.unit)) : null))))),
+    ] : h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field."));
+}
+
+/**
+ * Makes the sprint after this one (its name counted on, its dates from the setup's length) and moves the
+ * unfinished tasks the person keeps ticked into it: all in one commit.
+ */
+async function startNextSprint(f, setup, current, open) {
+  const { repo } = f;
+  const field = sprintField(setup);
+  const tree = await loadTree(repo);
+  const plan = nextSprint(current, field.length_days, isoDate());
+  const name = h("input", { class: "input", value: plan.name, autocomplete: "off" });
+  const start = h("input", { class: "input", type: "date", value: plan.start });
+  const end = h("input", { class: "input", type: "date", value: plan.end });
+  const goal = h("input", { class: "input", autocomplete: "off", placeholder: "What should this sprint get done?" });
+  const hint = h("small", {});
+  const boxes = open.map((t) => h("input", { type: "checkbox", checked: true, value: t.path }));
+  let createBtn;
+  const pathOf = () => `${field.folder}/${name.value.trim()}.md`;
+  const problem = () => {
+    const title = name.value.trim();
+    if (!title) return "Give it a name.";
+    if (titleProblem(title)) return titleProblem(title);
+    if (tree.index.has(pathOf())) return `${pathOf()} already exists.`;
+    if (repo.vault && tree.index.resolve(title)) return `A page called “${title}” already exists.`;
+    if (!start.value || !end.value || end.value < start.value) return "The end has to be on or after the start.";
+    return "";
+  };
+  const update = () => {
+    const p = problem();
+    hint.textContent = p || `It will be ${pathOf()}, ${shortDay(start.value)} – ${shortDay(end.value, true)}`;
+    hint.classList.toggle("bad", !!p);
+    if (createBtn) createBtn.disabled = !!p;
+  };
+  for (const el of [name, start, end]) el.addEventListener("input", update);
+  const body = [
+    h("label", { class: "field" }, h("span", {}, "Name"), name),
+    h("div", { class: "sprint-dates" }, h("label", { class: "field" }, h("span", {}, "Start"), start), h("label", { class: "field" }, h("span", {}, "End"), end)),
+    h("label", { class: "field" }, h("span", {}, "Goal"), goal),
+    h("div", { class: "field" }, hint),
+  ];
+  if (open.length) {
+    body.push(h("div", { class: "field" }, h("span", {}, `Move the unfinished tasks from ${current.name}`),
+      h("div", { class: "sprint-move" }, open.map((t, i) => h("label", { class: "check-line" }, boxes[i],
+        t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path), t.status ? h("span", { class: "muted" }, ` · ${t.status}`) : null)))));
+  }
+  const created = await modal({
+    title: "Start the next sprint",
+    text: `It starts after ${current.name} and lasts ${field.length_days} days, the task setup's sprint length. Change anything before you start it.`,
+    body,
+    buttons: [
+      { label: "Cancel", value: null },
+      { label: "Start sprint", kind: "primary", icon: "plus", onclick: async () => {
+        if (problem()) return false;
+        createBtn.disabled = true;
+        try {
+          const title = name.value.trim();
+          const parent = noteProps(f.text).parent;
+          const props = [...(typeof parent === "string" && parent.trim() ? [["parent", parent.trim()]] : []),
+            ["start", start.value], ["end", end.value], ["goal", goal.value.trim()]];
+          const files = [{ path: pathOf(), text: withProps(withBlocks(defaultNote(title), SPRINT_BLOCKS), props) }];
+          for (const box of boxes.filter((b) => b.checked)) {
+            const { text } = await gh.readText(repo, fullPath(repo, box.value));
+            files.push({ path: box.value, text: withProps(text, [[field.prop, `[[${title}]]`]]) });
+          }
+          const moved = files.length - 1;
+          const res = await gh.commitFiles(repo, files.map((x) => ({ path: fullPath(repo, x.path), text: x.text })),
+            `Start ${title}${moved ? `, with ${moved} unfinished task${moved === 1 ? "" : "s"} from ${current.name}` : ""} from ${APP_NAME}`);
+          wroteCommit(repo, res);
+          for (const x of files) {
+            const sha = res.shas[fullPath(repo, x.path)];
+            baseCache("baseProps", repo)[sha] = noteProps(x.text);
+            treeChanged(repo, x.path, sha);
+          }
+          return pathOf();
+        } catch (e) {
+          hint.textContent = e.status === 422 || e.status === 409
+            ? "Not started: GitHub has newer changes. Reload from GitHub and try again."
+            : `Not started: ${e.message}`;
+          hint.classList.add("bad");
+          createBtn.disabled = false;
+          return false;
+        }
+      } },
+    ],
+    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); name.focus(); },
+  });
+  if (!created) return;
+  location.hash = hrefFor(repo, created);
+  toast(`Started ${shownName(created)}`, "ok");
+}
+
+/** The sprint picker's list: the current sprint first, then the next, then the rest, the latest first. */
+function sprintList(f, field, setup, paths, lists) {
+  const id = `tf-list-${field.prop}`;
+  const known = sprintNotes(f.repo, setup).notes;
+  const options = known
+    ? sprintChoices(sprints(known, isoDate())).map((s) => h("option", { value: s.name, label: s.when === "now" || s.when === "next"
+      ? `${WHEN[s.when]}${s.start ? `: ${shortDay(s.start)} – ${shortDay(s.end)}` : ""}` : s.start ? shortDay(s.start, true) : "" }))
+    : paths.filter((p) => isSprintNote(setup, p)).map((p) => h("option", { value: shownName(p) }));
+  lists.push(h("datalist", { id }, options));
+  return id;
+}
+
 /** The value of a property as a control shows it. */
 function shownValue(raw) {
   if (raw instanceof Date) return raw.toISOString().slice(0, 10);
@@ -796,7 +1316,6 @@ function taskForm(f, setup) {
   const props = noteProps(f.text);
   const tree = app.trees.get(f.repo.id);
   const notes = tree ? [...tree.files.keys()].filter((p) => /\.md$/i.test(p) && p !== f.path) : [];
-  const inFolder = (dir) => (p) => p.toLowerCase().startsWith(`${dir.toLowerCase()}/`);
   const login = store.get("user")?.login || "";
   const lists = [];
   const listFor = (field, values) => {
@@ -804,7 +1323,8 @@ function taskForm(f, setup) {
     lists.push(h("datalist", { id }, [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b)).map((v) => h("option", { value: v }))));
     return id;
   };
-  const cells = setup.fields.filter((x) => x.on).flatMap((field) => {
+  // Relations are added and taken out in their own box, which shows them both ways.
+  const cells = setup.fields.filter((x) => x.on && x.kind !== "tasks").flatMap((field) => {
     const cur = shownValue(props[field.prop]).trim();
     const id = `tf-${field.prop}`;
     let control;
@@ -817,8 +1337,8 @@ function taskForm(f, setup) {
     } else {
       const link = ["task", "sprint", "link"].includes(field.kind);
       let list = null;
-      if (field.kind === "task") list = listFor(field, notes.filter((p) => isSetupTask(setup, p)).map(shownName));
-      else if (field.kind === "sprint") list = listFor(field, notes.filter(inFolder(field.folder)).map(shownName));
+      if (field.kind === "task") list = parentList(f, field, setup, notes, lists);
+      else if (field.kind === "sprint") list = sprintList(f, field, setup, notes, lists);
       else if (field.kind === "link") list = listFor(field, notes.map(shownName));
       else if (field.kind === "person") list = listFor(field, [login, cur]);
       control = h("input", {
@@ -839,10 +1359,46 @@ function taskForm(f, setup) {
 }
 
 /**
+ * The parent picker's list: every task by its ID and name ("C-12 Pick a name"), leaving out this task
+ * and the ones under it, which can't be its parent. Until the tasks' properties are read, just their names.
+ */
+function parentList(f, field, setup, paths, lists) {
+  const id = `tf-list-${field.prop}`;
+  const tree = app.trees.get(f.repo.id);
+  const known = taskNotes(f.repo, setup).notes;
+  const notes = known ?? paths.filter((p) => isSetupTask(setup, p)).map((p) => ({ path: p, props: {} }));
+  const resolve = (t, from) => tree.index.resolve(t, from);
+  const options = notes
+    .filter((n) => n.path !== f.path && (!known || !parentProblem(known, f.path, n.path, { prop: field.prop, resolve })))
+    .map((n) => { const tid = String(n.props.id ?? "").trim(); return tid ? `${tid} ${shownName(n.path)}` : shownName(n.path); })
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  lists.push(h("datalist", { id }, options.map((v) => h("option", { value: v }))));
+  return id;
+}
+
+/** A field's new value in words: a page's name, or the names in a list; `none` when it's empty. */
+const saidValue = (v, none) => (Array.isArray(v) ? (v.length ? v.map(linkName).join(", ") : none) : v ? linkName(v) : none);
+
+/**
  * One field changed on the open task. With no unsaved edits it's one commit of that one line, at once;
  * with some, the line changes in the text and Save keeps it with the rest.
  */
 async function setTaskField(f, field, input, control) {
+  // A parent task is picked by its ID or name, and can't be the task itself or one under it.
+  if (field.kind === "task" && String(input ?? "").trim()) {
+    const setup = taskSetupOf(f.repo);
+    const notes = setup ? taskNotes(f.repo, setup).notes : null;
+    if (notes) {
+      const tree = app.trees.get(f.repo.id);
+      const undo = () => { control.value = linkTarget(noteProps(f.text)[field.prop]); };
+      const task = findTask(notes, input);
+      if (!task) { undo(); return toast(`${field.label}: no task is called “${linkName(input)}”.`, "error"); }
+      const problem = parentProblem(notes, f.path, task.path, { prop: field.prop, resolve: (t, from) => tree.index.resolve(t, from) });
+      if (problem) { undo(); return toast(problem, "error"); }
+      input = shownName(task.path);
+      control.value = input;
+    }
+  }
   const value = fieldValue(field, input);
   if (value == null) return toast(`${field.label}: that isn't a ${field.kind === "date" ? "date" : "number"}.`, "error");
   const next = withProps(f.text, [[field.prop, value]]);
@@ -863,7 +1419,7 @@ async function setTaskField(f, field, input, control) {
   try {
     const id = String(noteProps(f.text).id ?? "").trim();
     const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), next, f.sha,
-      `${id ? id + ": " : ""}${field.prop} set to ${value ? linkName(value) : "nothing"} from ${APP_NAME}`);
+      `${id ? id + ": " : ""}${field.prop} set to ${saidValue(value, "nothing")} from ${APP_NAME}`);
     wroteCommit(f.repo, res);
     baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
     treeChanged(f.repo, f.path, res.sha);
@@ -877,30 +1433,38 @@ async function setTaskField(f, field, input, control) {
       if (!f.dirty) store.remove(draftKey(f));
       redraw();
     }
-    toast(`${field.label}: ${value ? linkName(value) : "cleared"}`, "ok");
+    toast(`${field.label}: ${saidValue(value, "cleared")}`, "ok");
   } catch (e) {
     toast(e.isConflict ? `Not changed: ${shownName(f.path)} changed on GitHub. Reload it first.` : `Not changed: ${e.message}`, "error");
     if (control.isConnected) control.disabled = false;
   }
 }
 
-// ---- an inbox's top tasks to start ----
+// ---- the top tasks to start: in a ```top-tasks block, on an inbox or any other page ----
 
-/** The repo's Inbox page and the notes in its inboxes folder. */
-const isInbox = (repo, path) => inboxCandidates([path], repo.inbox, repo.inboxes || "").length > 0;
-
-/** One look-up per tree version and areas, so typing in the inbox doesn't redo it. */
+/** One look-up per tree version and options, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who) {
+function loadSuggestions(repo, areas, who, count, sprintMode, order) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}`;
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
       .then(async (notes) => {
+        // `sprint: off` (or no sprint line) takes from every task, sprints or not.
+        const sprint = sprintMode === "off" ? null : await suggestSprints(repo, tree).catch(() => null);
+        const resolve = (t, from) => tree.index.resolve(t, from);
+        // A task blocked by an open task waits for it: it isn't suggested.
+        const blocked = blockedTasks(notes, { setup: await loadTaskSetup(repo).catch(() => null), resolve });
+        // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
+        const only = sprintMode === "current-only";
+        const fromSprint = !sprint ? null : only && !sprint.now ? []
+          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
         const shown = {
-          mine: claimedTasks(notes, who), free: suggestTasks(notes, { areas }),
-          waiting: waitingTasks(notes, { areas, owner: who }), allAreas: taskAreas(notes),
+          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked, order }),
+          waiting: waitingTasks(notes, { areas, owner: who, order }), allAreas: taskAreas(notes),
+          sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
+          noSprintNow: !!fromSprint && only && !sprint.now,
         };
         // Only the tasks shown are read whole, to tell whether each can be started now.
         const paths = [...shown.mine, ...shown.free, ...shown.waiting].map((n) => n.path);
@@ -914,21 +1478,242 @@ function loadSuggestions(repo, areas, who) {
 }
 
 /**
- * The top three free tasks, over the inbox's text: the notes in a `Tasks` folder with no assignee, highest
- * priority first. The inbox's `areas` property limits them to those areas; `owner` is who a click claims them for.
- * Above them, the tasks its owner has claimed and not finished: waiting for their agent, or with an agent on it.
+ * When sprints are on: the sprint property and the current and next sprints ({ path, name }, either may be
+ * missing); null when sprints are off or there are no sprint notes.
  */
-function suggestBox(f) {
-  const { repo } = f;
+async function suggestSprints(repo, tree) {
+  const setup = await loadTaskSetup(repo);
+  const field = sprintField(setup);
+  if (!field) return null;
+  const paths = [...tree.files.keys()].filter((p) => isSprintNote(setup, p));
+  if (!paths.length) return null;
+  const list = sprints(await baseNotes(repo, tree, paths), isoDate());
+  return { prop: field.prop, now: list.find((s) => s.when === "now") ?? null, next: list.find((s) => s.when === "next") ?? null };
+}
+
+/**
+ * Each ```top-tasks block on the page becomes the box, with only the options written in it: `range`, `areas`,
+ * `sprint` and `owner` (whom Claim claims for). Nothing comes from the page's properties or the device; a page
+ * without the block has no box, an inbox too. In a repo without tasks, the block's code stays.
+ */
+function fillTopTasks(root, f) {
+  for (const el of root.querySelectorAll(".top-tasks-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
+    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
+      count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault,
+      order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off" });
+    if (box) el.replaceWith(box);
+  }
+}
+
+/** One look-up per tree version and owner, so typing in the inbox doesn't redo it. */
+const questionLoads = new Map();
+function loadQuestions(repo, who) {
   const tree = app.trees.get(repo.id);
-  if (![...tree.files.keys()].some(isTaskPath)) return null;
-  const props = noteProps(f.text);
-  const areas = listProp(props.areas);
-  const who = String(props.owner ?? "").trim() || store.get("user")?.login || "";
+  const key = `${repo.id}:${tree.version}:${who}`;
+  if (!questionLoads.has(key)) {
+    for (const k of questionLoads.keys()) if (k.startsWith(`${repo.id}:`)) questionLoads.delete(k);
+    const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then(async (notes) => {
+      const tasks = questionTasks(notes, who);
+      // Only the tasks with a question are read whole, to see whether an answer is written on them yet.
+      const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path)).catch(() => new Map());
+      return tasks.map((t) => ({ ...t, answer: answers.get(t.path) ?? "" }));
+    });
+    questionLoads.set(key, load);
+    load.catch(() => questionLoads.delete(key));
+  }
+  return questionLoads.get(key);
+}
+
+// ---- mentions: `@login` ----
+
+/** The vault's people, from its inboxes' `github` and `owner`: one look-up per tree version. */
+const peopleLoads = new Map();
+function loadPeople(repo) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return Promise.resolve([]);
+  const key = `${repo.id}:${tree.version}`;
+  if (!peopleLoads.has(key)) {
+    for (const k of peopleLoads.keys()) if (k.startsWith(`${repo.id}:`)) peopleLoads.delete(k);
+    const paths = inboxCandidates([...tree.files.keys()], repo.inbox, repo.inboxes || "");
+    const load = paths.length ? baseNotes(repo, tree, paths).then(vaultPeople) : Promise.resolve([]);
+    peopleLoads.set(key, load);
+    load.catch(() => peopleLoads.delete(key));
+  }
+  return peopleLoads.get(key);
+}
+
+/** Each `@login` of a person with an inbox becomes a link to that inbox; any other stays plain text. */
+function fillMentions(root, repo) {
+  const spans = [...root.querySelectorAll("span.mention")];
+  if (!spans.length) return;
+  loadPeople(repo).then((people) => {
+    const byLogin = new Map(people.map((p) => [p.login.toLowerCase(), p]));
+    for (const span of spans) {
+      const p = byLogin.get(String(span.dataset.login).toLowerCase());
+      if (!p || !span.isConnected) continue;
+      span.replaceWith(h("a", { class: "mention", href: hrefFor(repo, p.path), title: `${p.name}'s inbox` }, `@${span.dataset.login}`));
+    }
+  }, () => {});
+}
+
+/** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
+async function noteMentions(repo, tree, paths) {
+  const cache = baseCache("mentions", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("mentions", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
+}
+
+/** One look-up per tree version and login: every note is read once (then cached), and the notes with a mention get their dates. */
+const mentionLoads = new Map();
+function loadMentions(repo, login) {
+  const tree = app.trees.get(repo.id);
+  const key = `${repo.id}:${tree.version}:${login.toLowerCase()}`;
+  if (!mentionLoads.has(key)) {
+    for (const k of mentionLoads.keys()) if (k.startsWith(`${repo.id}:`)) mentionLoads.delete(k);
+    const paths = [...tree.files.keys()].filter((p) => /\.md$/i.test(p));
+    const load = noteMentions(repo, tree, paths).then(async (all) => {
+      const me = login.toLowerCase();
+      const found = [];
+      for (const [path, list] of all) for (const m of list) if (m.login.toLowerCase() === me) found.push({ ...m, path });
+      const dates = await lastCommitDates(repo, tree, [...new Set(found.map((m) => m.path))]).catch(() => new Map());
+      for (const m of found) m.date = dates.get(m.path) ?? null;
+      found.sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || a.path.localeCompare(b.path) || a.line - b.line);
+      return { found, read: paths.length };
+    });
+    mentionLoads.set(key, load);
+    load.catch(() => mentionLoads.delete(key));
+  }
+  return mentionLoads.get(key);
+}
+
+// ---- new tasks: a ```new-tasks block's box ----
+
+/**
+ * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field: the item
+ * goes into the block like a ticked checkbox changes its line (the note changes, Save commits it), and the field
+ * keeps the focus, for the next one.
+ */
+function fillNewTasks(root, f) {
+  if (!canWrite(f.repo)) return;
+  const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
+  boxes.forEach((el, n) => {
+    const close = Number(el.dataset.close);
+    if (!(close >= 0)) return;
+    const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
+    el.append(h("form", { class: "newtasks-add", onsubmit: (e) => {
+      e.preventDefault();
+      const said = input.value.trim();
+      if (!said || app.file !== f) return;
+      const next = addNewTask(f.text, close, said);
+      if (next === f.text) return;
+      f.text = next;
+      if (f.editor) setEditorText(f.editor, f.text);
+      updateDirty();
+      const scroll = $("#main").scrollTop;
+      renderPreview();
+      $("#main").scrollTop = scroll;
+      [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n]?.querySelector(".newtasks-add input")?.focus();
+    } }, input, h("button", { class: "btn small", type: "submit" }, icon("plus"), "Add")));
+  });
+}
+
+// ---- needs your attention: questions and mentions ----
+
+/** Puts the box where each ```needs-attention block is (the top of an inbox), but not inside an embed. */
+function fillAttention(root, f) {
+  for (const el of root.querySelectorAll(".attention-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const show = (el.dataset.show || "questions,mentions").split(",").filter(Boolean);
+    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault });
+    if (box) el.replaceWith(box);
+  }
+}
+
+/** Each kind of box: its name, and the icon in its head. */
+const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"] };
+
+/**
+ * What waits on someone, as one box or one of its halves (`show`): the questions waiting on `owner` (tasks with
+ * a `question` property they asked for, review or whose agent has them), waiting for an answer first, then
+ * answered; then the places that mention `@login`, newest first. Each row says which it is and links to the
+ * task, or to the heading the mention is under. The head says whose, and what's missing from the block.
+ */
+function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true }) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return null;
+  const wantQ = show.includes("questions"), wantM = show.includes("mentions");
+  const [title, iconName] = ATTENTION_TITLES[wantQ && wantM ? "both" : wantQ ? "questions" : "mentions"];
+  const parts = () => [
+    wantQ ? (owner ? `Questions for ${owner}` : "No owner: line, so no questions") : "",
+    wantM ? (login ? `Mentions of @${login}` : "No login: line, so no mentions") : "",
+    showSet ? "" : "Both (the block sets no show)",
+  ].filter(Boolean);
+  const head = h("small", { class: "muted" }, parts().join(" · "));
+  const list = h("ol", { class: "attention-list" }, h("li", { class: "muted" }, "Looking…"));
+  const box = h("section", { class: "attention", "aria-label": title },
+    h("div", { class: "suggest-head" }, icon(iconName), h("strong", {}, title), head), list);
+  const askQ = wantQ && owner, askM = wantM && login;
+  if (!askQ && !askM) {
+    list.replaceChildren(h("li", { class: "muted" }, wantQ && wantM ? "Add owner: (your name) and login: (your GitHub login) to the block."
+      : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
+    return box;
+  }
+  const hasTasks = [...tree.files.keys()].some(isTaskPath);
+  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, k === "question" ? "Question" : "Mention");
+  const state = (t) => t.answer
+    ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
+    : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
+  const questionRow = (t) => h("li", {}, wantM ? kind("question") : null,
+    h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
+    h("span", { class: "suggest-tags" }, state(t)),
+    h("span", { class: "attention-text" }, t.question));
+  const mentionRow = (m) => h("li", {}, wantQ ? kind("mention") : null,
+    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
+      m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
+    m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
+    h("span", { class: "attention-text" }, m.text));
+  Promise.all([
+    askQ && hasTasks ? loadQuestions(repo, owner) : [],
+    askM ? loadMentions(repo, login) : { found: [], read: 0 },
+  ]).then(([tasks, { found, read }]) => {
+    const said = parts();
+    if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
+    if (askM) said[wantQ ? 1 : 0] = `${found.length} mention${found.length === 1 ? "" : "s"} of @${login} in ${read} notes`;
+    head.textContent = said.join(" · ");
+    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...found.map(mentionRow)];
+    list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
+  }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
+  return box;
+}
+
+/** How the box's head says each sprint choice. */
+const SPRINT_SAID = { "current-only": "Current sprint only", "current-then-next": "Current sprint, then the next", off: "" };
+/** How the box's head says each order. */
+const ORDER_SAID = { "priority-newest": "By priority, newest first", "priority-oldest": "By priority, oldest first", newest: "Newest first", oldest: "Oldest first" };
+
+/**
+ * The top free tasks (`count` of them): the notes in a `Tasks` folder with no assignee, in `order` (`TASK_ORDERS`),
+ * only in `areas` (lower case) when given; `shown` is how the areas are written, for the head. With `sprintMode`
+ * (`current-only`, `current-then-next`), from the sprints. Above them, the tasks `who` has claimed and not
+ * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
+ * says to add an owner. The head says every option in use, and when the range or the order is the default.
+ */
+function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off" }) {
+  const tree = app.trees.get(repo.id);
+  if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
   const list = h("ol", { class: "suggest-list" }, h("li", { class: "muted" }, "Looking for free tasks…"));
+  const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
+    orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode], who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
   const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
     h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
-      h("small", { class: "muted" }, areas.length ? `Areas: ${Array.isArray(props.areas) ? props.areas.join(", ") : props.areas}` : "All areas")),
+      h("small", { class: "muted" }, said.join(" · "))),
     list);
   const editable = canWrite(repo) && !!app.token;
   let allAreas = [];
@@ -964,40 +1749,81 @@ function suggestBox(f) {
     ? h("button", { class: "btn small ghost", type: "button", title,
       onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
     : null;
-  const notNow = (path) => statusButton(path, "Not now", WAITING, "Put it on the waiting list: it stops being suggested until you bring it back");
-  loadSuggestions(repo, areas, who).then(({ mine, free, waiting, allAreas: found, states: told }) => {
+  const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
+  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow }) => {
     allAreas = found;
     states = told;
+    /**
+     * Putting a task off. With sprints, it's pushed to the next sprint (one commit of its sprint line); when
+     * there's no sprint after the one it's in, the button says so and offers the waiting list instead.
+     */
+    const notNow = (n) => {
+      if (!editable) return null;
+      if (!sprint) return statusButton(n.path, "Not now", WAITING, WAIT_TITLE);
+      const next = sprint.now && sprint.next && !n.nextSprint && linkName(String(n.props[sprint.prop] ?? "")) !== sprint.next.name
+        ? sprint.next : null;
+      const latest = sprint.next ?? sprint.now;
+      return h("button", { class: "btn small ghost", type: "button",
+        title: next ? `Move it into ${next.name}: it leaves ${sprint.now.name}'s top tasks`
+          : `There's no sprint after ${latest.name} yet: put it on the waiting list instead`,
+        onclick: async (e) => {
+          const button = e.currentTarget;
+          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, `pushed to ${next.name}`);
+          if (await confirmDialog(`No sprint after ${latest.name} yet`,
+            `Put ${shownName(n.path)} on the waiting list instead? It stops being suggested until you bring it back. `
+            + `To push tasks to a new sprint, open ${latest.name} and press Start the next sprint.`, "Not now")) {
+            changeTask(repo, n.path, "status", WAITING, button);
+          }
+        } }, "Push to the next sprint");
+    };
+    // With sprints, the free tasks are the current sprint's, or the next one's when it has none left.
+    const sprintName = sprint ? (sprint.now ?? sprint.next).name : "";
+    if (sprint) box.querySelector(".suggest-head").append(h("span", { class: "chip sprint-chip", title: sprint.now
+      ? `The free tasks in the current sprint, ${sprint.now.name}${free.some((n) => n.nextSprint) ? `, which has none left, so ${sprint.next.name}'s` : ""}`
+      : `No sprint is running, so the free tasks in the next one, ${sprint.next.name}` }, sprintName));
+    /** Claiming a task from the next sprint moves it into the current one, in the same commit. */
+    const moveTo = (n) => (n.nextSprint && sprint?.now ? { prop: sprint.prop, name: sprint.now.name } : null);
+    const nextChip = (n) => (n.nextSprint ? h("span", { class: "chip next-sprint",
+      title: sprint.now ? `From ${sprint.next.name}: ${sprint.now.name} has no free tasks left. Claiming it moves it into ${sprint.now.name}.`
+        : `From ${sprint.next.name}, which starts on ${sprint.next.start}` }, "Next sprint") : null);
+    const none = noSprintNow ? "No sprint is running now, and this box shows the current sprint only."
+      : sprint ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
+      : "No free tasks right now.";
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n.path)]));
+    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n)]));
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
         statusButton(n.path, "Bring back", "To Do", "Take it off the waiting list: its status goes back to To Do"))))) : null;
-    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, "No free tasks right now."), waitingList);
+    if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, none), waitingList);
     fill(list, claimed, free.map((n) => row(n, [
+      nextChip(n),
       editable && who
-        ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}`,
-          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget) }, icon("check"), "Claim")
+        ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}${
+          moveTo(n) ? `, and move it into ${moveTo(n).name}` : ""}`,
+          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n)) }, icon("check"), "Claim")
         : null,
-      notNow(n.path)])),
-    !free.length ? h("li", { class: "muted" }, "No free tasks right now.") : null, waitingList);
+      notNow(n)])),
+    !free.length ? h("li", { class: "muted" }, none) : null, waitingList);
   }, () => fill(list, h("li", { class: "muted" }, "The tasks couldn't be read.")));
   return box;
 }
 
-/** Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first. */
-async function claimSuggested(repo, path, who, button) {
+/**
+ * Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first.
+ * `move` ({ prop, name }) also puts it in that sprint, in the same commit.
+ */
+async function claimSuggested(repo, path, who, button, move = null) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
-    `Its status becomes In Progress and its assignee ${who}. This saves the task to GitHub.`, "Claim")) return;
+    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to GitHub.`, "Claim")) return;
   button.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const taken = String(now.assignee ?? "").trim();
-    const next = taken ? null : claimTask(text, who);
+    const next = taken ? null : claimTask(text, who, move ? [[move.prop, `[[${move.name}]]`]] : []);
     // What was just read or written is known, so the list needn't read the task again.
     const known = baseCache("baseProps", repo);
     if (!next) {
@@ -1006,7 +1832,7 @@ async function claimSuggested(repo, path, who, button) {
       toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} has no properties to change.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
-      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who} from ${APP_NAME}`);
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who}${move ? `, moved into ${move.name}` : ""} from ${APP_NAME}`);
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
@@ -1018,17 +1844,20 @@ async function claimSuggested(repo, path, who, button) {
   if (!refreshInboxBox(repo)) button.disabled = false;
 }
 
-/** Draws the open inbox again (its box re-sorts), keeping the scroll. False when no inbox of `repo` is open. */
+/** Draws the open page again (its top tasks box re-sorts), keeping the scroll. False when no page of `repo` with one is open. */
 function refreshInboxBox(repo) {
-  if (!(app.file?.repo === repo && isInbox(repo, app.file.path) && app.file.dom?.preview.isConnected)) return false;
+  if (!(app.file?.repo === repo && app.file.dom?.preview.isConnected && app.file.dom.preview.querySelector(".suggest"))) return false;
   const scroll = $("#main").scrollTop;
   renderPreview();
   $("#main").scrollTop = scroll;
   return true;
 }
 
-/** Sets one property of a task from the inbox's box: one commit that changes only that line. */
-async function changeTask(repo, path, key, value, picker) {
+/**
+ * Sets one property of a task from a top tasks box: one commit that changes only that line. `said` (e.g.
+ * "pushed to Sprint 2") is what the commit and the message say instead of "<key> set to <value>".
+ */
+async function changeTask(repo, path, key, value, picker, said = "") {
   picker.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
@@ -1044,11 +1873,11 @@ async function changeTask(repo, path, key, value, picker) {
       treeChanged(repo, path, sha);
     } else {
       const id = String(now.id ?? "").trim();
-      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${key} set to ${value} from ${APP_NAME}`);
+      const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${said || `${key} set to ${value}`} from ${APP_NAME}`);
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
-      toast(key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
+      toast(said ? `${shownName(path)}: ${said}` : key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
         : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
   } catch (e) {
@@ -1061,8 +1890,71 @@ async function changeTask(repo, path, key, value, picker) {
 function decorate(root, repo, fromPath) {
   fillIcons(root);
   for (const a of root.querySelectorAll('a[href^="http"]')) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+  fillLinks(root, repo, fromPath);
   fillImages(root, repo, fromPath);
   fillDiagrams(root);
+  fillFolds(root, fromPath);
+  fillMentions(root, repo);
+}
+
+/**
+ * Plain Markdown links to other files in the repo, `[Add a vault](Add%20a%20vault.md)`, open that file in the
+ * app, as they do on GitHub. A link to a file the repo doesn't have is left as it is.
+ */
+function fillLinks(root, repo, fromPath) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return;
+  for (const a of root.querySelectorAll("a[href]:not(.wikilink)")) {
+    const link = relativeLink(a.getAttribute("href"), fromPath);
+    if (link && tree.files.has(link.path)) a.setAttribute("href", hrefFor(repo, link.path, link.heading));
+  }
+}
+
+// ---- folding a list's subpoints ----
+
+/** The folded list items of the open note, by `listItemKey`: kept while it's open, so a redraw keeps them; never saved. */
+const foldsOf = (f) => (f.folds ||= new Set());
+
+/** A list item's own text (without its subpoints) and the page it's from: what a fold is remembered by, so typing above it doesn't move it. */
+function listItemKey(li, fromPath) {
+  const own = li.cloneNode(true);
+  for (const x of own.querySelectorAll(":scope > ul, :scope > ol, .fold")) x.remove();
+  return `${fromPath}\n${own.textContent.replace(/\s+/g, " ").trim().slice(0, 120)}`;
+}
+
+/**
+ * Each list item with subpoints gets an arrow that folds them all away, or shows them again. It only changes
+ * the view: the note's text stays as it is. A bullet's arrow takes the bullet's place; a numbered or task
+ * item's sits at the start of its line.
+ */
+function fillFolds(root, fromPath) {
+  const f = app.file;
+  for (const li of root.querySelectorAll("li")) {
+    if (![...li.children].some((c) => c.tagName === "UL" || c.tagName === "OL") || li.querySelector(":scope > .fold, :scope > p > .fold")) continue;
+    const key = listItemKey(li, fromPath);
+    const folds = f ? foldsOf(f) : new Set();
+    const button = h("button", { type: "button", class: "fold" }, icon("chevron"));
+    const show = (folded) => {
+      li.classList.toggle("folded", folded);
+      button.setAttribute("aria-expanded", String(!folded));
+      button.setAttribute("aria-label", folded ? "Show the subpoints" : "Fold the subpoints");
+      button.title = folded ? "Show the subpoints" : "Fold the subpoints";
+    };
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      const folded = !li.classList.contains("folded");
+      if (folded) folds.add(key); else folds.delete(key);
+      show(folded);
+    });
+    li.classList.add("has-fold");
+    show(folds.has(key));
+    // In a loose list the line is a paragraph: the arrow goes inside it, so it stays on the same line.
+    const line = li.firstElementChild?.tagName === "P" ? li.firstElementChild : li;
+    const box = line.querySelector(":scope > input.task");
+    // A checkbox sits in the margin, so the arrow goes after it, in place of the space before the text.
+    if (box?.nextSibling?.nodeType === Node.TEXT_NODE) box.nextSibling.textContent = box.nextSibling.textContent.replace(/^\s+/, "");
+    if (box) box.after(button); else line.prepend(button);
+  }
 }
 
 // ---- Mermaid diagrams: ```mermaid blocks ----
@@ -1137,8 +2029,9 @@ function propertiesBox(raw, env, skip = null) {
 const blobUrls = new Map();
 function blobUrl(repo, sha, path = "") {
   const key = `${repo.id}:${sha}`;
-  // GitHub sends the bytes untyped; browsers guess PNG or JPEG, but draw an SVG only when it says it is one.
-  const typed = (b) => (/\.svg$/i.test(path) ? new Blob([b], { type: "image/svg+xml" }) : b);
+  // GitHub sends the bytes untyped; browsers guess PNG or JPEG, but draw an SVG (or show a PDF) only when it says it is one.
+  const type = /\.svg$/i.test(path) ? "image/svg+xml" : /\.pdf$/i.test(path) ? "application/pdf" : "";
+  const typed = (b) => (type ? new Blob([b], { type }) : b);
   if (!blobUrls.has(key)) {
     blobUrls.set(key, gh.readBlob(repo, sha).then((b) => URL.createObjectURL(typed(b)), (e) => { blobUrls.delete(key); throw e; }));
   }
@@ -1302,6 +2195,18 @@ async function taskStates(repo, tree, paths) {
     keepBaseCache("taskState", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
+}
+
+/** The answer written on each task (`taskAnswer`), from its whole text: cached by blob sha, like `taskStates`. */
+async function taskAnswers(repo, tree, paths) {
+  const cache = baseCache("taskAnswer", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskAnswer(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("taskAnswer", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? ""]));
 }
 
 /** "Last modified" is the date of the last commit that changed the note: a Map path -> Date. Failures leave gaps. */
@@ -1559,12 +2464,18 @@ const columnName = (c) => {
   return s;
 };
 
+/** A big table shows this many rows at first, and as many more at each press of Show more. */
+const TABLE_ROWS = 500;
+
 function renderTable() {
   const f = app.file;
-  f.csv ??= parseCsv(f.text);
+  f.csv ??= parseCsv(f.text, /\.tsv$/i.test(f.path) ? "\t" : null);
   const data = f.csv;
   if (!data.rows.length) data.rows.push(["Column 1"]);
-  const width = Math.max(1, ...data.rows.map((r) => r.length));
+  f.tableRows ??= TABLE_ROWS;
+  const shown = Math.min(data.rows.length, f.tableRows);
+  const showMore = () => { f.tableRows += TABLE_ROWS; renderTable(); };
+  const width = data.rows.reduce((w, r) => Math.max(w, r.length), 1);
   const pane = f.dom.preview;
   const keepScroll = pane.querySelector(".table-scroll");
   const scroll = keepScroll ? [keepScroll.scrollLeft, keepScroll.scrollTop] : null;
@@ -1590,14 +2501,19 @@ function renderTable() {
     td.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" || e.shiftKey) return;
       e.preventDefault();
-      const below = pane.querySelector(`td[data-r="${r + 1}"][data-c="${c}"]`);
-      below ? below.focus() : addRow(true);
+      if (r + 1 >= data.rows.length) return addRow(true);
+      if (r + 1 >= f.tableRows) showMore();
+      pane.querySelector(`td[data-r="${r + 1}"][data-c="${c}"]`)?.focus();
     });
     return td;
   };
   const addRow = (focus) => {
+    const allShown = shown === data.rows.length;
     data.rows.push(Array(width).fill(""));
+    // The new row is at the end: shown at once when the whole table is, else with a note.
+    if (allShown) f.tableRows = Math.max(f.tableRows, data.rows.length);
     rerender();
+    if (!allShown) return toast(`Row ${data.rows.length} added at the end of the table`, "ok");
     if (focus) pane.querySelector(`td[data-r="${data.rows.length - 1}"][data-c="0"]`)?.focus();
   };
   const addColumn = () => {
@@ -1611,7 +2527,7 @@ function renderTable() {
       data.rows.forEach((row) => row.splice(c, 1));
       rerender();
     }) : null))));
-  const body = data.rows.map((_, r) => h("tr", { class: r === 0 ? "header-row" : "" },
+  const body = data.rows.slice(0, shown).map((_, r) => h("tr", { class: r === 0 ? "header-row" : "" },
     h("th", { class: "rownum" }, h("span", { class: "num" }, String(r + 1)), xButton(`Delete row ${r + 1}`, async () => {
       if (!(await confirmDialog(`Delete row ${r + 1}?`, null, "Delete row", true))) return;
       data.rows.splice(r, 1);
@@ -1624,7 +2540,9 @@ function renderTable() {
       ro ? null : h("button", { class: "btn small", onclick: () => addRow(true) }, icon("rows"), "Add row"),
       ro ? null : h("button", { class: "btn small", onclick: addColumn }, icon("columns"), "Add column"),
       h("span", { class: "note" }, `${data.rows.length} rows · ${width} columns`)),
-    scroller);
+    scroller,
+    shown < data.rows.length ? h("button", { class: "btn small more-rows", onclick: showMore },
+      `Show ${Math.min(TABLE_ROWS, data.rows.length - shown)} more rows (${data.rows.length - shown} not shown yet)`) : null);
   if (scroll) [scroller.scrollLeft, scroller.scrollTop] = scroll;
 }
 
@@ -1761,16 +2679,29 @@ async function startingText(repo, tree, p) {
   const sha = template && tree.files.get(template);
   if (sha) {
     try {
-      return asNewTask(repo, p, fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() }));
+      return await asNewTask(repo, tree, p, fillTemplate(await gh.readBlobText(repo, sha), { title: p.title, date: isoDate() }));
     } catch { /* the template couldn't be read: start plain */ }
   }
-  return asNewTask(repo, p, defaultNote(p.title));
+  return asNewTask(repo, tree, p, defaultNote(p.title));
 }
 
-/** A new note in a project's tasks folder starts with the fields that are on (only once a setup is saved). */
-async function asNewTask(repo, p, text) {
+/**
+ * A new note in a project's tasks folder gets the ```subtasks, ```relations and ```commits blocks (a new sprint
+ * note, the ```sprint block), unless its template already places any; and the fields that are on (only once a setup is saved).
+ * With Reviewer on, its reviewer is who asked for it (Requested by), else whoever makes it. With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
+ * a sprint the template already sets stays, and Add subtask then gives it its parent's.
+ */
+async function asNewTask(repo, tree, p, text) {
   const setup = await loadTaskSetup(repo);
-  return setup.configured && isSetupTask(setup, p.path) ? withProps(text, newTaskProps(setup), { keep: true }) : text;
+  // A new sprint note shows its sprint box where the block is.
+  if (!isSetupTask(setup, p.path)) return isSprintNote(setup, p.path) ? withBlocks(text, SPRINT_BLOCKS) : text;
+  // Its subtasks, relations and commits show where these blocks are, unless its template placed its own.
+  text = withBlocks(text, TASK_BLOCKS);
+  if (!setup.configured) return text;
+  const out = withReviewer(setup, withProps(text, newTaskProps(setup), { keep: true }), store.get("user")?.login);
+  const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
+  if (!sprint?.next || String(noteProps(out)[sprint.prop] ?? "").trim()) return out;
+  return setProps(out, [[sprint.prop, `[[${sprint.next.name}]]`]]) ?? out;
 }
 
 async function newNote() {
@@ -1858,10 +2789,10 @@ async function newNote() {
 
 function tokenSteps() {
   return h("ol", { class: "steps" },
-    h("li", {}, h("span", {}, "Open ", h("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"), ".")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Repository access"), ", choose ", h("b", {}, "Only select repositories"), " and pick your notes repos.")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Permissions"), ", click ", h("b", {}, "Add permissions"), ", tick ", h("b", {}, "Contents"),
-      ", and set it to ", h("b", {}, "Read and write"), ".")),
+    h("li", {}, h("span", {}, "Open ", h("a", { href: newTokenUrl(), target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"),
+      ". The link fills in the name, ", h("b", {}, "Contents"), " set to ", h("b", {}, "Read and write"), ", and a year.")),
+    h("li", {}, h("span", {}, "Set ", h("b", {}, "Resource owner"), " to whoever owns your notes repo (you, or an organization). Under ",
+      h("b", {}, "Repository access"), ", choose ", h("b", {}, "Only select repositories"), " and pick your notes repos.")),
     h("li", {}, h("span", {}, "Generate the token, copy it, and paste it here.")));
 }
 
@@ -1873,7 +2804,7 @@ async function connect(token, out) {
   try {
     const u = await probe.user();
     app.token = token;
-    gh = probe;
+    gh = new GitHub(token, tokenMap());
     store.set("token", token);
     store.set("user", { login: u.login, avatar: u.avatar_url ? `${u.avatar_url}${u.avatar_url.includes("?") ? "&" : "?"}s=64` : "" });
     app.trees.clear();
@@ -1884,6 +2815,39 @@ async function connect(token, out) {
     fill(out, h("li", { class: "bad" }, icon("failure"), e.message));
     return false;
   }
+}
+
+/**
+ * Keeps a token for one owner's repos on this device, after GitHub says it works; the repos of that owner
+ * are read again with it. With `check`, also says whether it opens that repo. Resolves to whether it was kept.
+ */
+async function saveOwnerToken(owner, token, out, check = null) {
+  const key = String(owner).trim().toLowerCase();
+  if (!key || !token) return false;
+  fill(out, h("li", {}, icon("spinner"), "Checking the token…"));
+  try {
+    const u = await new GitHub(token).user();
+    if (check) await new GitHub(token).repo(check);
+    store.set("tokens", { ...ownerTokens(), [key]: { token, login: u.login } });
+    gh = new GitHub(app.token, tokenMap());
+    for (const r of app.repos) if (r.owner.toLowerCase() === key) { app.trees.delete(r.id); app.access.delete(r.id); }
+    fill(out, h("li", { class: "ok" }, icon("success"), `The token for ${owner} works (made by ${u.login}).`));
+    return true;
+  } catch (e) {
+    fill(out, h("li", { class: "bad" }, icon("failure"), e.status === 404 && check
+      ? `The token works, but it can't open ${check.owner}/${check.repo}: check that its resource owner is ${check.owner} and that ${check.repo} is picked.`
+      : e.message));
+    return false;
+  }
+}
+
+/** Takes this device's token for an owner off it: that owner's repos go back to the main token. */
+function removeOwnerToken(owner) {
+  const all = { ...ownerTokens() };
+  delete all[owner];
+  store.set("tokens", all);
+  gh = new GitHub(app.token, tokenMap());
+  for (const r of app.repos) if (r.owner.toLowerCase() === owner) { app.trees.delete(r.id); app.access.delete(r.id); }
 }
 
 /** The link that brings someone to one shared repo: #/join?owner=…&repo=…&branch=…&label=… */
@@ -1946,28 +2910,35 @@ function discoverVaults(now = false) {
     const state = store.get("discovery") || {};
     if (!now && Date.now() - (state.at || 0) < DISCOVER_EVERY) return [];
     const seen = { ...(state.seen || {}) };
-    const todo = reposToCheck(await gh.listRepos(), { seen, known: app.repos.map(repoKey), removed: state.removed || [] });
     const found = [];
-    for (let i = 0; i < todo.length; i += 40) {
-      const part = todo.slice(i, i + 40);
-      const vars = {};
-      const fields = part.map((x, j) => {
-        vars[`o${j}`] = x.owner;
-        vars[`n${j}`] = x.repo;
-        return `r${j}: repository(owner: $o${j}, name: $n${j}) { object(expression: "HEAD:${MARKER}") { ... on Blob { text } } }`;
-      });
-      const args = part.map((_, j) => `$o${j}: String!, $n${j}: String!`).join(", ");
-      const data = await gh.graphql(`query(${args}) {\n${fields.join("\n")}\n}`, vars);
-      part.forEach((x, j) => {
-        seen[repoKey(x)] = x.pushed;
-        const text = data[`r${j}`]?.object?.text;
-        const r = text != null ? parseMarker(text, x.owner, x.repo) : null;
-        if (r) found.push({ ...r, branch: r.branch || x.branch });
-      });
-    }
+    // A token sees its own owner's repos: look with every token this device has.
+    for (const token of [app.token, ...Object.values(tokenMap())]) await lookWith(new GitHub(token), seen, state.removed || [], found);
     store.set("discovery", { ...(store.get("discovery") || {}), at: Date.now(), seen });
     return found.map(addRepo);
   })().finally(() => { discovering = null; }));
+}
+
+/** One token's look: the repos it can save to that are new or changed since the last look, read for a marker file. */
+async function lookWith(client, seen, removed, found) {
+  const known = [...app.repos, ...found].map(repoKey);
+  const todo = reposToCheck(await client.listRepos(), { seen, known, removed });
+  for (let i = 0; i < todo.length; i += 40) {
+    const part = todo.slice(i, i + 40);
+    const vars = {};
+    const fields = part.map((x, j) => {
+      vars[`o${j}`] = x.owner;
+      vars[`n${j}`] = x.repo;
+      return `r${j}: repository(owner: $o${j}, name: $n${j}) { object(expression: "HEAD:${MARKER}") { ... on Blob { text } } }`;
+    });
+    const args = part.map((_, j) => `$o${j}: String!, $n${j}: String!`).join(", ");
+    const data = await client.graphql(`query(${args}) {\n${fields.join("\n")}\n}`, vars);
+    part.forEach((x, j) => {
+      seen[repoKey(x)] = x.pushed;
+      const text = data[`r${j}`]?.object?.text;
+      const r = text != null ? parseMarker(text, x.owner, x.repo) : null;
+      if (r) found.push({ ...r, branch: r.branch || x.branch });
+    });
+  }
 }
 
 /**
@@ -2050,6 +3021,9 @@ async function editTaskFields(r) {
       extra.push(h("label", { class: "task-days" }, h("input", { class: "input", type: "number", min: "1", max: "90", value: String(f.length_days),
         "aria-label": "Sprint length in days", oninput: (e) => { f.length_days = Math.min(90, Math.max(1, parseInt(e.target.value, 10) || 14)); } }), "days"));
     }
+    if (f.kind === "tasks") {
+      extra.push(h("small", { class: "muted" }, `Links to tasks; the other task shows “${relationFields().find((x) => x.key === f.key)?.reverse}”`));
+    }
     if (f.kind === "number") {
       extra.push(h("select", { class: "input", "aria-label": "Estimate unit", onchange: (e) => { f.unit = e.target.value; } },
         ...ESTIMATE_UNITS.map((u) => h("option", { value: u, selected: u === f.unit }, u))));
@@ -2112,28 +3086,63 @@ async function editTaskFields(r) {
 }
 
 /** Someone opened an invite link. */
-function join(params) {
+async function join(params) {
   const r = joinRepo(params);
   if (!r) return showProblem("This invite link is broken", "It doesn't say which repo to open. Ask for a new link.");
   if (!app.token) {
     store.set("join", r);
     return showWelcome(r);
   }
+  // A device already connected: its token may be for another owner. Then it needs one for this owner too.
+  if (!ownerTokens()[r.owner.toLowerCase()]) {
+    showMain(skeleton());
+    try { await gh.repo(r); } catch (e) {
+      if ([401, 403, 404].includes(e.status)) return showOwnerToken(r);
+    }
+  }
   redirect(hrefFor(addRepo(r)));
 }
 
+/**
+ * This device's token can't open the repo an invite link (or a repo in the list) is for: a fine-grained
+ * token opens one owner's repos. This page adds a token for that owner, with GitHub's form filled in.
+ */
+function showOwnerToken(r) {
+  closeFile();
+  app.pageTitle = "";
+  renderHeader();
+  const input = h("input", { class: "input", type: "password", placeholder: "github_pat_…", autocomplete: "off", spellcheck: "false" });
+  const out = h("ul", { class: "checks" });
+  const go = async () => {
+    if (!input.value.trim()) return input.focus();
+    if (!(await saveOwnerToken(r.owner, input.value.trim(), out, r))) return;
+    redirect(hrefFor(addRepo(r)));
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  showMain(h("div", { class: "welcome" },
+    h("h1", {}, `A token for ${r.owner}`),
+    h("p", { class: "lead" }, "This device's token can't open ", h("b", {}, `${r.owner}/${r.repo}`),
+      `. A token opens one owner's repos, so add one for ${r.owner}: this device keeps both, and each repo uses its owner's.`),
+    h("div", { class: "card" },
+      h("h2", {}, icon("key"), `Add a token for ${r.owner}`),
+      guestSteps(r),
+      h("div", { class: "inline-form" }, input, h("button", { class: "btn primary", onclick: go }, "Save token")),
+      out,
+      h("p", { class: "fine" }, TOKEN_NOTE, " ", h("a", { href: "#/settings" }, "Settings"), " lists this device's tokens."))));
+}
+
 function guestSteps(r) {
-  const tokenUrl = `https://github.com/settings/personal-access-tokens/new?${new URLSearchParams({ name: `${APP_NAME}: ${r.repo}`, target_name: r.owner })}`;
+  const tokenUrl = newTokenUrl({ owner: r.owner, name: `${APP_NAME} - ${r.repo}` });
   return h("ol", { class: "steps" },
     h("li", {}, h("span", {}, "If you were invited on GitHub, accept the invitation first. It came by email; you can also open ",
       h("a", { href: `https://github.com/${r.owner}/${r.repo}/invitations`, target: "_blank", rel: "noopener" }, "the repo's invitation"), " or ",
       h("a", { href: `https://github.com/orgs/${r.owner}/invitation`, target: "_blank", rel: "noopener" }, "the organization's invitation"),
       " while signed in to GitHub.")),
     h("li", {}, h("span", {}, "Open ", h("a", { href: tokenUrl, target: "_blank", rel: "noopener" }, "GitHub › New fine-grained token"),
-      ". Set ", h("b", {}, "Resource owner"), " to ", h("b", {}, r.owner), ", and under ", h("b", {}, "Repository access"),
-      " choose ", h("b", {}, "Only select repositories"), " › ", h("b", {}, r.repo), ".")),
-    h("li", {}, h("span", {}, "Under ", h("b", {}, "Permissions"), ", click ", h("b", {}, "Add permissions"), ", tick ", h("b", {}, "Contents"),
-      ", and set it to ", h("b", {}, "Read and write"), " if you were asked to edit, or leave it at ", h("b", {}, "Read-only"), " if not.")),
+      ": it sets ", h("b", {}, "Resource owner"), " to ", h("b", {}, r.owner), " for you. Under ", h("b", {}, "Repository access"),
+      ", choose ", h("b", {}, "Only select repositories"), " › ", h("b", {}, r.repo), ".")),
+    h("li", {}, h("span", {}, "The link has filled in the rest: the name, ", h("b", {}, "Contents"), " set to ", h("b", {}, "Read and write"),
+      ", and a year. If you were only asked to read, set ", h("b", {}, "Contents"), " to ", h("b", {}, "Read-only"), ".")),
     h("li", {}, h("span", {}, "Click ", h("b", {}, "Generate token"), " (for an organization it may say ", h("b", {}, "Generate token and request access"),
       "), copy the token, and paste it here. If ", r.owner, " has to approve tokens, it starts working once they do; until then the app says it can't find the notes.")));
 }
@@ -2189,7 +3198,7 @@ async function ensureSidebar() {
   } catch { /* Settings shows what's wrong when access is checked */ }
 }
 
-function showSettings(adding = false) {
+function showSettings(adding = false, tokenOwner = "") {
   closeFile();
   app.pageTitle = "Settings";
   renderHeader();
@@ -2210,6 +3219,14 @@ function showSettings(adding = false) {
       items.push(h("li", { class: "ok" }, icon("success"), `The token works for ${u.login}`));
     } catch (e) {
       items.push(h("li", { class: "bad" }, icon("failure"), e.message));
+    }
+    for (const [owner, t] of Object.entries(ownerTokens())) {
+      try {
+        const u = await new GitHub(t.token).user();
+        items.push(h("li", { class: "ok" }, icon("success"), `The token for ${owner} works for ${u.login}`));
+      } catch (e) {
+        items.push(h("li", { class: "bad" }, icon("failure"), `The token for ${owner}: ${e.message}`));
+      }
     }
     for (const r of app.repos) {
       try {
@@ -2237,9 +3254,10 @@ function showSettings(adding = false) {
     h("div", { class: "card-actions" },
       h("button", { class: "btn", onclick: checkAccess }, icon("success"), "Check access"),
       h("button", { class: "btn danger", onclick: async () => {
-        if (!(await confirmDialog("Disconnect this device?", "The token is removed from this browser. Unsaved drafts stay.", "Disconnect", true))) return;
+        if (!(await confirmDialog("Disconnect this device?", "Its tokens are removed from this browser. Unsaved drafts stay.", "Disconnect", true))) return;
         app.token = "";
         store.remove("token");
+        store.remove("tokens");
         store.remove("user");
         gh = new GitHub("");
         app.trees.clear();
@@ -2251,6 +3269,53 @@ function showSettings(adding = false) {
     out,
     h("details", { class: "fine" }, h("summary", {}, "How to make a new token"), tokenSteps()),
     h("p", { class: "fine" }, TOKEN_NOTE));
+
+  // ---- tokens for other owners ----
+  const others = ownerTokens();
+  const ownerInput = h("input", { class: "input", list: "repo-owners", autocomplete: "off", spellcheck: "false", autocapitalize: "off",
+    placeholder: "The owner: your-name or your-organization", value: tokenOwner, "aria-label": "Owner" });
+  const repoOwners = [...new Set(app.repos.map((r) => r.owner))].filter((o) => !others[o.toLowerCase()]);
+  const makeLink = h("a", { class: "btn", target: "_blank", rel: "noopener" }, icon("key"), "Make it on GitHub");
+  const syncLink = () => {
+    const o = ownerInput.value.trim();
+    makeLink.href = newTokenUrl({ owner: o, name: `${APP_NAME} - ${o || "notes"}` });
+    makeLink.title = o ? `GitHub's new token page, filled in for ${o}` : "GitHub's new token page";
+  };
+  ownerInput.addEventListener("input", syncLink);
+  syncLink();
+  const ownerTokenInput = h("input", { class: "input", type: "password", autocomplete: "off", spellcheck: "false", placeholder: "github_pat_…",
+    "aria-label": "The token for that owner" });
+  const ownerOut = h("ul", { class: "checks" });
+  const saveOther = async () => {
+    const o = ownerInput.value.trim();
+    if (!o) return ownerInput.focus();
+    if (!ownerTokenInput.value.trim()) return ownerTokenInput.focus();
+    const check = app.repos.find((r) => r.owner.toLowerCase() === o.toLowerCase()) || null;
+    if (await saveOwnerToken(o, ownerTokenInput.value.trim(), ownerOut, check)) { toast(`Token for ${o} saved on this device`, "ok"); showSettings(); }
+  };
+  ownerTokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveOther(); });
+  const ownersCard = h("section", { class: "card", id: "owner-tokens" },
+    h("h2", {}, icon("key"), "Tokens for other owners"),
+    h("p", {}, "A token opens one owner's repos. To open another owner's too, say your own account beside an organization, add a token for it: each repo then uses its owner's token, and the token above opens the rest."),
+    Object.keys(others).length
+      ? h("ul", { class: "checks owner-tokens" }, Object.entries(others).map(([o, t]) => h("li", {}, icon("key"),
+        h("span", {}, h("b", {}, o), t.login ? h("small", { class: "muted" }, ` · made by ${t.login}`) : null),
+        h("button", { class: "btn small danger", type: "button", onclick: async () => {
+          if (!(await confirmDialog(`Remove the token for ${o}?`, `${o}'s repos go back to the main token, which may not open them.`, "Remove", true))) return;
+          removeOwnerToken(o);
+          showSettings();
+        } }, "Remove"))))
+      : null,
+    h("h3", { class: "owner-tokens-add" }, "Add a token for an owner"),
+    h("ol", { class: "steps" },
+      h("li", {}, h("span", {}, "Type the owner, as in github.com/owner/repo.")),
+      h("li", {}, h("span", {}, "Press ", h("b", {}, "Make it on GitHub"), ": the owner, ", h("b", {}, "Contents"), " (read and write) and a year are filled in. Pick the repos under ",
+        h("b", {}, "Only select repositories"), ", and press ", h("b", {}, "Generate token"), ".")),
+      h("li", {}, h("span", {}, "Paste it here and press ", h("b", {}, "Save"), "."))),
+    h("div", { class: "inline-form" }, ownerInput, makeLink),
+    h("datalist", { id: "repo-owners" }, repoOwners.map((o) => h("option", { value: o }))),
+    h("div", { class: "inline-form" }, ownerTokenInput, h("button", { class: "btn primary", type: "button", onclick: saveOther }, "Save")),
+    ownerOut);
 
   // ---- repos ----
   const forms = h("div", {});
@@ -2344,8 +3409,20 @@ function showSettings(adding = false) {
   const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(store.prefix + "draft:"));
   let drafts = [];
   try { drafts = draftKeys(); } catch { /* storage blocked */ }
+  const pickVersion = (dev) => {
+    store.set("version", dev ? "dev" : "main");
+    if (dev !== DEV_BUILD) location.assign(versionHref(dev));
+  };
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    h("div", { class: "field" },
+      h("span", {}, "App version"),
+      h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
+        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => pickVersion(false) }, "Released"),
+        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => pickVersion(true) }, "In development")),
+      h("small", { class: "hint" }, DEV_BUILD
+        ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
+        : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
     h("p", {}, drafts.length ? `${drafts.length} unsaved ${drafts.length === 1 ? "draft is" : "drafts are"} kept in this browser.` : "No unsaved drafts are kept in this browser."),
     drafts.length ? h("button", { class: "btn small danger", onclick: async () => {
       if (!(await confirmDialog("Discard every unsaved draft?", "Changes you never saved will be gone.", "Discard all", true))) return;
@@ -2357,14 +3434,42 @@ function showSettings(adding = false) {
     h("div", { class: "page-head" },
       h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
-    github, repos, device));
+    github, ownersCard, repos, device));
+  // #/settings?token=<owner> opens straight to adding a token for that owner.
+  if (tokenOwner) { ownersCard.scrollIntoView({ block: "start" }); ownerTokenInput.focus(); }
 }
 
 // ================================================================
 // Start
 // ================================================================
 
+/**
+ * Which version this device follows. The released version sends a device that picked the development one on
+ * to it, once per try: if the development version doesn't open (the device comes back here), it stays.
+ * Resolves to false when the page is leaving.
+ */
+function followVersion() {
+  let session = null;
+  try { session = sessionStorage; } catch { /* storage blocked: no sending on */ }
+  if (DEV_BUILD) {
+    session?.removeItem(TO_DEV);
+    if (store.get("version") !== "dev") store.set("version", "dev");
+    document.body.classList.add("dev-build");
+    return true;
+  }
+  if (store.get("version") !== "dev" || !session) return true;
+  if (session.getItem(TO_DEV)) {
+    session.removeItem(TO_DEV);
+    setTimeout(() => toast("The version in development didn't open, so this is the released one. Settings › This device picks the version.", "error"), 0);
+    return true;
+  }
+  session.setItem(TO_DEV, "1");
+  location.replace(versionHref(true));
+  return false;
+}
+
 function start() {
+  if (!followVersion()) return;
   fillIcons(document.body);
   renderWho();
   renderRepoPicker();

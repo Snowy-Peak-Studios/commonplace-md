@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  parseBase, parseExpr, evalExpr, matchesFilter, candidatePaths, runView, usesFileMtime, noteProps, reviveDates, compareValues,
+  parseBase, parseExpr, evalExpr, matchesFilter, candidatePaths, runView, usesFileMtime, noteProps, reviveDates, compareValues, todayDate,
 } from "../src/bases.js";
 
 const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -70,7 +70,7 @@ test("expressions: file fields and inFolder", () => {
 });
 
 test("expressions: what isn't supported says so", () => {
-  assert.throws(() => parseExpr("today()"), /function “today\(\)” .* isn't supported/);
+  assert.throws(() => parseExpr("now()"), /function “now\(\)” .* isn't supported/);
   assert.throws(() => parseExpr("file.hasLink(x)"), /“.hasLink\(\)” .* isn't supported/);
   assert.throws(() => parseExpr("status == "), /ends too early/);
   assert.throws(() => parseExpr('status == "Done'), /no closing quote/);
@@ -241,4 +241,15 @@ views:
   assert.deepEqual(names(r.groups[0]), ["Delta", "Epsilon"]);
   assert.equal(r.groups[0].rows[0].values["formula.rank"], 1);
   assert.equal(r.groups[0].rows[0].values["file.basename"], "Delta");
+});
+
+test("today() and date() compare days, as YAML reads a date property", () => {
+  const now = new Date(2026, 10, 14, 23, 30); // late in the evening, local time
+  assert.equal(todayDate(now).toISOString(), "2026-11-14T00:00:00.000Z");
+  const sprint = { path: "Sprints/Sprint 1.md", props: noteProps("---\nstart: 2026-11-02\nend: 2026-11-14\n---\n") };
+  assert.equal(evalExpr("start <= today() && end >= today()", sprint, { now }), true);
+  assert.equal(evalExpr("end >= today()", sprint, { now: new Date(2026, 10, 15, 0, 5) }), false);
+  assert.equal(evalExpr('date("2026-11-02") == start', sprint), true);
+  assert.equal(evalExpr('date("soon")', sprint), null);
+  assert.equal(matchesFilter({ and: ["start <= today()", "end >= today()"] }, sprint, {}), evalExpr("start <= today() && end >= today()", sprint));
 });

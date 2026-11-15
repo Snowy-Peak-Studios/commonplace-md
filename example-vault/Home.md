@@ -9,11 +9,13 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 
 | Page | What it holds |
 |---|---|
-| [[Guide]] | Links, embeds, callouts, checkboxes, diagrams and the navigation box |
+| [[Guide]] | Links, embeds, callouts, checkboxes, folding lists, diagrams and the navigation box |
 | [[Task Board]] | The tasks in `Tasks/`, shown as a table from [[Tasks.base]] |
 | [[Set up tasks]] | Which fields your tasks have: [set them up](#/settings?fields) for the whole project |
+| [[How To]] | Short steps for each thing you do here: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone |
 | [[Inbox]] | Quick notes, new tasks and questions; each person can have their own in `Notes/Inboxes/` |
 | [[Reading list.csv\|Reading list]] | A CSV file, opened as a table you can edit |
+| [[Other kinds of files]] | Tables, JSON, scripts, PDFs and pictures: what opens how |
 | [[AGENTS\|Rules for AI agents]] | Optional: how AI agents work in these notes (`AGENTS.md`, loaded by `CLAUDE.md`); the prompt to start one is [[#Working with an AI agent\|below]] |
 
 ## This week's goals
@@ -21,6 +23,26 @@ Welcome to your notes. This folder is an example vault for **Commonplace.md**: c
 The goals live on the Task Board; this is that section, embedded here:
 
 ![[Task Board#Current goals]]
+
+## What to start next
+
+The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block. Everything it shows is written in it, one option per line:
+
+- `range:` how many tasks (up to 20);
+- `areas:` only these areas (empty: every area);
+- `order:` `priority-newest` (High, Medium, Low, the newest first within each), `priority-oldest`, `newest` or `oldest` (priority not counted);
+- `sprint:` `current-only`, `current-then-next` (the next sprint's when the current one has none left), or `off` (every task);
+- `owner:` whom **Claim** claims a task for.
+
+Nothing is taken from anywhere else. Other Markdown editors show it as a small code block.
+
+```top-tasks
+range: 3
+areas:
+order: priority-newest
+sprint: current-then-next
+owner: Your name
+```
 
 ## How saving works
 

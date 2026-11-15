@@ -1,10 +1,13 @@
 // Markdown preview: wikilinks, embeds, callouts, task checkboxes.
 // `env` (passed to render) supplies { resolve(target) -> path|null, href(path, heading), fromPath, depth }.
 // Icons, embedded pages, base views and Mermaid diagrams are left as placeholders (`data-icon`, `.embed-page`, `.embed-base`,
-// `.mermaid-diagram`) for the app to fill.
+// `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock } from "./vault.js";
+
+/** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
+export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
 
 /** Callout kinds and the icon each shows. */
 const CALLOUT_ICONS = {
@@ -30,6 +33,33 @@ function wikilinkRule(state, silent) {
   }
   state.pos = end + 2;
   return true;
+}
+
+/**
+ * `@login` in text becomes a `mention` token (the app makes it a link to that person's inbox). Not inside a
+ * link or code (code spans and fences aren't text tokens), and not in an email address (see `MENTION`).
+ */
+function mentionRule(state) {
+  for (const block of state.tokens) {
+    if (block.type !== "inline" || !block.children) continue;
+    const out = [];
+    let inLink = 0;
+    for (const t of block.children) {
+      if (t.type === "link_open") inLink++;
+      else if (t.type === "link_close") inLink--;
+      if (t.type !== "text" || inLink > 0 || !t.content.includes("@")) { out.push(t); continue; }
+      let last = 0;
+      for (const m of t.content.matchAll(MENTION)) {
+        const at = m.index + m[1].length;
+        if (at > last) out.push(Object.assign(new state.Token("text", "", 0), { content: t.content.slice(last, at) }));
+        out.push(Object.assign(new state.Token("mention", "", 0), { content: `@${m[2]}`, meta: { login: m[2] } }));
+        last = at + 1 + m[2].length;
+      }
+      if (!last) { out.push(t); continue; }
+      if (last < t.content.length) out.push(Object.assign(new state.Token("text", "", 0), { content: t.content.slice(last) }));
+    }
+    block.children = out;
+  }
 }
 
 /** `> [!kind]+ Title` blockquotes become callouts. Runs before inline parsing, on raw text. */
@@ -92,6 +122,8 @@ export function createMarkdown() {
   md.core.ruler.after("block", "callouts", calloutRule);
   md.core.ruler.after("inline", "tasks", taskRule);
   md.core.ruler.after("inline", "headings", headingRule);
+  md.core.ruler.push("mentions", mentionRule);
+  md.renderer.rules.mention = (tokens, idx) => `<span class="mention" data-login="${esc(tokens[idx].meta.login)}">@${esc(tokens[idx].meta.login)}</span>`;
 
   const linkHtml = ({ target, heading, alias }, env) => {
     const path = target ? env.resolve(target) : env.fromPath;
@@ -134,16 +166,119 @@ export function createMarkdown() {
   };
   // A ```mermaid block: its code shows until the app draws the diagram from it. Other fences render as before.
   // The source isn't put in an attribute: DOMPurify drops attribute values with `-->` in them, which is Mermaid's arrow.
+  // A ```top-tasks block: the app puts the top tasks box there; until then (or inside an embed) its code shows.
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    if (token.info.trim().split(/\s+/)[0].toLowerCase() !== "mermaid") return fence(tokens, idx, options, env, self);
+    const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
+    if (lang === "top-tasks") {
+      const { areas, count, countSet, order, orderSet, sprint, owner } = topTasksOptions(token.content);
+      return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
+        + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
+        + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
+        + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
+    }
+    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field. `data-close`
+    // is its closing fence's line, where Add puts a new item.
+    if (lang === "new-tasks") {
+      const { owner, items } = newTasksBlock(token.content);
+      const close = token.map ? token.map[1] - 1 : -1;
+      const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
+        : "No owner: line, so no agent sorts these";
+      const list = items.length ? items.map((item) => `<li>${md.renderInline(item, env)}</li>`).join("") : '<li class="muted">Nothing yet.</li>';
+      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
+        + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
+        + `<ul class="newtasks-list">${list}</ul></section>\n`;
+    }
+    // A ```needs-attention block: the app puts the questions and mentions box (or one of them) there.
+    if (lang === "needs-attention") {
+      const { owner, login, show, showSet } = attentionOptions(token.content);
+      return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
+        + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+    }
+    // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
+    if (APP_BLOCKS.includes(lang)) {
+      return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+    }
+    if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
   };
 
   md.renderer.rules.callout_close = (tokens, idx) => (tokens[idx].meta.fold ? "</div></details>\n" : "</div></div>\n");
 
   return md;
+}
+
+/** How many tasks a ```top-tasks block shows when it doesn't say (and the box says so), and the most it can ask for. */
+export const TOP_TASKS_COUNT = 3;
+const TOP_TASKS_MAX = 20;
+
+/**
+ * Which sprint a ```top-tasks block takes its tasks from: only the current one, the current one and then the
+ * next when it has none left, or every task (`off`, also when the line is left out or not known).
+ */
+export const TOP_TASKS_SPRINTS = ["current-only", "current-then-next", "off"];
+const SPRINT_WORDS = { current: "current-only", "current-and-next": "current-then-next", next: "current-then-next", none: "off", no: "off", all: "off" };
+
+/**
+ * The options of a ```top-tasks block, one per line, all written in the block, nothing taken from elsewhere:
+ * `range: 3` (how many tasks; `count` in older blocks), `areas: Features, Docs` (or `[Features, Docs]`),
+ * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and
+ * `owner: Your Name` (whom Claim claims for). Other lines are ignored. A missing or odd range is three, and a
+ * missing or odd order `priority-newest`, with `countSet` or `orderSet` false so the box can say so.
+ */
+export function topTasksOptions(src) {
+  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
+  const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(areas|count|range|order|sprint|owner)\s*:\s*(.*?)\s*$/i);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key === "areas") {
+      out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+    } else if (key === "sprint") {
+      const v = unquote(m[2]).toLowerCase().replace(/[\s_]+/g, "-");
+      out.sprint = TOP_TASKS_SPRINTS.includes(v) ? v : SPRINT_WORDS[v] ?? "off";
+    } else if (key === "order") {
+      const order = taskOrder(unquote(m[2]));
+      if (order) Object.assign(out, { order, orderSet: true });
+    } else if (key === "owner") {
+      out.owner = unquote(m[2]);
+    } else if (/^\d+$/.test(m[2])) {
+      out.count = Math.min(TOP_TASKS_MAX, Math.max(1, Number(m[2])));
+      out.countSet = true;
+    }
+  }
+  return out;
+}
+
+/** What a ```needs-attention block can show, in the order the box lists them. */
+export const ATTENTION_SHOWS = ["questions", "mentions"];
+
+/**
+ * The options of a ```needs-attention block, one per line, all written in the block: `show: questions, mentions`
+ * (or one of them; "both" and "all" mean both; left out or not known, both, with `showSet` false so the box can
+ * say so), `owner: Your Name` (whose questions: the tasks they asked for, review or whose agent has them) and
+ * `login: your-login` (whose mentions: `@` and that GitHub login; the `@` may be written too). Other lines are
+ * ignored.
+ */
+export function attentionOptions(src) {
+  const out = { owner: "", login: "", show: [...ATTENTION_SHOWS], showSet: false };
+  const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(owner|login|show)\s*:\s*(.*?)\s*$/i);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key === "owner") out.owner = unquote(m[2]);
+    else if (key === "login") out.login = unquote(m[2]).replace(/^@/, "");
+    else {
+      const words = m[2].toLowerCase().replace(/^\[|\]$/g, "").split(/[\s,]+/).map(unquote).filter(Boolean);
+      const both = words.some((w) => w === "both" || w === "all");
+      const picked = both ? [...ATTENTION_SHOWS] : ATTENTION_SHOWS.filter((s) => words.some((w) => w === s || w + "s" === s));
+      if (picked.length) Object.assign(out, { show: picked, showSet: true });
+    }
+  }
+  return out;
 }
 
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */

@@ -18,6 +18,8 @@ properties:
     displayName: Assignee
   requested_by:
     displayName: Requested by
+  part_of:
+    displayName: Parent task
   file.mtime:
     displayName: Last modified
 views:
@@ -39,6 +41,20 @@ views:
         direction: ASC
       - property: id
         direction: DESC
+  - type: table
+    name: By parent
+    groupBy:
+      property: part_of
+      direction: ASC
+    order:
+      - id
+      - file.name
+      - status
+      - priority
+      - assignee
+    sort:
+      - property: id
+        direction: ASC
   - type: table
     name: Open
     filters:

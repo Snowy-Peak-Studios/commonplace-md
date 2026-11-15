@@ -6,9 +6,21 @@ assignee: Your name
 requested_by: Your name
 area: Setup
 priority: Medium
+sprint: "[[Sprint 1]]"
+estimate: 3
+part_of: "[[Get set up]]"
 ---
 
 # Try the app on a phone
+
+```subtasks
+```
+
+```relations
+```
+
+```commits
+```
 
 As someone away from my desk, I want my notes on my phone, so that I can add to the [[Inbox]] anywhere.
 

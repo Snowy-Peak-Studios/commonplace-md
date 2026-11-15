@@ -1,0 +1,8 @@
+{
+  "theme": "follows the device",
+  "startPage": "Home.md",
+  "fontSize": 16,
+  "spellcheck": true,
+  "pinned": ["Task Board.md", "Notes/Inbox.md"],
+  "lastOpened": null
+}

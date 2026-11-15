@@ -24,6 +24,14 @@
   --ok: #23885a;
   --code: #b03a6f;
   --code-bg: #f4f2f8;
+  /* Colours for code and other text files (each at least 4.5:1 on --bg and --code-bg) */
+  --syn-keyword: #7a3ec2;
+  --syn-string: #23794e;
+  --syn-number: #a65208;
+  --syn-comment: #6f6c7a;
+  --syn-property: #1f5fbf;
+  --syn-type: #a1356a;
+  --syn-function: #0e7490;
   --shadow: 0 1px 2px rgba(20, 16, 40, 0.06), 0 8px 24px rgba(20, 16, 40, 0.08);
   --shadow-lg: 0 2px 6px rgba(20, 16, 40, 0.08), 0 24px 60px rgba(20, 16, 40, 0.18);
   --active-line: rgba(100, 90, 170, 0.045);
@@ -61,6 +69,13 @@
     --ok: #55c993;
     --code: #f09ac0;
     --code-bg: #26252d;
+    --syn-keyword: #c59bff;
+    --syn-string: #8fd6a4;
+    --syn-number: #f2b46d;
+    --syn-comment: #9a97a6;
+    --syn-property: #8cb8ff;
+    --syn-type: #f09ac0;
+    --syn-function: #6fd3e0;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.35), 0 24px 60px rgba(0, 0, 0, 0.5);
     --active-line: rgba(255, 255, 255, 0.035);
@@ -368,6 +383,9 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   font-weight: 500;
 }
 .seg button .icon { width: 16px; height: 16px; }
+.version-pick { display: flex; width: fit-content; }
+/* The development version says so, beside the signed-in person at the foot of the sidebar. */
+.dev-build #who::after { content: "dev"; margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--warn); background: var(--warn-soft); }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--bg-raise); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
 
@@ -468,6 +486,14 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 @keyframes pulse { 50% { opacity: 0.45; } }
 .image-wrap { padding: 32px; display: flex; justify-content: center; }
 .image-view { max-width: 100%; border-radius: var(--radius); box-shadow: var(--shadow); }
+/* PDFs in the browser's own viewer, and other files to download */
+.file-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+a.btn { text-decoration: none; }
+a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
+.pdf-wrap { display: flex; flex-direction: column; gap: 10px; padding: 14px 24px 18px; height: calc(100dvh - var(--bar-h)); }
+.pdf-wrap .file-actions { justify-content: flex-end; }
+.pdf-view { flex: 1; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-soft); }
+.more-rows { margin: 12px 0 4px; }
 
 /* ================================================================
    The editor
@@ -557,6 +583,35 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
   transform: rotate(45deg);
 }
 .preview li.task-item:has(> input.task:checked), .preview li.task-item:has(> p > input.task:checked) { color: var(--muted); }
+/* folding a list's subpoints: an arrow on each item that has some; a bullet's arrow takes the bullet's place */
+.preview li.has-fold { position: relative; }
+.preview li.folded > ul, .preview li.folded > ol { display: none; }
+.preview .fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  height: 1.3em;
+  margin: 0 0.15em 0 -0.15em;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  vertical-align: -0.28em;
+  cursor: pointer;
+}
+.preview .fold:hover { color: var(--accent); background: var(--bg-soft); }
+.preview .fold .icon { width: 0.95em; height: 0.95em; transform: rotate(90deg); transition: transform 0.15s; }
+.preview li.folded > .fold .icon, .preview li.folded > p > .fold .icon { transform: none; }
+.preview li.folded > .fold, .preview li.folded > p > .fold { color: var(--accent); }
+.preview ul > li.has-fold:not(.task-item) { list-style: none; }
+.preview ul > li.has-fold:not(.task-item) > .fold, .preview ul > li.has-fold:not(.task-item) > p > .fold {
+  position: absolute;
+  left: -1.42em;
+  top: 0.2em;
+  margin: 0;
+}
 .preview code {
   font-family: var(--mono);
   font-size: 0.86em;
@@ -634,19 +689,21 @@ main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
 .prop-val a { text-decoration: none; }
 .props-raw { background: var(--code-bg); padding: 10px 12px; border-radius: 8px; font: 13px/1.5 var(--mono); }
 
-/* an inbox's top tasks to start */
-.suggest { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg-soft); font-size: 14px; }
+/* the top tasks to start: over an inbox, or a ```top-tasks block on any page */
+.suggest, .attention, .newtasks { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg-soft); font-size: 14px; }
 .suggest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .suggest-head .icon { width: 18px; height: 18px; color: var(--accent); }
 .suggest-head small { margin-left: auto; font-size: 12.5px; }
-.preview .suggest-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.preview .suggest-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; padding: 2px 0; }
-.preview .suggest-list li + li { border-top: 1px solid var(--line); }
+.preview .suggest-list, .preview .attention-list, .preview .newtasks-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.preview .suggest-list li, .preview .attention-list li, .preview .newtasks-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; padding: 2px 0; }
+.preview .suggest-list li + li, .preview .attention-list li + li, .preview .newtasks-list li + li { border-top: 1px solid var(--line); }
 .suggest-name { flex: 1 1 200px; min-width: 0; font-weight: 550; text-decoration: none; overflow-wrap: anywhere; }
 .suggest-tags { display: flex; gap: 5px; }
 .chip { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
 .chip.claimed { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); font-weight: 600; }
 .chip.claimed.working { color: var(--ok); border-color: transparent; background: var(--bg-soft); }
+.chip.sprint-chip { color: var(--accent); cursor: help; }
+.chip.next-sprint { color: var(--warn); background: var(--warn-soft); border-color: transparent; cursor: help; }
 .suggest-waiting { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
 .suggest-waiting > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px 0; }
 .suggest-waiting > summary::-webkit-details-marker { display: none; }
@@ -673,6 +730,19 @@ select.chip.pick:hover:not(:disabled) { border-color: var(--line-strong); }
 select.chip.pick:disabled { opacity: 0.6; cursor: progress; }
 .chip.prio-high { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .suggest-list .btn .icon { width: 15px; height: 15px; }
+.attention-list .attention-text { flex: 1 0 100%; color: var(--text-2); font-size: 13.5px; padding-bottom: 4px; overflow-wrap: anywhere; }
+.mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 550; text-decoration: none; }
+a.mention:hover { text-decoration: underline; }
+.cm-tooltip.cm-tooltip-autocomplete { background: var(--bg-raise); border: 1px solid var(--line-strong); border-radius: 8px; color: var(--text); overflow: hidden; }
+.cm-tooltip.cm-tooltip-autocomplete > ul > li { padding: 4px 10px !important; }
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--accent-soft); color: var(--text); }
+.cm-tooltip-autocomplete .cm-completionDetail { color: var(--muted); font-style: normal; margin-left: 8px; }
+.newtasks-add { display: flex; gap: 8px; margin-top: 10px; }
+.newtasks-add .input { flex: 1; min-width: 0; }
+.newtasks .suggest-head [data-icon] { display: inline-flex; }
+.chip.kind { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.chip.kind-question { color: var(--warn); }
+.chip.kind-mention { color: var(--accent); }
 
 /* callouts */
 .callout {
@@ -973,6 +1043,48 @@ select.input { padding-right: 8px; }
 .tf-grid .input:disabled { opacity: 0.6; cursor: progress; }
 @media (max-width: 860px) { .tf-grid { grid-template-columns: max-content minmax(0, 1fr); } }
 
+/* A task's subtasks: a bar of how many are done, and each with its status */
+.subtasks, .commits { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.subtasks.none { padding: 0; border: none; background: none; margin: -6px 0 12px; }
+.st-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.st-title { font-weight: 650; }
+.st-count { font-size: 13px; color: var(--text-2); }
+.st-head .btn { margin-left: auto; }
+.st-bar { height: 6px; margin: 10px 0 6px; border-radius: 3px; background: var(--bg-soft); overflow: hidden; }
+.st-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+/* The boxes sit in the note, where its blocks are: their lists don't take the note's list indent. */
+.st-list, .preview .st-list { list-style: none; margin: 0; padding: 0; }
+.st-list li, .preview .st-list li { display: flex; align-items: center; gap: 10px; margin: 0; padding: 6px 0; border-top: 1px solid var(--line); }
+.st-list li:first-child { border-top: none; }
+.st-list a { flex: 1; min-width: 0; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.st-list a:hover { color: var(--link); text-decoration: underline; }
+.st-list li.done a { color: var(--text-2); }
+.st-id { margin-right: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+.st-status { flex: none; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; color: var(--text-2); background: var(--bg-soft); white-space: nowrap; }
+.st-date { flex: none; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.st-note { margin: 8px 0 0; font-size: 13px; color: var(--text-2); }
+/* A task's relations, both ways: a small label over each group. */
+.rel-group { margin-top: 10px; }
+.rel-label { font-size: 12.5px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.rel-group .st-list li:first-child { border-top: none; }
+.relations .icon-btn { flex: none; width: 28px; height: 28px; }
+.rel-missing { flex: 1; min-width: 0; color: var(--text-2); text-decoration: line-through dotted; overflow-wrap: anywhere; }
+.rel-add { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 8px; margin: 4px 0 6px; }
+@media (max-width: 560px) { .rel-add { grid-template-columns: 1fr; } }
+
+/* A sprint's page: its dates, its tasks by status, how many are done */
+.sprint-box { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.sprint-when { padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--bg-soft); }
+.sprint-when.now { color: var(--accent-text); background: var(--accent); }
+.sprint-goal { margin: 10px 0 0; color: var(--text-2); }
+.sprint-done { margin-top: 10px; }
+.sprint-group { margin-top: 10px; }
+.sprint-status { font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.sprint-empty { margin: 10px 0 0; }
+.sprint-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.sprint-move { max-height: 220px; overflow: auto; padding: 8px 10px 0; border: 1px solid var(--line); border-radius: var(--radius); }
+.sprint-move .check-line { margin-bottom: 8px; }
+
 /* Task fields: one row per field, in the repo's task setup */
 .task-fields { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
 .task-field { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(110px, 0.8fr) minmax(160px, 2fr) 34px; gap: 8px; align-items: center; }
@@ -1123,3 +1235,7 @@ select.input { padding-right: 8px; }
 @media (max-width: 380px) {
   .save:disabled { display: none; }
 }
+
+/* Tokens for other owners: each with its Remove at the end of its line */
+.owner-tokens li .btn { margin-left: auto; }
+.owner-tokens-add { margin: 14px 0 4px; font-size: 15px; }

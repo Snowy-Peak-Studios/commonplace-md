@@ -12,6 +12,7 @@ tags:
 > - [[#Embeds|Embeds]]
 > - [[#Callouts|Callouts]]
 > - [[#Checkboxes|Checkboxes]]
+> - [[#Lists with subpoints|Lists with subpoints]]
 > - [[#Diagrams|Diagrams]]
 > - [[#The navigation box|The navigation box]]
 %% /nav %%
@@ -28,6 +29,19 @@ What a note can hold. Open this page in Edit mode to see how each part is writte
 - A link to a heading, with its own text: [[Home#How saving works|how saving works]]
 - A bare name finds the page in any folder: [[Make a note template]]
 - Normal Markdown links work too: [the Markdown guide](https://commonmark.org/help/)
+
+## Mentions
+
+Write `@` and someone's GitHub login to mention them: @your-github-login, have a look at this part. In Edit mode, typing `@` offers everyone who has an inbox. A mention is a link to their inbox, and the ` ```needs-attention ` block at the top of their [[Inbox]] lists every place that mentions them, this line too. In code, like `@this`, and in an email address it isn't a mention.
+
+## New tasks anywhere
+
+A ` ```new-tasks ` block catches ideas right where you have them, on any page: write one per line, or use **Add** in the box. Its `owner:` says whose they are; their agent finds every such block in the vault and turns each item into a task.
+
+```new-tasks
+owner: Your name
+- Show the reading list on the Home page
+```
 
 ## Embeds
 
@@ -55,6 +69,28 @@ Tick them in Read mode; each tick is saved as a commit.
 - [x] Make a token
 - [ ] Add the repo in Settings
 - [ ] Write a first note
+
+## Lists with subpoints
+
+In Read mode, a point with subpoints has a small arrow: tap it to fold them all away, and again to show them. It only changes what you see, never the note.
+
+- Plan the week
+  - Monday: sort the inbox
+  - Friday: look back
+    - What got done
+    - What moves to next week
+- Pack for the trip
+  - Tickets
+  - Charger
+
+1. Make the repo
+   1. Pick a name
+   2. Keep it private
+2. Add it in Settings
+
+- [ ] Share the notes
+  - [ ] Copy the invite link
+  - [ ] Send it to a friend
 
 ## Diagrams
 

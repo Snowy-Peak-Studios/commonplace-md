@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, attentionOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -63,4 +63,77 @@ test("a mermaid block becomes a diagram placeholder holding its source; other fe
   const escaped = 'graph TB\n  A[&quot;Run &lt;br&gt; start&quot;] --&gt; B &amp; C\n';
   assert.equal(html, `<div class="mermaid-diagram"><pre><code>${escaped}</code></pre></div>\n`);
   assert.equal(render("```js\nconst a = 1 < 2;\n```\n"), '<pre><code class="language-js">const a = 1 &lt; 2;\n</code></pre>\n');
+});
+
+test("a top-tasks block becomes a placeholder with all its options, holding its source", () => {
+  const src = "range: 5\nareas: Features, Docs\norder: oldest\nsprint: current-only\nowner: Ana Lee\n";
+  assert.equal(render("```top-tasks\n" + src + "```\n"),
+    '<div class="top-tasks-block" data-areas="Features, Docs" data-count="5" data-order="oldest" data-sprint="current-only" data-owner="Ana Lee">'
+    + `<pre><code>${src}</code></pre></div>\n`);
+  assert.equal(render("```top-tasks\n```\n"),
+    '<div class="top-tasks-block" data-areas="" data-count="3" data-count-default="1" data-order="priority-newest" data-order-default="1"'
+    + ' data-sprint="off" data-owner=""><pre><code></code></pre></div>\n');
+  assert.match(render('```Top-Tasks\nareas: ["A&B"]\nowner: "<b>"\n```\n'), /data-areas="A&amp;B".*data-owner="&lt;b&gt;"/);
+});
+
+test("a top-tasks block's options: range (or count) from 1 to 20, areas, order, sprint and owner; other lines ignored", () => {
+  const none = { areas: [], count: 3, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
+  assert.deepEqual(topTasksOptions(""), none);
+  assert.deepEqual(topTasksOptions("Areas: [Features, 'Docs']\nRANGE: 7"), { ...none, areas: ["Features", "Docs"], count: 7, countSet: true });
+  assert.deepEqual(topTasksOptions("count: 7"), { ...none, count: 7, countSet: true }, "older blocks say count");
+  assert.deepEqual(topTasksOptions("range: 0\nnote: hi"), { ...none, count: 1, countSet: true });
+  assert.deepEqual(topTasksOptions("range: 99"), { ...none, count: 20, countSet: true });
+  assert.deepEqual(topTasksOptions("range: five\nareas:"), none);
+  for (const [said, mode] of [["current-only", "current-only"], ["Current only", "current-only"], ["current", "current-only"],
+    ["current-then-next", "current-then-next"], ["current and next", "current-then-next"], ["off", "off"], ["none", "off"], ["soon", "off"]]) {
+    assert.equal(topTasksOptions(`sprint: ${said}`).sprint, mode, said);
+  }
+  assert.equal(topTasksOptions("owner: 'Zoë Ng'").owner, "Zoë Ng");
+  assert.equal(topTasksOptions("owner:").owner, "");
+  assert.deepEqual(topTasksOptions("order: Newest first"), { ...none, order: "newest", orderSet: true });
+  assert.deepEqual(topTasksOptions("order: by due date"), none, "an order it doesn't know is the default, and not set");
+});
+
+test("a task's and a sprint's blocks become placeholders that keep their code", () => {
+  for (const name of ["subtasks", "relations", "commits", "sprint"]) {
+    assert.equal(render("```" + name + "\n```\n"), `<div class="app-block" data-block="${name}"><pre><code>${name}</code></pre></div>\n`);
+  }
+  assert.equal(render("```subtasks\nsome: thing\n```\n"), '<div class="app-block" data-block="subtasks"><pre><code>some: thing\n</code></pre></div>\n');
+});
+
+test("a needs-attention block becomes a placeholder with what it shows, its owner and login, holding its source", () => {
+  assert.equal(render("```needs-attention\nshow: questions\nowner: Ana Lee\nlogin: ana\n```\n"),
+    '<div class="attention-block" data-owner="Ana Lee" data-login="ana" data-show="questions"><pre><code>show: questions\nowner: Ana Lee\nlogin: ana\n</code></pre></div>\n');
+  assert.equal(render("```Needs-Attention\n```\n"),
+    '<div class="attention-block" data-owner="" data-login="" data-show="questions,mentions" data-show-default="1"><pre><code>needs-attention</code></pre></div>\n');
+  assert.match(render('```needs-attention\nowner: "<b>"\n```\n'), /data-owner="&lt;b&gt;"/);
+});
+
+test("a needs-attention block's options: show (both, or one), owner and login; other lines ignored", () => {
+  const both = ["questions", "mentions"];
+  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("show: mentions").show, ["mentions"]);
+  assert.deepEqual(attentionOptions("show: [Mention]").show, ["mentions"]);
+  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true }, "always questions first");
+  assert.deepEqual(attentionOptions("show: both").show, both);
+  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false });
+});
+
+test("@login becomes a mention, but not in code, a link or an email", () => {
+  assert.equal(render("Ask @Ann-Lee, not ann@example.com or `@code`.\n"),
+    '<p>Ask <span class="mention" data-login="Ann-Lee">@Ann-Lee</span>, not <a href="mailto:ann@example.com">ann@example.com</a> or <code>@code</code>.</p>\n');
+  assert.equal(render("[see @bob](https://example.com) and **@bob**\n"),
+    '<p><a href="https://example.com">see @bob</a> and <strong><span class="mention" data-login="bob">@bob</span></strong></p>\n');
+  assert.match(render("## Ask @bob\n"), /data-heading="Ask @bob"/);
+});
+
+test("a new-tasks block is a box with its items rendered, its owner, and its closing fence's line", () => {
+  const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
+  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
+  assert.match(html, /<small class="muted">For Ana Lee · 2 items · Your agent turns them into tasks<\/small>/);
+  assert.match(html, /<ul class="newtasks-list"><li>Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/li><li><strong>Bold<\/strong> one<\/li><\/ul><\/section>/);
+  const none = render("```new-tasks\n```\n");
+  assert.match(none, /No owner: line, so no agent sorts these/);
+  assert.match(none, /<li class="muted">Nothing yet\.<\/li>/);
 });

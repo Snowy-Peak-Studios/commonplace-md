@@ -131,6 +131,54 @@ export function titleProblem(title) {
 /** How a new Markdown note starts when its repo has no note template. */
 export const defaultNote = (title) => `# ${title.trim()}\n\n`;
 
+/**
+ * Where a plain Markdown link in a note leads when it's a relative link to another file, as GitHub reads it:
+ * `[Add a vault](Add%20a%20vault.md#the-steps)` from `How To/Start.md` is `{ path: "How To/Add a vault.md",
+ * heading: "the steps" }`. A leading `/` starts at the top of the vault. Null for a web or mail address, an
+ * address in the app (`#/...`), a heading on the same page, or a path that climbs above the top.
+ */
+export function relativeLink(href, fromPath = "") {
+  const raw = String(href ?? "").trim();
+  if (!raw || raw.startsWith("#") || raw.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(raw)) return null;
+  const at = raw.indexOf("#");
+  const decode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const target = decode((at < 0 ? raw : raw.slice(0, at)).split("?")[0]);
+  const parts = target.startsWith("/") ? [] : String(fromPath).split("/").slice(0, -1);
+  for (const seg of target.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg !== "..") parts.push(seg);
+    else if (!parts.length) return null;
+    else parts.pop();
+  }
+  if (!parts.length) return null;
+  const heading = at < 0 ? "" : decode(raw.slice(at + 1)).replace(/-/g, " ").trim();
+  return { path: parts.join("/"), heading: heading || null };
+}
+
+/** The blocks a task's page shows its boxes in, and a sprint's: the app adds no box a note doesn't ask for. */
+export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
+export const SPRINT_BLOCKS = ["sprint"];
+
+/** Whether the note has a fenced block of this name: ```name (or ~~~name) on a line of its own. */
+export function hasBlock(text, name) {
+  return new RegExp(`^ {0,3}(?:\`{3,}|~{3,})[ \\t]*${name}[ \\t]*$`, "mi").test(toLf(text));
+}
+
+/**
+ * The note with these blocks written in, each an empty fence, under its first `# ` heading (else at the
+ * top of its body). A note that already has any of them keeps what it has: it chose its own.
+ */
+export function withBlocks(text, names) {
+  const src = toLf(text);
+  if (!names.length || names.some((n) => hasBlock(src, n))) return src;
+  const blocks = names.map((n) => `\`\`\`${n}\n\`\`\``).join("\n\n");
+  const start = splitFrontMatter(src)?.length ?? 0;
+  const head = /^# .*$/m.exec(src.slice(start));
+  const at = head ? start + head.index + head[0].length : start;
+  const rest = src.slice(at).replace(/^\n+/, "");
+  return `${src.slice(0, at)}${head ? "\n\n" : ""}${blocks}\n${rest ? `\n${rest}` : ""}`;
+}
+
 /** A note template with `{{title}}` and `{{date}}` (YYYY-MM-DD) filled in; any other `{{...}}` stays as written. */
 export function fillTemplate(text, { title = "", date = "" } = {}) {
   const values = { title: title.trim(), date };
@@ -164,6 +212,96 @@ export function ownInboxPath(notes, login, fallback = "") {
 }
 
 // ================================================================
+// New tasks: a ```new-tasks block's items, sorted into tasks by agents
+// ================================================================
+
+/**
+ * A ```new-tasks block's content: its `owner:` line (whose items they are) and its items, one per other
+ * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `).
+ */
+export function newTasksBlock(src) {
+  const out = { owner: "", items: [] };
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*owner\s*:\s*(.*?)\s*$/i);
+    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); continue; }
+    const item = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
+    if (item) out.items.push(item);
+  }
+  return out;
+}
+
+/**
+ * The note with `- item` added to a ```new-tasks block, whose closing fence is line `close` (from 0): just
+ * above that line. A block left open (no closing fence) runs to the end of the note, so the item goes last.
+ */
+export function addNewTask(text, close, item) {
+  const lines = toLf(text).split("\n");
+  const said = String(item ?? "").replace(/\s*\n\s*/g, " ").trim();
+  if (!said || !(close >= 0 && close < lines.length)) return text;
+  const at = /^\s*(`{3,}|~{3,})\s*$/.test(lines[close]) ? close : lines.length;
+  lines.splice(at, 0, `- ${said}`);
+  return lines.join("\n");
+}
+
+// ================================================================
+// Mentions: `@login` in a note, found for that person's inbox
+// ================================================================
+
+/**
+ * A mention: `@` and a GitHub login (letters, digits and single hyphens, up to 39), not right after a letter,
+ * a digit or one of `.+-_/@` (so not an email or a path), and not followed by more of a login. Group 1 is
+ * what comes before the `@`, group 2 the login.
+ */
+export const MENTION = /(^|[^\p{L}\p{N}.+\-_/@`])@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/gu;
+
+/**
+ * Every mention in a note: [{ login, line, heading, text }], `line` counting from 1 in the whole file,
+ * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
+ * fenced code and inline code don't count. One per login and line.
+ */
+export function findMentions(text) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  const skipped = fm ? src.slice(0, fm.length).split("\n").length - 1 : 0;
+  const lines = (fm ? src.slice(fm.length) : src).split("\n");
+  const out = [];
+  let fence = null, heading = "";
+  lines.forEach((line, i) => {
+    const f = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
+      return;
+    }
+    if (f) { fence = f[1]; return; }
+    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (h) heading = h[1];
+    const plain = line.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
+    const seen = new Set();
+    for (const m of plain.matchAll(MENTION)) {
+      if (seen.has(m[2].toLowerCase())) continue;
+      seen.add(m[2].toLowerCase());
+      const said = line.trim();
+      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said });
+    }
+  });
+  return out;
+}
+
+/**
+ * The people of a vault, from its inboxes ([{ path, props }]): each inbox with a `github` login gives
+ * { login, name, path }, the name from its `owner` (else the login); each login once, sorted by name.
+ */
+export function vaultPeople(notes) {
+  const seen = new Map();
+  for (const n of notes) {
+    const login = String(n.props?.github ?? "").trim().replace(/^@/, "");
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login) || seen.has(login.toLowerCase())) continue;
+    seen.set(login.toLowerCase(), { login, name: String(n.props.owner ?? "").trim() || login, path: n.path });
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name) || a.login.localeCompare(b.login));
+}
+
+// ================================================================
 // Suggested tasks: the top free tasks an inbox shows
 // ================================================================
 
@@ -172,8 +310,8 @@ export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
 
 const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
-/** Statuses that aren't free to start. */
-const NOT_FREE = /^(done|in progress|waiting|cancell?ed|won'?t do)$/i;
+/** Statuses that aren't free to start: started, put off, blocked or over. */
+const NOT_FREE = /^(done|in progress|waiting|blocked|cancell?ed|won'?t do)$/i;
 
 /** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
 export function listProp(v) {
@@ -183,22 +321,43 @@ export function listProp(v) {
 
 /**
  * The top free tasks, from [{ path, props }]: no assignee, not started or done, in one of `areas`
- * (any area when empty). Highest priority first; within a priority, the newest (highest ID number) first.
+ * (any area when empty), sorted in `order` (`TASK_ORDERS`; by default the highest priority first, and within a
+ * priority the newest, the highest ID number, first) and cut to `count`.
  */
 const rank = (n) => PRIORITY_RANK[String(n.props.priority ?? "").trim().toLowerCase()] ?? 3;
 const idNum = (n) => Number(/(\d+)\s*$/.exec(String(n.props.id ?? ""))?.[1] ?? -1);
+
+/**
+ * The orders a top tasks box can sort by: priority (High, Medium, Low, then none) and the newest or oldest
+ * first within it, or only the newest or oldest (by the number at the end of `id`). `priority-newest` is
+ * what the box used before it could be chosen.
+ */
+export const TASK_ORDERS = ["priority-newest", "priority-oldest", "newest", "oldest"];
+const ORDER_WORDS = { priority: "priority-newest", "priority-only": "priority-newest", "newest-first": "newest", "oldest-first": "oldest" };
+/** An `order:` value as one of `TASK_ORDERS`, or "" when it isn't one. */
+export function taskOrder(v) {
+  const w = String(v ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return TASK_ORDERS.includes(w) ? w : ORDER_WORDS[w] ?? "";
+}
+/** A sort for tasks in that order; the file path settles ties, so the order is always the same. */
+function byOrder(order = "priority-newest") {
+  const age = order.endsWith("oldest") ? (a, b) => idNum(a) - idNum(b) : (a, b) => idNum(b) - idNum(a);
+  const prio = order.startsWith("priority") ? (a, b) => rank(a) - rank(b) : () => 0;
+  return (a, b) => prio(a, b) || age(a, b) || a.path.localeCompare(b.path);
+}
 /** Statuses of work that's over. */
 const FINISHED = /^(done|cancell?ed|won'?t do)$/i;
 /** The status of a task put off with "Not now": on the waiting list, out of the suggestions. */
 export const WAITING = "Waiting";
 const isWaiting = (n) => String(n.props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase();
 
-export function suggestTasks(notes, { areas = [], count = 3 } = {}) {
+export function suggestTasks(notes, { areas = [], count = 3, blocked = null, order = "priority-newest" } = {}) {
   const want = listProp(areas);
   return notes
     .filter((n) => isTaskPath(n.path) && blank(n.props.assignee) && !NOT_FREE.test(String(n.props.status ?? "").trim()) && !isEpic(n)
+      && !blocked?.has(n.path)
       && (!want.length || want.includes(String(n.props.area ?? "").trim().toLowerCase())))
-    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path))
+    .sort(byOrder(order))
     .slice(0, count);
 }
 
@@ -229,6 +388,45 @@ export function claimedTasks(notes, owner) {
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
+/** A task's open question: its `question` property, trimmed; "" when it has none. */
+export const questionOf = (props) => (Array.isArray(props?.question) ? props.question.join(" ") : String(props?.question ?? "")).trim();
+
+/**
+ * The tasks with an open question (a `question` property), from [{ path, props }], each with its `question`.
+ * Only `owner`'s: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them
+ * (`assignee`, with or without the agent), names matched like `claimedTasks`; everyone's when `owner` is
+ * empty. Finished tasks don't count. Newest first.
+ */
+export function questionTasks(notes, owner = "") {
+  const me = foldName(owner);
+  const people = (v) => (Array.isArray(v) ? v : [v]).map((x) => foldName(splitAssignee(x).name));
+  const theirs = (n) => !me || [n.props.requested_by, n.props.reviewer, n.props.assignee].some((v) => people(v).includes(me));
+  return notes
+    .filter((n) => isTaskPath(n.path) && questionOf(n.props) && !FINISHED.test(String(n.props.status ?? "").trim()) && theirs(n))
+    .map((n) => ({ ...n, question: questionOf(n.props) }))
+    .sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+}
+
+/**
+ * The answer written on a task: what follows its `**Answer:**` line (or an *Answer* heading), up to the next
+ * heading, a `---` line or the acceptance criteria (a checkbox line, for a task with no heading over them),
+ * trimmed; "" when nothing is written there yet, or there's no such line.
+ */
+export function taskAnswer(text) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  const lines = (fm ? src.slice(fm.length) : src).split("\n");
+  const at = lines.findIndex((l) => /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(l));
+  if (at < 0) return "";
+  const first = lines[at].replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
+  const rest = [];
+  for (const l of lines.slice(at + 1)) {
+    if (/^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(l)) break;
+    rest.push(l);
+  }
+  return [first, ...rest].join("\n").trim();
+}
+
 /** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */
 export function taskAreas(notes) {
   const seen = new Map();
@@ -249,14 +447,14 @@ export const PRIORITIES = ["High", "Medium", "Low"];
 /** An epic isn't worked on itself (its parts are), so it's never suggested or put on the waiting list. */
 const isEpic = (n) => String(n.props.type ?? "").trim().toLowerCase() === "epic";
 
-export function waitingTasks(notes, { areas = [], owner = "" } = {}) {
+export function waitingTasks(notes, { areas = [], owner = "", order = "priority-newest" } = {}) {
   const want = listProp(areas);
   const me = foldName(owner);
   return notes
     .filter((n) => isTaskPath(n.path) && isWaiting(n) && !isEpic(n) && (!want.length
       || want.includes(String(n.props.area ?? "").trim().toLowerCase())
       || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
-    .sort((a, b) => rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+    .sort(byOrder(order));
 }
 
 /**
@@ -277,6 +475,9 @@ export function taskState(text) {
   if (ready === "placeholder") return { state: "placeholder", reason: "Marked as a placeholder (ready: placeholder)" };
   const body = fm ? src.slice(fm.length) : src;
   const clip = (s) => (s.length > 110 ? s.slice(0, 107).trimEnd() + "..." : s);
+  // An open question (a `question` property) waits for its answer first.
+  const question = String((fm && /^question:[ \t]*(.*?)[ \t]*$/m.exec(fm.raw)?.[1]) ?? "").replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (question) return { state: "decision", reason: `Waiting for an answer: ${clip(question)}` };
   const plain = body.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
   const title = /^#\s+(.*)$/m.exec(body)?.[1] ?? "";
   const tagged = !!fm && /^tags:.*\bplaceholder\b/im.test(fm.raw);
@@ -296,14 +497,16 @@ export function taskState(text) {
   return { state: "ready", reason: "Ready to start: no open decisions" };
 }
 
-/** A YAML scalar: plain when that's safe, else double-quoted. */
-const yamlValue = (s) => (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
+/** A YAML value: a scalar plain when that's safe, else double-quoted; a list on one line, `["[[A]]", "[[B]]"]`. */
+const yamlValue = (s) => Array.isArray(s) ? `[${s.map((x) => JSON.stringify(String(x))).join(", ")}]`
+  : (/^[\p{L}\p{N}][\p{L}\p{N} ._()-]*$/u.test(s) && !/\s$/.test(s) ? s : JSON.stringify(s));
 
 /**
  * A task note claimed by `who`: its front matter's `status` becomes "In Progress" and its `assignee` `who`,
- * each line changed in place (or added at the end of the front matter). Null when the note has no front matter.
+ * each line changed in place (or added at the end of the front matter); `more` sets other properties in the
+ * same change (e.g. its sprint). Null when the note has no front matter.
  */
-export const claimTask = (text, who) => setProps(text, [["status", "In Progress"], ["assignee", who]]);
+export const claimTask = (text, who, more = []) => setProps(text, [["status", "In Progress"], ["assignee", who], ...more]);
 
 /**
  * A note with some front matter properties set, each `key: value` line changed in place (or added at the
@@ -316,7 +519,8 @@ export function setProps(text, entries) {
   let raw = fm.raw;
   for (const [key, value] of entries) {
     const line = `${key}: ${yamlValue(value)}`;
-    const re = new RegExp(`^${key}:.*$`, "m");
+    // The old value's own lines go too: a list written one item per line (`- "[[A]]"`), or anything indented.
+    const re = new RegExp(`^${key}:.*(?:\\n(?:[ \\t]+.*|-(?:[ \\t].*)?))*$`, "m");
     raw = re.test(raw) ? raw.replace(re, () => line) : raw.trim() ? `${raw}\n${line}` : line;
   }
   // The front matter starts right after the opening `---` line.
@@ -385,16 +589,22 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
 /**
  * The task fields the app knows. `kind` says what control a field gets: a choice from `values`, a person,
  * a link to a task or a sprint note, a date, a number or text. `legacy` fields are the ones a repo
- * with no setup has had all along.
+ * with no setup has had all along; `optional` ones start off in a new setup, until a project turns them on.
  */
 export const TASK_FIELDS = [
-  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Waiting", "Done"], legacy: true },
+  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Blocked", "Waiting", "Done"], legacy: true },
   { key: "priority", label: "Priority", kind: "choice", values: ["High", "Medium", "Low"], legacy: true },
   { key: "assignee", label: "Assignee", kind: "person", legacy: true },
   { key: "area", label: "Area", kind: "text", legacy: true },
   { key: "requested_by", label: "Requested by", kind: "person", legacy: true },
+  { key: "reviewer", label: "Reviewer", kind: "person", optional: true },
   { key: "type", label: "Type", kind: "choice", values: ["Epic", "Story", "Task", "Bug"] },
   { key: "part_of", label: "Parent task", kind: "task" },
+  // Relations: lists of links to other tasks. Each shows on the other task too, the other way round.
+  { key: "blocked_by", label: "Blocked by", kind: "tasks", reverse: "Blocks" },
+  { key: "related", label: "Related", kind: "tasks", reverse: "Related" },
+  { key: "after", label: "Comes after", kind: "tasks", reverse: "Comes before" },
+  { key: "before", label: "Comes before", kind: "tasks", reverse: "Comes after" },
   { key: "sprint", label: "Sprint", kind: "sprint", folder: "Sprints", length_days: 14 },
   { key: "estimate", label: "Estimate", kind: "number", unit: "points" },
   { key: "due", label: "Due date", kind: "date" },
@@ -413,14 +623,15 @@ const cleanFolder = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/
 /**
  * A repo's task setup from the `tasks` part of its marker, with every field filled in. No setup at all
  * (`null`) keeps the fields repos have always had; a setup starts from a new project's fields (every
- * one on) and changes what it names. Anything it can't use is left at the default.
+ * one on but the optional ones) and changes what it names. Anything it can't use is left at the default.
  */
 export function taskSetup(raw) {
   const given = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
   const set = given?.fields && typeof given.fields === "object" ? given.fields : {};
   const fields = TASK_FIELDS.map((f) => {
     const s = set[f.key] && typeof set[f.key] === "object" ? set[f.key] : {};
-    const field = { key: f.key, label: f.label, kind: f.kind, on: given ? s.on !== false : !!f.legacy, prop: f.key };
+    const on = given ? (f.optional ? s.on === true : s.on !== false) : !!f.legacy;
+    const field = { key: f.key, label: f.label, kind: f.kind, on, prop: f.key };
     if (typeof s.prop === "string" && isFieldProp(s.prop.trim())) field.prop = s.prop.trim();
     if (f.values) field.values = cleanValues(s.values).length ? cleanValues(s.values) : [...f.values];
     if (f.kind === "sprint") {
@@ -530,8 +741,9 @@ export const linkName = (v) => {
   return (m ? m[1] : s).trim();
 };
 
-/** What a field's control saves: link kinds become `[[Name]]`, numbers stay digits, empty stays empty. */
+/** What a field's control saves: link kinds become `[[Name]]` (a list of them for relations), numbers stay digits, empty stays empty. */
 export function fieldValue(field, input) {
+  if (field.kind === "tasks") return [...new Set((Array.isArray(input) ? input : [input]).map(linkName).filter(Boolean))].map((x) => `[[${x}]]`);
   const s = String(input ?? "").trim();
   if (!s) return "";
   if (["task", "sprint", "link"].includes(field.kind)) return `[[${linkName(s)}]]`;
@@ -543,13 +755,293 @@ export function fieldValue(field, input) {
 /**
  * The properties a new task starts with: every field that's on, empty, except the choices, which start
  * at their first value; Priority at its middle one and Type at "Task" when it has one, so a new task
- * isn't the highest priority or an epic.
+ * isn't the highest priority or an epic. Relations are left out until a task has some.
  */
 export function newTaskProps(setup) {
-  return setup.fields.filter((f) => f.on).map((f) => {
+  return setup.fields.filter((f) => f.on && f.kind !== "tasks").map((f) => {
     if (f.kind !== "choice" || !f.values?.length) return [f.prop, ""];
     if (f.key === "priority") return [f.prop, f.values[Math.floor((f.values.length - 1) / 2)]];
     if (f.key === "type") return [f.prop, f.values.find((v) => v.toLowerCase() === "task") || f.values[0]];
     return [f.prop, f.values[0]];
   });
+}
+
+/**
+ * A new task's reviewer, when the setup has Reviewer on and the note doesn't name one yet: the person who
+ * asked for it (its Requested by), else `who`, the person making it. The note's text, changed or not.
+ */
+export function withReviewer(setup, text, who = "") {
+  const field = setup?.fields.find((f) => f.key === "reviewer" && f.on);
+  if (!field) return text;
+  // One plain line each (`reviewer: ""`, `requested_by: Ann`), read without a YAML parser.
+  const raw = splitFrontMatter(toLf(text))?.raw ?? "";
+  const line = (prop) => (new RegExp(`^${prop}:[ \t]*(.*)$`, "m").exec(raw)?.[1] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (line(field.prop)) return text;
+  const reviewer = line(fieldProp(setup, "requested_by")) || String(who ?? "").trim();
+  return reviewer ? withProps(text, [[field.prop, reviewer]]) : text;
+}
+
+// ---- parent tasks and subtasks ----
+
+/** The property a field of the setup is kept in (its key when there's no setup): `fieldProp(setup, "part_of")`. */
+export const fieldProp = (setup, key) => setup?.fields.find((f) => f.key === key)?.prop || key;
+
+/** The page a link property leads to, as a link target: `[[Epic]]` -> "Epic"; a list uses its first link. */
+export function linkTarget(v) {
+  const first = Array.isArray(v) ? v.find((x) => !blank(x)) : v;
+  return blank(first) ? "" : linkName(first);
+}
+
+/** Whether a status means the work is over: Done, Cancelled, Won't do, or the last of the setup's statuses. */
+export function isDoneStatus(status, setup = null) {
+  const s = String(status ?? "").trim();
+  if (!s) return false;
+  const statuses = setup?.fields.find((f) => f.key === "status")?.values;
+  return FINISHED.test(s) || (!!statuses?.length && s.toLowerCase() === statuses.at(-1).toLowerCase());
+}
+
+/**
+ * The tasks under one task, from [{ path, props }]: the notes whose parent property (`prop`) links to
+ * `path`, through `resolve(target, fromPath)`. The open ones first, then by ID and name; with how many are done.
+ */
+export function subtasksOf(notes, path, { prop = "part_of", resolve, setup = null } = {}) {
+  const status = fieldProp(setup, "status");
+  const tasks = notes
+    .filter((n) => n.path !== path && linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path)
+    .map((n) => ({ path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[status] ?? "").trim(), done: isDoneStatus(n.props[status], setup) }))
+    .sort((a, b) => a.done - b.done || a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
+  return { tasks, done: tasks.filter((t) => t.done).length, total: tasks.length };
+}
+
+// ---- relations between tasks: blocked by, related, comes after, comes before ----
+
+/**
+ * The pages a list property links to, as link targets: `["[[A]]", "[[B]]"]` -> ["A", "B"]. One link, links
+ * in a line of text, or a plain name count too; so does `[[A]]` left unquoted, which YAML reads as a list in a list.
+ */
+export function linkList(v) {
+  if (blank(v)) return [];
+  const items = Array.isArray(v) ? v.map(String) : [...String(v).matchAll(/\[\[[^\]]+\]\]/g)].map((m) => m[0]);
+  if (!Array.isArray(v) && !items.length) items.push(String(v));
+  return [...new Set(items.filter((x) => !blank(x)).map(linkName).filter(Boolean))];
+}
+
+/**
+ * The relation fields that are on, in their order, each with its property and how it reads from the
+ * other task (`reverse`): Blocked by / Blocks, Related, Comes after / Comes before. All four with no setup.
+ */
+export function relationFields(setup = null) {
+  return TASK_FIELDS.filter((f) => f.kind === "tasks").map((f) => {
+    const s = setup?.fields.find((x) => x.key === f.key);
+    return { key: f.key, label: f.label, reverse: f.reverse, prop: s?.prop || f.key, on: s ? !!s.on : true };
+  }).filter((f) => f.on);
+}
+
+/**
+ * A task's relations both ways, from [{ path, props }]: its own links (from `props`, its properties now) and
+ * the other tasks' links to it, which read the other way round (B blocked by A shows on A as "Blocks").
+ * Groups [{ label, tasks }] in a fixed order, each task once ({ path, name, id, status, done, own, key });
+ * `own` ones are in this task's own property `key` (`name` as written there), so they can be taken out here.
+ * A link to no page keeps its name, with no path, and comes last.
+ */
+export function taskRelations(notes, path, props, { setup = null, resolve }) {
+  const statusProp = fieldProp(setup, "status");
+  const byPath = new Map(notes.map((n) => [n.path, n]));
+  const groups = new Map();
+  const add = (label, item) => {
+    if (!groups.has(label)) groups.set(label, []);
+    const list = groups.get(label);
+    const same = list.find((x) => (item.path ? x.path === item.path : !x.path && x.name.toLowerCase() === item.name.toLowerCase()));
+    if (!same) list.push(item);
+    else if (item.own && !same.own) Object.assign(same, { own: true, key: item.key, name: item.name });
+  };
+  const about = (p) => {
+    const n = byPath.get(p);
+    return { id: String(n?.props.id ?? "").trim(), status: String(n?.props[statusProp] ?? "").trim(), done: isDoneStatus(n?.props[statusProp], setup) };
+  };
+  const fields = relationFields(setup);
+  for (const f of fields) {
+    for (const name of linkList(props?.[f.prop])) {
+      const p = resolve(name, path);
+      if (p === path) continue;
+      add(f.label, p ? { path: p, name, ...about(p), own: true, key: f.key } : { path: null, name, id: "", status: "", done: false, own: true, key: f.key });
+    }
+    for (const n of notes) {
+      if (n.path === path || !linkList(n.props[f.prop]).some((t) => resolve(t, n.path) === path)) continue;
+      add(f.reverse, { path: n.path, name: "", ...about(n.path), own: false, key: f.key });
+    }
+  }
+  const order = ["Blocked by", "Blocks", "Comes after", "Comes before", "Related"];
+  return order.filter((l) => groups.get(l)?.length).map((label) => ({
+    label,
+    tasks: groups.get(label).sort((a, b) => !a.path - !b.path || a.done - b.done || a.id.localeCompare(b.id, undefined, { numeric: true }) || (a.path || a.name).localeCompare(b.path || b.name)),
+  }));
+}
+
+/**
+ * The tasks that wait on an open task, from [{ path, props }]: their Blocked by links a task that isn't done.
+ * A link to no task doesn't block. Empty when the setup has Blocked by off.
+ */
+export function blockedTasks(notes, { setup = null, resolve }) {
+  const field = relationFields(setup).find((f) => f.key === "blocked_by");
+  if (!field) return new Set();
+  const statusProp = fieldProp(setup, "status");
+  const byPath = new Map(notes.map((n) => [n.path, n]));
+  const out = new Set();
+  for (const n of notes) {
+    const open = linkList(n.props[field.prop]).some((t) => {
+      const other = byPath.get(resolve(t, n.path));
+      return other && other.path !== n.path && !isDoneStatus(other.props[statusProp], setup);
+    });
+    if (open) out.add(n.path);
+  }
+  return out;
+}
+
+/**
+ * Why `parentPath` can't be `path`'s parent, or "" when it can: a task can't be its own parent, nor sit
+ * under one of its own subtasks (at any depth), which would make a loop.
+ */
+export function parentProblem(notes, path, parentPath, { prop = "part_of", resolve } = {}) {
+  if (!parentPath) return "";
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+  if (parentPath === path) return "A task can't be its own parent.";
+  const parentOf = new Map(notes.map((n) => [n.path, linkTarget(n.props[prop]) ? resolve(linkTarget(n.props[prop]), n.path) : null]));
+  const seen = new Set();
+  for (let p = parentOf.get(parentPath); p && !seen.has(p); p = parentOf.get(p)) {
+    if (p === path) return `${name(parentPath)} is already under ${name(path)}, so it can't be its parent.`;
+    seen.add(p);
+  }
+  return "";
+}
+
+/** The task a parent picker's text means: an ID (`C-12`, any case) or a task's name; null when none. */
+export function findTask(notes, input) {
+  const s = linkName(input).toLowerCase();
+  if (!s) return null;
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "").toLowerCase();
+  return notes.find((n) => String(n.props.id ?? "").trim().toLowerCase() === s)
+    || notes.find((n) => name(n.path) === s)
+    || notes.find((n) => { const id = String(n.props.id ?? "").trim().toLowerCase(); return id && s.startsWith(id + " ") && name(n.path) === s.slice(id.length + 1); })
+    || null;
+}
+
+// ---- sprints ----
+
+/** A date property as `YYYY-MM-DD`: YAML gives a Date, JSON a string; "" when it isn't one. */
+export function isoDay(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
+  return /^\d{4}-\d\d-\d\d/.exec(String(v ?? "").trim())?.[0] ?? "";
+}
+
+/** `YYYY-MM-DD` plus some days. */
+export function addDays(day, n) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const noteName = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+
+/**
+ * The sprint notes, from [{ path, props }] with `start`, `end` and `goal`, the latest start first,
+ * each with where it stands on `today`: "now", "next" (the first one after today), "later" or "past".
+ */
+export function sprints(notes, today) {
+  const list = notes.map((n) => ({ path: n.path, name: noteName(n.path), start: isoDay(n.props.start), end: isoDay(n.props.end),
+    goal: String(n.props.goal ?? "").trim() }))
+    .sort((a, b) => (b.start || "").localeCompare(a.start || "") || b.name.localeCompare(a.name, undefined, { numeric: true }));
+  const now = (s) => s.start && s.start <= today && (!s.end || s.end >= today);
+  const next = list.filter((s) => s.start > today).at(-1);
+  return list.map((s) => ({ ...s, when: now(s) ? "now" : s === next ? "next" : s.start > today ? "later" : "past" }));
+}
+
+/** The sprint picker's order: the current sprint, the next one, then the rest, the latest first. */
+export function sprintChoices(list) {
+  const rank = { now: 0, next: 1 };
+  return [...list].sort((a, b) => (rank[a.when] ?? 2) - (rank[b.when] ?? 2));
+}
+
+/**
+ * The sprint after `last` (the latest one): its name counts on ("Sprint 12" -> "Sprint 13"), it starts the
+ * day after `last` ends (or today, if that's later) and lasts `days`.
+ */
+export function nextSprint(last, days, today) {
+  const m = /^(.*?)(\d+)$/.exec(last?.name ?? "");
+  const name = m ? `${m[1]}${Number(m[2]) + 1}` : last ? `${last.name} 2` : "Sprint 1";
+  const after = last?.end ? addDays(last.end, 1) : "";
+  const start = after > today ? after : today;
+  return { name, start, end: addDays(start, Math.max(1, days) - 1) };
+}
+
+/**
+ * The top tasks to start when sprints are in use, from [{ path, props }]: the free tasks (as `suggestTasks`
+ * picks them) whose sprint property (`prop`) links to the current sprint's note (`now`, a path); when it has
+ * none left, a few from the next sprint's (`next`), each with `nextSprint: true`. Null when there's neither
+ * a current nor a next sprint, so the top tasks are picked from all tasks, as without sprints.
+ */
+export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint", now = null, next = null, resolve, blocked = null, order }) {
+  if (!now && !next) return null;
+  const inSprint = (path) => (n) => !!linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path;
+  const current = now ? suggestTasks(notes.filter(inSprint(now)), { areas, count, blocked, order }) : [];
+  if (current.length || !next) return current;
+  return suggestTasks(notes.filter(inSprint(next)), { areas, count, blocked, order }).map((n) => ({ ...n, nextSprint: true }));
+}
+
+/**
+ * A sprint's tasks: those whose sprint property links to it, grouped by status in the setup's order (others
+ * after), with how many are done and, when estimates are on, how much of the estimate.
+ */
+export function sprintTasks(notes, path, { setup = null, resolve }) {
+  const prop = fieldProp(setup, "sprint");
+  const statusProp = fieldProp(setup, "status");
+  const estimate = setup?.fields.find((f) => f.key === "estimate");
+  const order = (setup?.fields.find((f) => f.key === "status")?.values ?? []).map((v) => v.toLowerCase());
+  const tasks = notes
+    .filter((n) => linkTarget(n.props[prop]) && resolve(linkTarget(n.props[prop]), n.path) === path)
+    .map((n) => {
+      const points = Number(n.props[estimate?.prop ?? "estimate"]);
+      return { path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[statusProp] ?? "").trim(),
+        done: isDoneStatus(n.props[statusProp], setup), points: Number.isFinite(points) && !blank(n.props[estimate?.prop ?? "estimate"]) ? points : null };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
+  const groups = [];
+  for (const t of tasks) {
+    let g = groups.find((x) => x.status.toLowerCase() === t.status.toLowerCase());
+    if (!g) groups.push(g = { status: t.status, tasks: [] });
+    g.tasks.push(t);
+  }
+  const at = (s) => { const i = order.indexOf(s.toLowerCase()); return i < 0 ? order.length + (s ? 0 : 1) : i; };
+  groups.sort((a, b) => at(a.status) - at(b.status));
+  const sum = (list) => list.reduce((n, t) => n + (t.points ?? 0), 0);
+  const hasPoints = tasks.some((t) => t.points != null);
+  return {
+    groups, total: tasks.length, done: tasks.filter((t) => t.done).length,
+    points: hasPoints ? { done: sum(tasks.filter((t) => t.done)), total: sum(tasks), unit: estimate?.unit ?? "points" } : null,
+    open: tasks.filter((t) => !t.done),
+  };
+}
+
+// ---- a task's commits ----
+
+const COMMIT_LINK = /^\[([^\]]*)\]\((https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/commit\/([0-9a-f]{7,40}))\)\s*(.*)$/i;
+const COMMIT_URL = /^(https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/commit\/([0-9a-f]{7,40}))\s*(.*)$/i;
+
+/**
+ * A task's `commits` property as a list, the newest first: each line is
+ * `[abc1234](https://github.com/owner/repo/commit/<sha>) the first line of the message` (as the Task
+ * commits Action writes them, oldest first), or a bare commit address. Anything else is left out.
+ * Resolves to [{ short, url, repo, title }], with `repo` in lower case.
+ */
+export function taskCommitLinks(value) {
+  const list = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
+  const out = [];
+  for (const v of list) {
+    const s = String(v ?? "").trim();
+    let m = COMMIT_LINK.exec(s);
+    if (m) { out.push({ short: m[4].slice(0, 7), url: m[2], repo: m[3].toLowerCase(), title: m[5].trim() }); continue; }
+    m = COMMIT_URL.exec(s);
+    if (m) out.push({ short: m[3].slice(0, 7), url: m[1], repo: m[2].toLowerCase(), title: m[4].trim() });
+  }
+  return out.reverse();
 }
