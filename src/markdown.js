@@ -178,15 +178,11 @@ export function createMarkdown() {
         + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
-    // A ```mentions block: the app lists the places in the vault that mention its login there.
-    if (lang === "mentions") {
-      return `<div class="mentions-block" data-login="${esc(mentionsOptions(token.content).login)}">`
-        + `<pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
-    }
-    // A ```questions block: the app lists the tasks with an open question there.
-    if (lang === "questions") {
-      return `<div class="questions-block" data-owner="${esc(questionsOptions(token.content).owner)}">`
-        + `<pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+    // A ```needs-attention block: the app puts the questions and mentions box (or one of them) there.
+    if (lang === "needs-attention") {
+      const { owner, login, show, showSet } = attentionOptions(token.content);
+      return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
+        + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     if (APP_BLOCKS.includes(lang)) {
@@ -244,23 +240,33 @@ export function topTasksOptions(src) {
   return out;
 }
 
-/**
- * The options of a ```questions block, one per line, all written in the block: `owner: Your Name` (whose
- * questions it lists: the tasks they asked for, review or whose agent has them; everyone's when left out).
- * Other lines are ignored.
- */
-export function questionsOptions(src) {
-  const line = String(src ?? "").split("\n").map((l) => l.match(/^\s*owner\s*:\s*(.*?)\s*$/i)).find(Boolean);
-  return { owner: line ? line[1].replace(/^["']|["']$/g, "").trim() : "" };
-}
+/** What a ```needs-attention block can show, in the order the box lists them. */
+export const ATTENTION_SHOWS = ["questions", "mentions"];
 
 /**
- * The options of a ```mentions block, one per line, all written in the block: `login: your-login` (whose
- * mentions it lists: `@` and that GitHub login; the `@` may be written too). Other lines are ignored.
+ * The options of a ```needs-attention block, one per line, all written in the block: `show: questions, mentions`
+ * (or one of them; "both" and "all" mean both; left out or not known, both, with `showSet` false so the box can
+ * say so), `owner: Your Name` (whose questions: the tasks they asked for, review or whose agent has them) and
+ * `login: your-login` (whose mentions: `@` and that GitHub login; the `@` may be written too). Other lines are
+ * ignored.
  */
-export function mentionsOptions(src) {
-  const line = String(src ?? "").split("\n").map((l) => l.match(/^\s*login\s*:\s*(.*?)\s*$/i)).find(Boolean);
-  return { login: line ? line[1].replace(/^["']|["']$/g, "").trim().replace(/^@/, "") : "" };
+export function attentionOptions(src) {
+  const out = { owner: "", login: "", show: [...ATTENTION_SHOWS], showSet: false };
+  const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(owner|login|show)\s*:\s*(.*?)\s*$/i);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key === "owner") out.owner = unquote(m[2]);
+    else if (key === "login") out.login = unquote(m[2]).replace(/^@/, "");
+    else {
+      const words = m[2].toLowerCase().replace(/^\[|\]$/g, "").split(/[\s,]+/).map(unquote).filter(Boolean);
+      const both = words.some((w) => w === "both" || w === "all");
+      const picked = both ? [...ATTENTION_SHOWS] : ATTENTION_SHOWS.filter((s) => words.some((w) => w === s || w + "s" === s));
+      if (picked.length) Object.assign(out, { show: picked, showSet: true });
+    }
+  }
+  return out;
 }
 
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */

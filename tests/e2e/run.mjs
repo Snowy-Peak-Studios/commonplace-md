@@ -215,38 +215,32 @@ check(["All areas", "Top 3", "By priority, newest first", "Current sprint, then 
   "the inbox's box says its block's options: " + inboxHead);
 await shot("2-inbox-desktop");
 
-// 2a. The inbox's ```questions block: the tasks with an open question for its owner, each linking to its task.
-await page.waitForSelector(".note-body .questions .questions-list a.suggest-name", { timeout: 15000 }).catch(() => {});
-const questions = await page.evaluate(() => ({
-  code: !!document.querySelector(".note-body .questions-block"),
-  head: document.querySelector(".note-body .questions .suggest-head small")?.textContent ?? "",
-  rows: [...document.querySelectorAll(".note-body .questions .questions-list li")].map((li) => ({
-    name: li.querySelector(".suggest-name")?.textContent ?? "", chip: li.querySelector(".chip.state")?.textContent ?? "",
-    question: li.querySelector(".question-text")?.textContent ?? "", href: decodeURIComponent(li.querySelector("a")?.getAttribute("href") ?? "") })),
-}));
-check(!questions.code && questions.head.includes("For Your name") && questions.rows.some((r) => r.name.includes("Add a reading list")
-  && r.chip === "Waiting for your answer" && r.question === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md")),
-  "the inbox's ```questions block lists the tasks with an open question, each linking to its task: " + JSON.stringify(questions));
-await page.evaluate(() => document.querySelector(".note-body .questions")?.scrollIntoView({ block: "center" }));
-await shot("2a-inbox-questions");
-
-// 2a2. The inbox's ```mentions block, before its top tasks: every place in the vault that mentions its login.
-await page.waitForSelector(".note-body .mentions .mentions-list a.suggest-name", { timeout: 20000 }).catch(() => {});
-const mentions = await page.evaluate(() => {
-  const box = document.querySelector(".note-body .mentions");
+// 2a. The inbox's ```needs-attention block, before its top tasks: one box, its questions first, then its mentions.
+await page.waitForFunction(() => document.querySelectorAll(".note-body .attention .attention-list a.suggest-name").length >= 2, { timeout: 20000 }).catch(() => {});
+const attention = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .attention");
   const top = document.querySelector(".note-body .suggest");
   return {
-    code: !!document.querySelector(".note-body .mentions-block"),
+    code: !!document.querySelector(".note-body .attention-block"),
+    boxes: document.querySelectorAll(".note-body .attention").length,
     first: !!(box && top && box.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING),
+    title: box?.querySelector(".suggest-head strong")?.textContent ?? "",
     head: box?.querySelector(".suggest-head small")?.textContent ?? "",
-    rows: [...(box?.querySelectorAll(".mentions-list li") ?? [])].map((li) => ({
-      name: li.querySelector(".suggest-name")?.textContent ?? "", href: decodeURIComponent(li.querySelector("a")?.getAttribute("href") ?? ""),
-      text: li.querySelector(".mention-text")?.textContent ?? "" })),
+    rows: [...(box?.querySelectorAll(".attention-list li") ?? [])].map((li) => ({
+      kind: li.querySelector(".chip.kind")?.textContent ?? "", name: li.querySelector(".suggest-name")?.textContent ?? "",
+      state: li.querySelector(".chip.state")?.textContent ?? "", text: li.querySelector(".attention-text")?.textContent ?? "",
+      href: decodeURIComponent(li.querySelector("a")?.getAttribute("href") ?? "") })),
   };
 });
-check(!mentions.code && mentions.first && mentions.head.startsWith("For @your-github-login")
-  && mentions.rows.some((r) => r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions") && r.text.includes("@your-github-login")),
-  "the inbox's ```mentions block comes first and lists the Guide's mention, linking to its heading: " + JSON.stringify(mentions));
+const qRow = attention.rows.findIndex((r) => r.kind === "Question" && r.name.includes("Add a reading list") && r.state === "Waiting for your answer"
+  && r.text === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md"));
+const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions")
+  && r.text.includes("@your-github-login"));
+check(!attention.code && attention.boxes === 1 && attention.first && attention.title === "Needs your attention"
+  && attention.head.includes("for Your name") && attention.head.includes("of @your-github-login") && qRow >= 0 && mRow > qRow,
+  "the inbox's ```needs-attention block is one box before the top tasks: its question, then the Guide's mention, each linking to its place: " + JSON.stringify(attention));
+await page.evaluate(() => document.querySelector(".note-body .attention")?.scrollIntoView({ block: "center" }));
+await shot("2a-inbox-attention");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
 const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({

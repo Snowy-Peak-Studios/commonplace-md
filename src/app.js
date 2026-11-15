@@ -872,10 +872,8 @@ function renderPreview() {
   fillBases(body, f.repo);
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
-  // The open questions show only where a ```questions block is, like the top tasks.
-  fillQuestions(body, f);
-  // The places that mention someone show only where a ```mentions block is, at the top of their inbox.
-  fillMentionBoxes(body, f);
+  // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
+  fillAttention(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
@@ -1507,15 +1505,6 @@ function fillTopTasks(root, f) {
   }
 }
 
-/** Puts the open questions box where each ```questions block is (an inbox's Needs attention), but not inside an embed. */
-function fillQuestions(root, f) {
-  for (const el of root.querySelectorAll(".questions-block")) {
-    if (el.parentElement.closest(".embed-page")) continue;
-    const box = questionsBox(f.repo, el.dataset.owner || "");
-    if (box) el.replaceWith(box);
-  }
-}
-
 /** One look-up per tree version and owner, so typing in the inbox doesn't redo it. */
 const questionLoads = new Map();
 function loadQuestions(repo, who) {
@@ -1533,32 +1522,6 @@ function loadQuestions(repo, who) {
     load.catch(() => questionLoads.delete(key));
   }
   return questionLoads.get(key);
-}
-
-/**
- * The tasks with an open question (a `question` property) for `who`, or everyone's: each links to its task,
- * where the question's options and its Answer line are, with the question in a few words, and whether it's
- * still waiting for an answer or answered and waiting for the agent. The head says whose they are.
- */
-function questionsBox(repo, who) {
-  const tree = app.trees.get(repo.id);
-  if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
-  const list = h("ol", { class: "questions-list" }, h("li", { class: "muted" }, "Looking for questions…"));
-  const box = h("section", { class: "questions", "aria-label": "Questions waiting for an answer" },
-    h("div", { class: "suggest-head" }, icon("question"), h("strong", {}, "Questions for you"),
-      h("small", { class: "muted" }, who ? `For ${who} · Answer on the task` : "Everyone's: the block names no owner · Answer on the task")),
-    list);
-  const chip = (t) => t.answer
-    ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
-    : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
-  loadQuestions(repo, who).then((tasks) => {
-    list.replaceChildren(...(tasks.length ? tasks.map((t) => h("li", {},
-      h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
-      h("span", { class: "suggest-tags" }, chip(t)),
-      h("span", { class: "question-text" }, t.question)))
-      : [h("li", { class: "muted" }, "No questions waiting.")]));
-  }, () => list.replaceChildren(h("li", { class: "muted" }, "The tasks couldn't be read.")));
-  return box;
 }
 
 // ---- mentions: `@login` ----
@@ -1591,15 +1554,6 @@ function fillMentions(root, repo) {
       span.replaceWith(h("a", { class: "mention", href: hrefFor(repo, p.path), title: `${p.name}'s inbox` }, `@${span.dataset.login}`));
     }
   }, () => {});
-}
-
-/** Puts the mentions box where each ```mentions block is (the top of an inbox), but not inside an embed. */
-function fillMentionBoxes(root, f) {
-  for (const el of root.querySelectorAll(".mentions-block")) {
-    if (el.parentElement.closest(".embed-page")) continue;
-    const box = mentionsBox(f.repo, el.dataset.login || "");
-    if (box) el.replaceWith(box);
-  }
 }
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
@@ -1637,27 +1591,71 @@ function loadMentions(repo, login) {
   return mentionLoads.get(key);
 }
 
+// ---- needs your attention: questions and mentions ----
+
+/** Puts the box where each ```needs-attention block is (the top of an inbox), but not inside an embed. */
+function fillAttention(root, f) {
+  for (const el of root.querySelectorAll(".attention-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const show = (el.dataset.show || "questions,mentions").split(",").filter(Boolean);
+    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault });
+    if (box) el.replaceWith(box);
+  }
+}
+
+/** Each kind of box: its name, and the icon in its head. */
+const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"] };
+
 /**
- * The places in the vault that mention `@login`, newest note first: the note and the heading above, as a
- * link to that place, the line's words and when the note last changed. The head says whose and how many
- * notes were read. Without a login in the block, it says to add one.
+ * What waits on someone, as one box or one of its halves (`show`): the questions waiting on `owner` (tasks with
+ * a `question` property they asked for, review or whose agent has them), waiting for an answer first, then
+ * answered; then the places that mention `@login`, newest first. Each row says which it is and links to the
+ * task, or to the heading the mention is under. The head says whose, and what's missing from the block.
  */
-function mentionsBox(repo, login) {
+function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true }) {
   const tree = app.trees.get(repo.id);
   if (!tree) return null;
-  const list = h("ol", { class: "mentions-list" }, h("li", { class: "muted" }, login ? "Looking for mentions…" : "Add a login: line to the block, e.g. login: your-github-login"));
-  const head = h("small", { class: "muted" }, login ? `For @${login}` : "No login in the block");
-  const box = h("section", { class: "mentions", "aria-label": "Mentions" },
-    h("div", { class: "suggest-head" }, icon("info"), h("strong", {}, "Mentions"), head), list);
-  if (!login) return box;
-  loadMentions(repo, login).then(({ found, read }) => {
-    head.textContent = `For @${login} · ${found.length} in ${read} notes read`;
-    list.replaceChildren(...(found.length ? found.map((m) => h("li", {},
-      h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
-        m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
-      m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
-      h("span", { class: "mention-text" }, m.text)))
-      : [h("li", { class: "muted" }, `No note mentions @${login} yet.`)]));
+  const wantQ = show.includes("questions"), wantM = show.includes("mentions");
+  const [title, iconName] = ATTENTION_TITLES[wantQ && wantM ? "both" : wantQ ? "questions" : "mentions"];
+  const parts = () => [
+    wantQ ? (owner ? `Questions for ${owner}` : "No owner: line, so no questions") : "",
+    wantM ? (login ? `Mentions of @${login}` : "No login: line, so no mentions") : "",
+    showSet ? "" : "Both (the block sets no show)",
+  ].filter(Boolean);
+  const head = h("small", { class: "muted" }, parts().join(" · "));
+  const list = h("ol", { class: "attention-list" }, h("li", { class: "muted" }, "Looking…"));
+  const box = h("section", { class: "attention", "aria-label": title },
+    h("div", { class: "suggest-head" }, icon(iconName), h("strong", {}, title), head), list);
+  const askQ = wantQ && owner, askM = wantM && login;
+  if (!askQ && !askM) {
+    list.replaceChildren(h("li", { class: "muted" }, wantQ && wantM ? "Add owner: (your name) and login: (your GitHub login) to the block."
+      : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
+    return box;
+  }
+  const hasTasks = [...tree.files.keys()].some(isTaskPath);
+  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, k === "question" ? "Question" : "Mention");
+  const state = (t) => t.answer
+    ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
+    : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
+  const questionRow = (t) => h("li", {}, wantM ? kind("question") : null,
+    h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
+    h("span", { class: "suggest-tags" }, state(t)),
+    h("span", { class: "attention-text" }, t.question));
+  const mentionRow = (m) => h("li", {}, wantQ ? kind("mention") : null,
+    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
+      m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
+    m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
+    h("span", { class: "attention-text" }, m.text));
+  Promise.all([
+    askQ && hasTasks ? loadQuestions(repo, owner) : [],
+    askM ? loadMentions(repo, login) : { found: [], read: 0 },
+  ]).then(([tasks, { found, read }]) => {
+    const said = parts();
+    if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
+    if (askM) said[wantQ ? 1 : 0] = `${found.length} mention${found.length === 1 ? "" : "s"} of @${login} in ${read} notes`;
+    head.textContent = said.join(" · ");
+    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...found.map(mentionRow)];
+    list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions, questionsOptions, mentionsOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, attentionOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -101,23 +101,29 @@ test("a task's and a sprint's blocks become placeholders that keep their code", 
   assert.equal(render("```subtasks\nsome: thing\n```\n"), '<div class="app-block" data-block="subtasks"><pre><code>some: thing\n</code></pre></div>\n');
 });
 
-test("a questions block becomes a placeholder with its owner, holding its source", () => {
-  assert.equal(render("```questions\nowner: Ana Lee\n```\n"),
-    '<div class="questions-block" data-owner="Ana Lee"><pre><code>owner: Ana Lee\n</code></pre></div>\n');
-  assert.equal(render("```Questions\n```\n"), '<div class="questions-block" data-owner=""><pre><code>questions</code></pre></div>\n');
-  assert.match(render('```questions\nowner: "<b>"\n```\n'), /data-owner="&lt;b&gt;"/);
-  assert.deepEqual(questionsOptions("range: 3\n  Owner :  'Bo Park' \n"), { owner: "Bo Park" });
-  assert.deepEqual(questionsOptions(""), { owner: "" });
+test("a needs-attention block becomes a placeholder with what it shows, its owner and login, holding its source", () => {
+  assert.equal(render("```needs-attention\nshow: questions\nowner: Ana Lee\nlogin: ana\n```\n"),
+    '<div class="attention-block" data-owner="Ana Lee" data-login="ana" data-show="questions"><pre><code>show: questions\nowner: Ana Lee\nlogin: ana\n</code></pre></div>\n');
+  assert.equal(render("```Needs-Attention\n```\n"),
+    '<div class="attention-block" data-owner="" data-login="" data-show="questions,mentions" data-show-default="1"><pre><code>needs-attention</code></pre></div>\n');
+  assert.match(render('```needs-attention\nowner: "<b>"\n```\n'), /data-owner="&lt;b&gt;"/);
 });
 
-test("@login becomes a mention, but not in code, a link or an email; a mentions block holds its login", () => {
+test("a needs-attention block's options: show (both, or one), owner and login; other lines ignored", () => {
+  const both = ["questions", "mentions"];
+  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("show: mentions").show, ["mentions"]);
+  assert.deepEqual(attentionOptions("show: [Mention]").show, ["mentions"]);
+  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true }, "always questions first");
+  assert.deepEqual(attentionOptions("show: both").show, both);
+  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false });
+});
+
+test("@login becomes a mention, but not in code, a link or an email", () => {
   assert.equal(render("Ask @Ann-Lee, not ann@example.com or `@code`.\n"),
     '<p>Ask <span class="mention" data-login="Ann-Lee">@Ann-Lee</span>, not <a href="mailto:ann@example.com">ann@example.com</a> or <code>@code</code>.</p>\n');
   assert.equal(render("[see @bob](https://example.com) and **@bob**\n"),
     '<p><a href="https://example.com">see @bob</a> and <strong><span class="mention" data-login="bob">@bob</span></strong></p>\n');
   assert.match(render("## Ask @bob\n"), /data-heading="Ask @bob"/);
-  assert.equal(render("```mentions\nlogin: @Ann-Lee\n```\n"),
-    '<div class="mentions-block" data-login="Ann-Lee"><pre><code>login: @Ann-Lee\n</code></pre></div>\n');
-  assert.deepEqual(mentionsOptions("login: 'bob'\n"), { login: "bob" });
-  assert.deepEqual(mentionsOptions("owner: Bob\n"), { login: "" });
 });

@@ -35,8 +35,8 @@ I was frustrated with the work tools I had to use, so I started making this for 
   - `![[image.png]]` embeds show, and so do callouts and the front matter as properties.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
-  - A ` ```questions ` block lists the tasks with a question waiting for you, each linking to the task, where you answer it.
-  - `@login` mentions a person (typing `@` offers everyone with an inbox), and a ` ```mentions ` block at the top of their inbox lists every place that mentions them.
+  - `@login` mentions a person (typing `@` offers everyone with an inbox).
+  - A ` ```needs-attention ` block shows what waits on you: the tasks with a question for you, and the places that mention you, in one box or two.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
   - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
@@ -375,8 +375,8 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths
 - ` ```mermaid ` diagrams
 - ` ```top-tasks ` blocks: the top tasks to start, on any page
-- ` ```questions ` blocks: the tasks with a question waiting for an answer
-- `@login` mentions, and ` ```mentions ` blocks: every place that mentions someone
+- `@login` mentions
+- ` ```needs-attention ` blocks: the questions waiting for someone and the places that mention them
 - checkboxes, ticked in Read mode
 - lists whose subpoints fold away in Read mode
 - `%% comments %%`, hidden in the preview
@@ -461,17 +461,16 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
   `range` is how many (up to 20; three when the block doesn't say, and the box says so; older blocks' `count` still works). `areas` keeps only those areas (empty or left out: every area). `order` is `priority-newest` (High, Medium, Low, then none; the newest first within each: also when left out, and the box says so), `priority-oldest`, `newest` or `oldest` (by the number in the task's `id`, priority not counted); it sorts the waiting list too. `sprint` is `current-only`, `current-then-next` or `off` (every task, also when left out). `owner` is whom **Claim** claims for: it sets the task's `status` to *In Progress* and its `assignee` to the owner, in one commit; with no `owner`, nothing can be claimed. The box's head says every option in use. A page without the block, an inbox too, has no box. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints** (and `sprint: current-then-next`), the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit. With sprints, **Not now** becomes **Push to the next sprint**: it moves the task into the next sprint (one commit of its sprint line); when there's no sprint after the task's yet, it says so and offers the waiting list instead. With `sprint: current-only`, it never reaches into the next sprint, and says so when no sprint is running. **On any page** (your Home, a project page, a sprint) the same block shows the same box. Other Markdown editors show the block as plain code.
-- **Questions:** a ` ```questions ` block (in your inbox's *Needs attention*, or on any page) lists the tasks with an open question: a `question` property with the question in a few words. Each links to its task, where the question's options are, and shows whether it's *Waiting for your answer* or *Answered, waiting for the agent* (something is written under the task's `**Answer:**` line). `owner` says whose questions: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them (`assignee`); with no `owner`, everyone's. Finished tasks don't count. A task with an open question shows *Needs a decision* among the top tasks, until the agent acts on the answer and empties `question`.
+- **Mentions:** write `@` and a GitHub login in any note to mention that person; in Edit mode, typing `@` offers the people of the vault (every inbox with a `github` login, by its `owner`). In Read mode, the mention is a link to their inbox. Not in code, and not in an email address or a path.
+- **Needs attention:** a ` ```needs-attention ` block (at the top of your inbox, or on any page) shows what waits on you. Everything it shows is written in it, one line each:
 
-  ```questions
+  ```needs-attention
+  show: questions, mentions
   owner: Your Name
-  ```
-
-- **Mentions:** write `@` and a GitHub login in any note to mention that person; in Edit mode, typing `@` offers the people of the vault (every inbox with a `github` login, by its `owner`). In Read mode, the mention is a link to their inbox. Not in code, and not in an email address or a path. A ` ```mentions ` block (at the top of an inbox, or on any page) lists every place in the vault that mentions its `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first. It reads every note once and keeps what it found per note version on the device, so later looks only read what changed. Nothing is written into the inbox, and a mention stays listed while the note says it.
-
-  ```mentions
   login: your-github-login
   ```
+
+  `show` is `questions, mentions` for one box, *Needs your attention*, with both (also when left out, and the box says so), or just `questions` (*Questions for you*) or `mentions` (*Mentions of you*): two blocks make two separate boxes. **Questions** are the tasks with an open question (a `question` property with the question in a few words) for `owner`: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them (`assignee`). Each links to its task, where the question's options are, and shows *Waiting for your answer* or *Answered, waiting for the agent* (something is written under the task's `**Answer:**` line); those waiting come first. Such a task shows *Needs a decision* among the top tasks, until the agent acts on the answer and empties `question`. **Mentions** are every place in the vault that mentions `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first, after the questions. The box reads every note once and keeps what it found per note version on the device, so later looks only read what changed. Nothing is written into the inbox: a mention stays listed while the note says it. Without `owner` or `login`, the box says which is missing.
 
 </details>
 

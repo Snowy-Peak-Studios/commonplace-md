@@ -8,11 +8,19 @@ github: your-github-login
 
 The shared inbox: write here first, sort it later. The Inbox button opens it, unless you have an inbox of your own in `Notes/Inboxes/` (see [[Your name]]).
 
-Mentions of you come first: the ` ```mentions ` block lists every place in the vault that says `@` and your GitHub login. Put your login in its `login:` line.
+## Needs attention
 
-```mentions
+*What waits on you: the questions on tasks, and the places that mention you, in one box. Answer a question on its task.*
+
+```needs-attention
+show: questions, mentions
+owner: Your name
 login: your-github-login
 ```
+
+`show:` is what the box shows: `questions, mentions` in one box, or one of them (two blocks make two boxes, as in [[Your name]]). `owner:` is whose questions (your name), `login:` whose mentions (your GitHub login).
+
+## Top tasks
 
 Put your GitHub login in `github` above to make this one yours. The box below shows the top three free tasks you could start; **Claim** makes one yours. It's the ` ```top-tasks ` block, and its lines say what it shows (the [[Home]] page says what each means): change them, move the block, or put one on any page.
 
@@ -36,11 +44,3 @@ owner: Your name
 *Thoughts that aren't tasks. They stay here.*
 
 - The [[Guide]] shows everything a note can hold.
-
-## Needs attention
-
-*Questions waiting for you: the tasks with a question, found by the block below. Answer on the task.*
-
-```questions
-owner: Your name
-```

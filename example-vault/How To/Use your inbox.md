@@ -10,17 +10,28 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 
 - **New tasks**: anything that should become a task. You, or your AI agent, turn each into a task note later.
 - **Notes**: thoughts that aren't tasks. They stay.
-- **Needs attention**: questions waiting for your answer. A ` ```questions ` block there lists the tasks with a question for you (below). Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
+- **Needs attention**: what waits on you. A ` ```needs-attention ` block there lists the tasks with a question for you, and the places that mention you (below). Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
 
-## Mentions of you
+## Needs attention: questions and mentions
 
-Anyone can mention you in any note with `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). A ` ```mentions ` block at the top of your inbox lists every place that does: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first. It takes one line:
+A ` ```needs-attention ` block at the top of your inbox shows what waits on you:
+
+- **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**.
+- **Mentions**: every place in the vault that says `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). Each row links to the heading it's under, with the line and when the note last changed, newest first.
+
+Everything it shows is written in the block, one line each:
 
 ```text
+show: questions, mentions
+owner: Your name
 login: your-github-login
 ```
 
-It reads every note once (then only the changed ones), so the first look in a big vault takes a moment. A mention stays listed while the note says it.
+- `show`: `questions, mentions` for one box with both (also when left out), or just `questions` or `mentions`. Two blocks, one each, make two separate boxes, as in [Your name](../Notes/Inboxes/Your%20name.md).
+- `owner`: whose questions: the tasks they asked for, review, or whose agent has them.
+- `login`: whose mentions.
+
+It reads every note once for the mentions (then only the changed ones), so the first look in a big vault takes a moment. A mention stays listed while the note says it; a question until your agent acts on the answer. [Add a reading list](../Tasks/Add%20a%20reading%20list.md) has a question and the [Guide](../Guide.md) a mention, so your [inbox](../Notes/Inbox.md) lists both.
 
 ## Your own inbox
 
@@ -46,14 +57,3 @@ owner: Your name
 
 **Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Each task's priority and area can be changed right there, and **Not now** puts one off. The block works on any page: [Home](../Home.md) has one.
 
-## The questions for you
-
-A ` ```questions ` block lists the tasks with a question waiting for an answer: a task gets one when your agent writes it a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**. It takes one line:
-
-```text
-owner: Your name
-```
-
-- `owner`: whose questions: the tasks they asked for, review, or whose agent has them. Left out, everyone's.
-
-[Add a reading list](../Tasks/Add%20a%20reading%20list.md) has one, so your [inbox](../Notes/Inbox.md) lists it.
