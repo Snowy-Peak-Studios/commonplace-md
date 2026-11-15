@@ -66,6 +66,8 @@ const page = await browser.newPage();
 page.on("dialog", (d) => d.accept());
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+// A failed request says which address it was, so an expected one can be told from a real one.
+page.on("response", (r) => { if (r.status() >= 400) errors.push(`  (${r.status()} ${r.request().method()} ${r.url().replace(/[?#].*$/, "")})`); });
 await page.setRequestInterception(true);
 page.on("request", async (req) => {
   const url = req.url();
@@ -116,6 +118,15 @@ page.on("request", async (req) => {
   const committed = treeWrites.flatMap((t) => t.tree).findLast((e) => `${REPO_API}/contents/${encPath(e.path)}` === url.split("?")[0]);
   if (committed && req.method() === "GET") return req.respond(json(200, { sha: await blobSha(committed.content), size: committed.content.length, content: b64(committed.content) }));
   if (url.split("?")[0] === contentsUrl(CSV_PATH)) return req.respond(json(200, { sha: "csvsha", size: CSV_TEXT.length, content: b64(CSV_TEXT) }));
+  // A note in a commit answered here (Start the next sprint) has a blob only here: a whole-vault read asks for it too.
+  const blob = req.method() === "GET" && /\/git\/blobs\/([0-9a-f]{40})$/.exec(url.split("?")[0]);
+  if (blob) {
+    for (const e of treeWrites.flatMap((w) => w.tree)) {
+      if (e.content != null && await blobSha(e.content) === blob[1]) {
+        return req.respond(json(200, { sha: blob[1], size: e.content.length, encoding: "base64", content: b64(e.content) }));
+      }
+    }
+  }
   req.continue();
 });
 

@@ -27,8 +27,8 @@ cd tests/e2e && npm install
 GH_TOKEN=<a token that can read the repo> node run.mjs <folder for screenshots>
 ```
 
-With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. The one console error
-expected is the `409 (Conflict)` the script fakes.
+With the GitHub CLI, `GH_TOKEN=$(gh auth token)` works. Every line should start with `PASS`. Every failed request is listed
+at the end with its address; the one expected is the `409 (Conflict)` the script fakes.
 
 Every write is answered by the script: PUTs, and the Git data API's trees, commits and refs (Start the next sprint). Any other write is refused, so the check never changes the repo.
 
