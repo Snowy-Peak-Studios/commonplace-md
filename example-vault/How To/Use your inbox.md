@@ -46,7 +46,9 @@ login: your-github-login
 - `owner`: whose questions: the tasks they asked for, review, or whose agent has them.
 - `login`: whose mentions.
 
-It reads every note once for the mentions (then only the changed ones), so the first look in a big vault takes a moment. A mention stays listed while the note says it; a question until your agent acts on the answer. [Add a reading list](../Tasks/Add%20a%20reading%20list.md) has a question and the [Guide](../Guide.md) a mention, so your [inbox](../Notes/Inbox.md) lists both.
+It reads every note once for the mentions (then only the changed ones), so the first look in a big vault takes a moment. A question stays until your agent acts on the answer. A mention goes away when it's answered: a reply on the very next line, starting with `@` and the other person's login. Or press **Seen** (or **All seen**): it folds under *Seen*, kept in your inbox's `seen_mentions` property, so all your devices agree.
+
+While something waits on you (a question with no answer, a mention with no reply that isn't seen), the **Inbox** button shows a red dot. [Add a reading list](../Tasks/Add%20a%20reading%20list.md) has a question and the [Guide](../Guide.md) a mention, so your [inbox](../Notes/Inbox.md) lists both.
 
 ## Your own inbox
 

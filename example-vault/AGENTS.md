@@ -100,6 +100,7 @@ Then move on to another task while it waits.
 ## Mentions
 
 - To point someone to a place, write `@` and their GitHub login there (the `github` of their inbox). The ` ```needs-attention ` block in their inbox lists it; nothing else needs writing.
+- To answer a mention, reply on the very next line, starting with `@` and the login of who wrote it: that clears it from your person's box.
 - A question for your own person still goes on its task (see Questions).
 
 ## Keep the vault in step

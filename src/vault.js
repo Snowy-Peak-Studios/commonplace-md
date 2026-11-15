@@ -164,6 +164,23 @@ export function hasBlock(text, name) {
   return new RegExp(`^ {0,3}(?:\`{3,}|~{3,})[ \\t]*${name}[ \\t]*$`, "mi").test(toLf(text));
 }
 
+/** What is written inside each fenced block of this name (```name ... ```), in order: one string per block. */
+export function blockContents(text, name) {
+  const out = [];
+  let open = null, body = [];
+  for (const line of toLf(text).split("\n")) {
+    if (open) {
+      const f = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(line);
+      if (f && f[1][0] === open[0] && f[1].length >= open.length) { out.push(body.join("\n")); open = null; }
+      else body.push(line);
+      continue;
+    }
+    const f = new RegExp(`^ {0,3}(\`{3,}|~{3,})[ \t]*${name}[ \t]*$`, "i").exec(line);
+    if (f) { open = f[1]; body = []; }
+  }
+  return out;
+}
+
 /**
  * The note with these blocks written in, each an empty fence, under its first `# ` heading (else at the
  * top of its body). A note that already has any of them keeps what it has: it chose its own.
@@ -254,10 +271,54 @@ export function addNewTask(text, close, item) {
  */
 export const MENTION = /(^|[^\p{L}\p{N}.+\-_/@`])@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/gu;
 
+/** A reply line: it starts with `@login`, after spaces, `>`, a list mark or a checkbox. Group 1 is the login. */
+const REPLY = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/u;
+
+/** The property of an inbox that keeps the mentions its person marked as seen: one key per mention. */
+export const SEEN_MENTIONS = "seen_mentions";
+
+/** The seen list as written (a list, or one key), as is: a note's path can have commas and capitals. */
+const seenList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).trim()).filter(Boolean);
+
 /**
- * Every mention in a note: [{ login, line, heading, text }], `line` counting from 1 in the whole file,
+ * A mention's key for the seen list: the note's path, `#`, and a short hash of the login and the line's words,
+ * so a mention stays seen while its line stays the same, and shows again when the line is changed.
+ */
+export function mentionKey(path, m) {
+  let h = 0x811c9dc5;
+  for (const ch of `${String(m.login).toLowerCase()}\n${m.text}`) {
+    h ^= ch.codePointAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${path}#${h.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * A person's mentions (each with its `path`) sorted for their inbox: `open` (not answered, not seen), `seen`
+ * (its key is in `seen`, the inbox's seen list) and `answered` (a reply is right under it), each in the order given.
+ */
+export function sortMentions(found, seen = []) {
+  const known = new Set(seenList(seen));
+  const out = { open: [], seen: [], answered: [] };
+  for (const m of found) (m.answered ? out.answered : known.has(mentionKey(m.path, m)) ? out.seen : out.open).push(m);
+  return out;
+}
+
+/**
+ * The inbox's new seen list: what it had plus the mentions in `add`, keeping only the keys of mentions in
+ * `found` that aren't answered (the others are gone, or cleared by a reply), so the list doesn't grow forever.
+ */
+export function withSeenMentions(seen, add, found) {
+  const live = new Set(found.filter((m) => !m.answered).map((m) => mentionKey(m.path, m)));
+  const keys = [...seenList(seen), ...add.map((m) => mentionKey(m.path, m))];
+  return [...new Set(keys)].filter((k) => live.has(k));
+}
+
+/**
+ * Every mention in a note: [{ login, line, heading, text, answered }], `line` counting from 1 in the whole file,
  * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
- * fenced code and inline code don't count. One per login and line.
+ * fenced code and inline code don't count. One per login and line. `answered` when the very next line is a
+ * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login.
  */
 export function findMentions(text) {
   const src = toLf(text);
@@ -281,7 +342,9 @@ export function findMentions(text) {
       if (seen.has(m[2].toLowerCase())) continue;
       seen.add(m[2].toLowerCase());
       const said = line.trim();
-      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said });
+      const reply = REPLY.exec(lines[i + 1] ?? "");
+      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
+        answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });
     }
   });
   return out;

@@ -9,8 +9,9 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions,
 } from "./vault.js";
-import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT, attentionOptions } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
@@ -322,9 +323,69 @@ function treeChanged(repo, path, sha) {
   }
 }
 
-const fileRow = (repo, path, iconName = iconFor(path), label = shownName(path), sub = null) =>
-  h("a", { class: "row file", href: hrefFor(repo, path), "data-path": path, title: path },
-    icon(iconName), h("span", { class: "name" }, label, sub ? h("small", {}, sub) : null));
+const fileRow = (repo, path, iconName = iconFor(path), label = shownName(path), sub = null, dot = "") =>
+  h("a", { class: "row file", href: hrefFor(repo, path), "data-path": path, title: dot ? `${path}: ${dot}` : path },
+    icon(iconName), h("span", { class: "name" }, label, sub ? h("small", {}, sub) : null),
+    dot ? h("span", { class: "inbox-dot", role: "img", "aria-label": dot }) : null);
+
+// ---- the Inbox dot: something in your own inbox needs you ----
+
+const INBOX_DOT_SAID = "Something needs you";
+
+/**
+ * Whether the signed-in person's own inbox (its `github` is their login) has something waiting, as its
+ * ```needs-attention blocks would show it: a question with no answer yet, or a mention with no reply under
+ * it that isn't marked seen. It runs in the background, once per tree version, and reuses the box's look-ups
+ * (the notes are read once, then cached by sha). The dot follows `tree.attention`.
+ */
+async function checkInboxDot(repo) {
+  const tree = app.trees.get(repo.id);
+  const inbox = inboxOf(repo);
+  const login = store.get("user")?.login;
+  if (!tree || !app.token || !login || !inbox || !tree.files.has(inbox)) return;
+  const key = `${tree.version}:${inbox}:${login}`;
+  if (tree.attentionKey === key) return;
+  tree.attentionKey = key;
+  let waits = false;
+  try {
+    const [note] = await baseNotes(repo, tree, [inbox]);
+    if (String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
+      for (const b of await inboxAttention(repo, tree, inbox)) {
+        if (b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
+          && (await loadQuestions(repo, b.owner)).some((t) => !t.answer)) waits = true;
+        if (!waits && b.show.includes("mentions") && b.login
+          && sortMentions((await loadMentions(repo, b.login)).found, note.props[SEEN_MENTIONS]).open.length) waits = true;
+        if (waits) break;
+      }
+    }
+  } catch { /* no dot when the notes can't be read */ }
+  if (app.trees.get(repo.id) !== tree || tree.attentionKey !== key || !!tree.attention === waits) return;
+  tree.attention = waits;
+  if (app.repo === repo) { paintInboxDot(); renderShortcuts(); }
+}
+
+/** The options of each ```needs-attention block in the inbox, read once per version of it (cached by sha). */
+async function inboxAttention(repo, tree, inbox) {
+  const cache = baseCache("attentionBlocks", repo);
+  const sha = tree.files.get(inbox);
+  if (!Object.hasOwn(cache, sha)) {
+    const text = (await readNotes(repo, tree, [inbox])).get(inbox);
+    if (text == null) return [];
+    for (const k of Object.keys(cache)) delete cache[k];
+    cache[sha] = blockContents(text, "needs-attention").map(attentionOptions);
+    keepBaseCache("attentionBlocks", repo, (k) => k === sha);
+  }
+  return cache[sha];
+}
+
+/** The header's Inbox button shows the dot, on the desktop and the phone. */
+function paintInboxDot() {
+  const btn = $("#inbox-btn");
+  const on = !!(app.repo && app.trees.get(app.repo.id)?.attention);
+  btn.classList.toggle("has-dot", on);
+  btn.title = on ? `Inbox: ${INBOX_DOT_SAID.toLowerCase()}` : "Inbox";
+  btn.setAttribute("aria-label", btn.title);
+}
 
 function rememberRecent(repo, path) {
   const list = store.get("recent", []).filter((r) => !(r.repo === repo.id && r.path === path));
@@ -339,7 +400,7 @@ function renderShortcuts() {
   if (!tree) return fill(host);
   const fixed = [];
   const inbox = inboxOf(repo);
-  if (inbox && tree.files.has(inbox)) fixed.push(fileRow(repo, inbox, "inbox", "Inbox"));
+  if (inbox && tree.files.has(inbox)) fixed.push(fileRow(repo, inbox, "inbox", "Inbox", null, tree.attention ? INBOX_DOT_SAID : ""));
   if (repo.home && tree.files.has(repo.home) && repo.home !== inbox) fixed.push(fileRow(repo, repo.home, "home"));
   const skip = new Set([inbox, repo.home]);
   const recent = store.get("recent", [])
@@ -458,7 +519,7 @@ async function refreshUser() {
     store.set("user", { login: u.login, avatar: u.avatar_url ? `${u.avatar_url}${u.avatar_url.includes("?") ? "&" : "?"}s=64` : "" });
     renderWho();
     const tree = app.repo && app.trees.get(app.repo.id);
-    if (tree && u.login !== before) findOwnInbox(app.repo, tree);
+    if (tree && u.login !== before) { findOwnInbox(app.repo, tree); checkInboxDot(app.repo); }
   } catch { /* shown in Settings when it matters */ }
 }
 
@@ -489,6 +550,8 @@ function renderHeader() {
   upBtn.setAttribute("aria-label", upBtn.title);
   $("#inbox-btn").hidden = !inboxOf(app.repo) || !app.token;
   $("#inbox-btn").classList.toggle("on", !!f && f.path === inboxOf(app.repo));
+  paintInboxDot();
+  if (app.repo) checkInboxDot(app.repo);
   const title = $("#title");
   const writable = canWrite();
   $("#new-btn").hidden = !writable;
@@ -1560,12 +1623,14 @@ function fillMentions(root, repo) {
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
 async function noteMentions(repo, tree, paths) {
-  const cache = baseCache("mentions", repo);
+  // "mentions2": now each mention also says whether a reply is under it, so the older cache is dropped.
+  store.remove(`mentions:${repo.id}`);
+  const cache = baseCache("mentions2", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("mentions", repo, (sha) => live.has(sha));
+    keepBaseCache("mentions2", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
 }
@@ -1631,7 +1696,7 @@ function fillAttention(root, f) {
   for (const el of root.querySelectorAll(".attention-block")) {
     if (el.parentElement.closest(".embed-page")) continue;
     const show = (el.dataset.show || "questions,mentions").split(",").filter(Boolean);
-    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault });
+    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault, note: f });
     if (box) el.replaceWith(box);
   }
 }
@@ -1644,8 +1709,10 @@ const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["
  * a `question` property they asked for, review or whose agent has them), waiting for an answer first, then
  * answered; then the places that mention `@login`, newest first. Each row says which it is and links to the
  * task, or to the heading the mention is under. The head says whose, and what's missing from the block.
+ * A mention with a reply right under it is left out (the head counts them); one marked **Seen** folds under
+ * *Seen*. The seen list is the `seen_mentions` property of `note`, the open note the box is in.
  */
-function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true }) {
+function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, note = null }) {
   const tree = app.trees.get(repo.id);
   if (!tree) return null;
   const wantQ = show.includes("questions"), wantM = show.includes("mentions");
@@ -1674,23 +1741,56 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
     h("span", { class: "suggest-tags" }, state(t)),
     h("span", { class: "attention-text" }, t.question));
-  const mentionRow = (m) => h("li", {}, wantQ ? kind("mention") : null,
+  const seenNow = note ? noteProps(note.text)[SEEN_MENTIONS] : [];
+  const canMark = !!note && canWrite(repo) && !!app.token;
+  let allFound = [];
+  const markSeen = (ms) => markMentionsSeen(note, ms, allFound);
+  const mentionRow = (m, seen = false) => h("li", {}, wantQ ? kind("mention") : null,
     h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
       m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
     m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it",
+      onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
     h("span", { class: "attention-text" }, m.text));
   Promise.all([
     askQ && hasTasks ? loadQuestions(repo, owner) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
   ]).then(([tasks, { found, read }]) => {
+    allFound = found;
+    const ms = sortMentions(found, seenNow);
     const said = parts();
     if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
-    if (askM) said[wantQ ? 1 : 0] = `${found.length} mention${found.length === 1 ? "" : "s"} of @${login} in ${read} notes`;
+    if (askM) said[wantQ ? 1 : 0] = `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes`
+      + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "");
     head.textContent = said.join(" · ");
-    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...found.map(mentionRow)];
+    if (canMark && ms.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button",
+      title: "Mark every new mention as seen", onclick: () => markSeen(ms.open) }, icon("check"), "All seen"));
+    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...ms.open.map((m) => mentionRow(m))];
+    if (ms.seen.length) rows.push(h("li", { class: "attention-seen" }, h("details", {},
+      h("summary", { class: "muted" }, `Seen (${ms.seen.length})`),
+      h("ol", { class: "attention-list" }, ms.seen.map((m) => mentionRow(m, true))))));
     list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
+}
+
+/**
+ * Marks mentions as seen in the open note's `seen_mentions` property (keeping only mentions still there and not
+ * answered). The note changes like a ticked checkbox; with nothing else unsaved it's saved at once, one commit.
+ */
+function markMentionsSeen(f, ms, found) {
+  if (app.file !== f || !ms.length) return;
+  const was = f.dirty;
+  const next = setProps(f.text, [[SEEN_MENTIONS, withSeenMentions(noteProps(f.text)[SEEN_MENTIONS], ms, found)]]);
+  if (!next || next === f.text) return;
+  f.text = next;
+  if (f.editor) setEditorText(f.editor, f.text);
+  updateDirty();
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+  if (!was) save();
+  else toast("Marked as seen: Save to keep it", "info");
 }
 
 /** How the box's head says each sprint choice. */

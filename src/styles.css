@@ -342,6 +342,13 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   color: var(--muted);
 }
 .title .dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; align-self: center; }
+/* the Inbox dot: something in your own inbox needs you */
+#inbox-btn { position: relative; }
+#inbox-btn.has-dot::after {
+  content: ""; position: absolute; top: 5px; left: 22px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); box-shadow: 0 0 0 2px var(--bg);
+}
+.row .inbox-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none; }
 .bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
 /* newer notes on GitHub */
@@ -730,6 +737,10 @@ select.chip.pick:hover:not(:disabled) { border-color: var(--line-strong); }
 select.chip.pick:disabled { opacity: 0.6; cursor: progress; }
 .chip.prio-high { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .suggest-list .btn .icon { width: 15px; height: 15px; }
+.attention-list .attention-seen-btn { margin-left: auto; }
+.attention .attention-all { margin-left: auto; }
+.preview .attention-list li.attention-seen > details { flex: 1 0 100%; }
+.attention-seen summary { cursor: pointer; padding: 4px 0; }
 .attention-list .attention-text { flex: 1 0 100%; color: var(--text-2); font-size: 13.5px; padding-bottom: 4px; overflow-wrap: anywhere; }
 .mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 550; text-decoration: none; }
 a.mention:hover { text-decoration: underline; }

@@ -32,7 +32,7 @@ What a note can hold. Open this page in Edit mode to see how each part is writte
 
 ## Mentions
 
-Write `@` and someone's GitHub login to mention them: @your-github-login, have a look at this part. In Edit mode, typing `@` offers everyone who has an inbox. A mention is a link to their inbox, and the ` ```needs-attention ` block at the top of their [[Inbox]] lists every place that mentions them, this line too. In code, like `@this`, and in an email address it isn't a mention.
+Write `@` and someone's GitHub login to mention them: @your-github-login, have a look at this part. In Edit mode, typing `@` offers everyone who has an inbox. A mention is a link to their inbox, and the ` ```needs-attention ` block at the top of their [[Inbox]] lists every place that mentions them, this line too. In code, like `@this`, and in an email address it isn't a mention. A reply on the very next line, starting with `@` and their login, clears it from their box; so does their **Seen** button.
 
 ## New tasks anywhere
 

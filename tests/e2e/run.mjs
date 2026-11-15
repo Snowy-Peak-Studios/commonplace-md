@@ -39,6 +39,7 @@ const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
 let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
+let fakeLogin = null; // answer "who is signed in?" with this login, to be the example inboxes' person
 
 const CSV_PATH = "Data/Test table.csv";
 const CSV_TEXT = 'Name,Price,Note\nApples,3,\nPears,5,"the best, by far"\n';
@@ -99,6 +100,7 @@ page.on("request", async (req) => {
     return req.respond({ status: 200, contentType: "text/plain", body: fakeHead,
       headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });
   }
+  if (fakeLogin && req.method() === "GET" && url === `${API}/user`) return req.respond(json(200, { login: fakeLogin, avatar_url: "" }));
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
@@ -1194,6 +1196,47 @@ const added = await page.evaluate(() => ({
 check(added.items === 3 && added.save && added.focus, "Add puts the item in the block, the note can be saved, and the field keeps the focus: " + JSON.stringify(added));
 await page.evaluate(() => document.querySelector(".note-body section.newtasks")?.scrollIntoView({ block: "center" }));
 await shot("2g-inbox-new-tasks");
+
+// 10a2. The Inbox dot: signed in as the example inboxes' person, something waits on them (the reading
+// list's question, the Guide's mention), so the Inbox button and the sidebar's Inbox row show a dot. In the
+// inbox, Seen on the Guide's mention folds it under Seen and saves the inbox's seen_mentions at once.
+fakeLogin = "your-github-login";
+await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
+// Only the #hash changed, so the page is reloaded for the app to ask GitHub again who is signed in.
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector("#inbox-btn.has-dot", { timeout: 30000 }).catch(() => {});
+const dot = await page.evaluate(() => ({
+  button: document.querySelector("#inbox-btn")?.classList.contains("has-dot") ?? false,
+  label: document.querySelector("#inbox-btn")?.getAttribute("aria-label") ?? "",
+  row: !!document.querySelector("#shortcuts .row .inbox-dot"),
+}));
+check(dot.button && dot.label === "Inbox: something needs you" && dot.row,
+  "the Inbox button and the sidebar's Inbox row show a dot when something waits on you: " + JSON.stringify(dot));
+await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));
+await shot("2h-inbox-dot");
+// The new-tasks check above left the inbox changed: leaving kept it as a draft, which would come back.
+await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("commonplace:draft:")).forEach((k) => localStorage.removeItem(k)));
+await page.click("#inbox-btn");
+await page.waitForFunction(() => [...document.querySelectorAll(".note-body .attention .attention-list li")].some((li) => li.textContent.includes("Mention") && li.querySelector(".attention-seen-btn")), { timeout: 20000 }).catch(() => {});
+const putsBeforeSeen = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".note-body .attention .attention-list li")]
+  .find((li) => li.querySelector("a.suggest-name")?.textContent.startsWith("Guide") && li.querySelector(".attention-seen-btn"))
+  ?.querySelector(".attention-seen-btn").click());
+await page.waitForFunction((n) => document.querySelector(".attention-seen summary") && n, { timeout: 10000 }, putsBeforeSeen).catch(() => {});
+await new Promise((r) => setTimeout(r, 1500));
+const seenAfter = await page.evaluate(() => ({
+  summary: document.querySelector(".note-body .attention .attention-seen summary")?.textContent ?? "",
+  folded: [...document.querySelectorAll(".note-body .attention .attention-seen li a.suggest-name")].map((a) => a.textContent),
+  head: document.querySelector(".note-body .attention .suggest-head small")?.textContent ?? "",
+  toast: document.querySelector("#toast")?.textContent ?? "", dirty: !document.querySelector("#save-btn")?.disabled,
+}));
+const seenPut = puts.slice(putsBeforeSeen).find((p) => p.text.includes("seen_mentions:"));
+check(seenAfter.summary === "Seen (1)" && seenAfter.folded.some((t) => t.startsWith("Guide")) && seenAfter.head.includes("1 seen")
+  && /seen_mentions: \["Guide\.md#[0-9a-f]{8}"\]/.test(seenPut?.text ?? ""),
+  "Seen folds the Guide's mention under Seen and saves seen_mentions in the inbox at once: " + JSON.stringify({ ...seenAfter, put: seenPut?.text.split("\n").slice(0, 7), puts: puts.slice(putsBeforeSeen).map((p) => p.url.split("/").pop()) }));
+await page.evaluate(() => document.querySelector(".note-body .attention")?.scrollIntoView({ block: "center" }));
+await shot("2i-inbox-mention-seen");
+fakeLogin = null;
 
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();

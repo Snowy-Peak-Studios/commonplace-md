@@ -712,6 +712,50 @@ test("mentions in a note: @login, not in code, an email or a path; with the head
   assert.equal(findMentions("x ".repeat(100) + "@long").at(0).text.length, 160);
 });
 
+test("a mention with a reply right under it is answered: the next line starts with someone else's @login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = [
+    "@ann what do you think?",
+    "@bob Fine by me.",
+    "@ann and this one?",
+    "",
+    "@bob no reply: a blank line comes first",
+    "@bob the same person again is no reply",
+    "- @ann in a list",
+    "  - [x] @bob replied in the list",
+    "> @ann quoted",
+    "> @bob quoted reply",
+    "@ann the last line",
+  ].join("\n");
+  assert.deepEqual(findMentions(note).map((m) => [m.login, m.line, m.answered]), [
+    ["ann", 1, true], ["bob", 2, true], ["ann", 3, false], ["bob", 5, false], ["bob", 6, true],
+    ["ann", 7, true], ["bob", 8, true], ["ann", 9, true], ["bob", 10, true], ["ann", 11, false],
+  ], "a talk back and forth: each line answers the one above it");
+});
+
+test("mentions sort into open, seen and answered, and the seen list keeps only live mentions", async () => {
+  const { mentionKey, sortMentions, withSeenMentions } = await import("../src/vault.js");
+  const a = { path: "Tasks/One, two.md", login: "Ann", text: "@Ann look", answered: false };
+  const b = { path: "Notes/B.md", login: "ann", text: "@ann and here", answered: false };
+  const c = { path: "Notes/B.md", login: "ann", text: "@ann replied to", answered: true };
+  assert.match(mentionKey(a.path, a), /^Tasks\/One, two\.md#[0-9a-f]{8}$/);
+  assert.equal(mentionKey(a.path, a), mentionKey(a.path, { ...a, login: "ann" }), "the login's case doesn't count");
+  assert.notEqual(mentionKey(a.path, a), mentionKey(a.path, { ...a, text: "@Ann look again" }), "a changed line shows again");
+  const seen = [mentionKey(a.path, a)];
+  assert.deepEqual(sortMentions([a, b, c], seen), { open: [b], seen: [a], answered: [c] });
+  assert.deepEqual(sortMentions([a, b, c], mentionKey(a.path, a)).seen, [a], "one key written as text");
+  assert.deepEqual(sortMentions([a, b], null).open, [a, b]);
+  assert.deepEqual(withSeenMentions([...seen, "Gone.md#00000000"], [b, c], [a, b, c]),
+    [mentionKey(a.path, a), mentionKey(b.path, b)], "gone and answered mentions drop out, each key once");
+});
+
+test("blockContents gives what each fenced block of a name holds", async () => {
+  const { blockContents } = await import("../src/vault.js");
+  const note = "# Inbox\n```needs-attention\nshow: mentions\nlogin: ann\n```\n\n~~~~ needs-attention\nowner: Ann\n```\nstill in\n~~~~\n```other\nx\n```";
+  assert.deepEqual(blockContents(note, "needs-attention"), ["show: mentions\nlogin: ann", "owner: Ann\n```\nstill in"]);
+  assert.deepEqual(blockContents("```needs-attention\nnever closed", "needs-attention"), []);
+});
+
 test("a vault's people come from its inboxes' github and owner, each login once", async () => {
   const { vaultPeople } = await import("../src/vault.js");
   const people = vaultPeople([
