@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions, attentionOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlockOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -116,6 +116,15 @@ test("a task's and a sprint's blocks become placeholders that keep their code", 
     assert.equal(render("```" + name + "\n```\n"), `<div class="app-block" data-block="${name}"><pre><code>${name}</code></pre></div>\n`);
   }
   assert.equal(render("```subtasks\nsome: thing\n```\n"), '<div class="app-block" data-block="subtasks"><pre><code>some: thing\n</code></pre></div>\n');
+  assert.equal(render("```commits\ntask: \"[[A & B]]\"\n```\n"),
+    '<div class="app-block" data-block="commits" data-task="[[A &amp; B]]"><pre><code>task: &quot;[[A &amp; B]]&quot;\n</code></pre></div>\n');
+});
+
+test("a task's block options: task names another task by its ID, name or link; other lines are ignored", () => {
+  assert.deepEqual(appBlockOptions(""), { task: "" });
+  assert.deepEqual(appBlockOptions("Task: T-12\nnote: hi"), { task: "T-12" });
+  assert.deepEqual(appBlockOptions("task: '[[Get set up]]'"), { task: "[[Get set up]]" });
+  assert.deepEqual(appBlockOptions("task:"), { task: "" });
 });
 
 test("a needs-attention block becomes a placeholder with what it shows, its owner and login, holding its source", () => {

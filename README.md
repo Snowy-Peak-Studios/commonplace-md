@@ -346,7 +346,8 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 - The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
 - A new task gets the three task blocks under its title, unless its template already has any of them; a new sprint gets ` ```sprint `.
-- In other Markdown editors, and on a page that isn't a task or a sprint, a block shows as a short code block.
+- **Another task's box, on any page:** a `task:` line in a ` ```subtasks `, ` ```relations ` or ` ```commits ` block (the task's ID, name or `[[link]]`) shows that task's box there, naming it; away from the task's own page it only reads. The example vault's Task Board shows its epic's subtasks this way.
+- In other Markdown editors, and on a page that isn't a task or a sprint (without a `task:` line), a block shows as a short code block.
 
 **Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
 
@@ -443,6 +444,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
 - ` ```base ` blocks: a base view written in the page
+- a task's ` ```subtasks `, ` ```relations ` and ` ```commits ` blocks on any page, with `task:` and the task's ID, name or link
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths

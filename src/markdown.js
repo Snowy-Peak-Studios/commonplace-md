@@ -200,8 +200,10 @@ export function createMarkdown() {
     // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
+    // A `task:` line shows another task's box, on any page.
     if (APP_BLOCKS.includes(lang)) {
-      return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+      const { task } = appBlockOptions(token.content);
+      return `<div class="app-block" data-block="${lang}"${task ? ` data-task="${esc(task)}"` : ""}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
@@ -264,6 +266,20 @@ export function topTasksOptions(src) {
       out.count = Math.min(TOP_TASKS_MAX, Math.max(1, Number(m[2])));
       out.countSet = true;
     }
+  }
+  return out;
+}
+
+/**
+ * The options of a task's or a sprint's block (```subtasks, ```relations, ```commits, ```sprint), one per line:
+ * `task: C-12` (a task's ID, name or `[[link]]`: show that task's box, on any page). Left out, the page's own.
+ * Other lines are ignored.
+ */
+export function appBlockOptions(src) {
+  const out = { task: "" };
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(task)\s*:\s*(.*?)\s*$/i);
+    if (m) out.task = m[2].trim().replace(/^["']|["']$/g, "").trim();
   }
   return out;
 }

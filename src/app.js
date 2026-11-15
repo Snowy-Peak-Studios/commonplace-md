@@ -957,7 +957,7 @@ function renderPreview() {
     relations: isTask && (() => relationsBox(f, setup)),
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && (() => sprintBox(f, setup)),
-  });
+  }, setup && ((kind, input) => otherTaskBox(f, setup, kind, input, isTask ? props : null)));
   fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
 }
 
@@ -966,13 +966,45 @@ function renderPreview() {
  * A box with nothing to show leaves no trace; a block on a page that isn't a task (or a sprint), or one
  * inside an embedded page, keeps its code, as it does outside the app. No block, no box.
  */
-function fillAppBlocks(body, boxes) {
+function fillAppBlocks(body, boxes, other = null) {
   for (const el of body.querySelectorAll(".app-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    // A block with a `task:` line shows that task's box, on any page.
+    const box = el.dataset.task && other ? other(el.dataset.block, el.dataset.task) : undefined;
+    if (box !== undefined) { el.replaceWith(box ?? ""); continue; }
     const make = boxes[el.dataset.block];
-    if (!make || el.parentElement.closest(".embed-page")) continue;
-    el.replaceWith(make() ?? "");
+    if (make) el.replaceWith(make() ?? "");
   }
 }
+
+/** The task kinds of block that can name another task with `task:`. */
+const TASK_BOX_KINDS = ["subtasks", "relations", "commits"];
+
+/**
+ * A ```subtasks, ```relations or ```commits block's box for the task its `task:` line names (an ID, a name or a
+ * link), on any page. On another page it only reads: adding and taking out are on the task's own page. A name
+ * that leads to no task says so. Undefined for a kind that takes no `task:`, so the block is drawn as before.
+ */
+function otherTaskBox(f, setup, kind, input, ownProps) {
+  if (!TASK_BOX_KINDS.includes(kind)) return undefined;
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return h("div", { class: "subtasks none" }, h("span", { class: "muted" }, "Looking for the task…"));
+  const t = findTask(entry.notes, input);
+  if (!t) return h("div", { class: "subtasks none" }, h("span", { class: "muted" }, `No task is called “${linkName(input)}”, so this ${kind} block shows nothing.`));
+  if (t.path === f.path) {
+    return kind === "subtasks" ? subtasksBox(f, setup) : kind === "relations" ? relationsBox(f, setup) : commitsBox(f, ownProps ?? t.props);
+  }
+  const of = { path: t.path, props: t.props };
+  return kind === "subtasks" ? subtasksBox(f, setup, of) : kind === "relations" ? relationsBox(f, setup, of) : commitsBox(f, t.props, of);
+}
+
+/** The task a box on another page is about, after its title: "of C-49 Agile tasks", linking to it. */
+const ofTask = (repo, of) => (of ? h("a", { class: "st-of", href: hrefFor(repo, of.path), title: `Open ${shownName(of.path)}` },
+  "of ", String(of.props.id ?? "").trim() ? h("span", { class: "st-id" }, String(of.props.id).trim()) : null, shownName(of.path)) : null);
+
+/** An empty box for another task, so the page says there's nothing rather than showing nothing. */
+const noneFor = (repo, title, of, said) => h("section", { class: "subtasks", "aria-label": title },
+  h("div", { class: "st-head" }, h("span", { class: "st-title" }, title), ofTask(repo, of)), h("p", { class: "muted st-none" }, said));
 
 // ---- a task's fields as a form (the project's task setup) ----
 
@@ -1040,16 +1072,17 @@ function redrawNote() {
 }
 
 /** A task's subtasks, each with its status, and a bar of how many are done; Add subtask makes a new one under it. */
-function subtasksBox(f, setup) {
+function subtasksBox(f, setup, of = null) {
   const entry = taskNotes(f.repo, setup);
   if (!entry.notes) return null;
   const tree = app.trees.get(f.repo.id);
-  const { tasks, done, total } = subtasksOf(entry.notes, f.path,
+  const { tasks, done, total } = subtasksOf(entry.notes, of?.path ?? f.path,
     { prop: fieldProp(setup, "part_of"), resolve: (t, from) => tree.index.resolve(t, from), setup });
-  const add = canWrite(f.repo) ? h("button", { class: "btn small ghost", onclick: () => addSubtask(f, setup) }, icon("plus"), "Add subtask") : null;
-  if (!total) return add ? h("div", { class: "subtasks none" }, add) : null;
+  // On another page it only reads: Add subtask is on the task's own page.
+  const add = !of && canWrite(f.repo) ? h("button", { class: "btn small ghost", onclick: () => addSubtask(f, setup) }, icon("plus"), "Add subtask") : null;
+  if (!total) return of ? noneFor(f.repo, "Subtasks", of, "No subtasks yet.") : add ? h("div", { class: "subtasks none" }, add) : null;
   return h("section", { class: "subtasks", "aria-label": "Subtasks" },
-    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Subtasks"), h("span", { class: "st-count" }, `${done} of ${total} done`), add),
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Subtasks"), ofTask(f.repo, of), h("span", { class: "st-count" }, `${done} of ${total} done`), add),
     h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(total), "aria-valuenow": String(done),
       "aria-label": `${done} of ${total} subtasks done` }, h("span", { style: `width: ${Math.round((done / total) * 100)}%` })),
     h("ul", { class: "st-list" }, tasks.map((t) => h("li", { class: t.done ? "done" : null },
@@ -1063,16 +1096,17 @@ function subtasksBox(f, setup) {
  * A task's relations both ways, grouped: Blocked by, Blocks, Comes after, Comes before, Related; each task
  * with its status. The task's own links can be taken out here, and Add relation links another task.
  */
-function relationsBox(f, setup) {
+function relationsBox(f, setup, of = null) {
   const fields = relationFields(setup);
   if (!fields.length) return null;
   const entry = taskNotes(f.repo, setup);
   if (!entry.notes) return null;
   const tree = app.trees.get(f.repo.id);
-  const groups = taskRelations(entry.notes, f.path, noteProps(f.text), { setup, resolve: (t, from) => tree.index.resolve(t, from) });
-  const editable = canWrite(f.repo);
+  const groups = taskRelations(entry.notes, of?.path ?? f.path, of ? of.props : noteProps(f.text), { setup, resolve: (t, from) => tree.index.resolve(t, from) });
+  // On another page it only reads: adding and taking out are on the task's own page.
+  const editable = !of && canWrite(f.repo);
   const add = editable ? h("button", { class: "btn small ghost", type: "button", onclick: () => addRelation(f, setup, fields) }, icon("plus"), "Add relation") : null;
-  if (!groups.length) return add ? h("div", { class: "subtasks none" }, add) : null;
+  if (!groups.length) return of ? noneFor(f.repo, "Relations", of, "No relations yet.") : add ? h("div", { class: "subtasks none" }, add) : null;
   const remove = (t, button) => {
     const field = setup.fields.find((x) => x.key === t.key);
     const left = linkList(noteProps(f.text)[field.prop]).filter((n) => n.toLowerCase() !== t.name.toLowerCase());
@@ -1080,7 +1114,7 @@ function relationsBox(f, setup) {
   };
   const name = (t) => (t.path ? shownName(t.path) : t.name);
   return h("section", { class: "subtasks relations", "aria-label": "Relations" },
-    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Relations"), add),
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Relations"), ofTask(f.repo, of), add),
     groups.map((g) => h("div", { class: "rel-group" },
       h("div", { class: "rel-label" }, g.label),
       h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
@@ -1141,12 +1175,12 @@ async function addRelation(f, setup, fields) {
  * The commits made for a task, from its `commits` property: the Task commits Action adds each pushed commit
  * whose message starts with the task's ID. Nothing is asked of GitHub; links open the commits there.
  */
-function commitsBox(f, props) {
+function commitsBox(f, props, of = null) {
   const list = taskCommitLinks(props?.commits);
-  if (!list.length) return null;
+  if (!list.length) return of ? noneFor(f.repo, "Commits", of, "No commits yet.") : null;
   const own = `${f.repo.owner}/${f.repo.repo}`.toLowerCase();
   return h("section", { class: "commits", "aria-label": "Commits" },
-    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Commits"),
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Commits"), ofTask(f.repo, of),
       h("span", { class: "st-count" }, `${list.length} ${list.length === 1 ? "commit" : "commits"}`)),
     h("ul", { class: "st-list" }, list.map((c) => h("li", {},
       h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", title: c.title || c.short },

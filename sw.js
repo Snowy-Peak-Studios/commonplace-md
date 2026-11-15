@@ -1,6 +1,6 @@
 // Caches the app's own files so it opens fast and survives a flaky connection.
 // Notes always come from api.github.com and are never cached here.
-const VERSION = "commonplace-v50";
+const VERSION = "commonplace-v51";
 // The released app and the development one (served under dev/) share an origin, and so the cache storage:
 // each keeps its own caches, named after its scope, and clears only its own old ones.
 const SCOPE = new URL(self.registration.scope).pathname;

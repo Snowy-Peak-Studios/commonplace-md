@@ -1068,6 +1068,17 @@ await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].
 // 8f. Parent tasks and subtasks: the example epic lists its three tasks, the parent picker refuses a loop,
 // and Add subtask makes a new task under it.
 const epic = "Tasks/Get set up.md";
+// On the Task Board, a ```subtasks block with task: T-6 shows the epic's subtasks there, read only, naming the epic.
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+await until(() => document.querySelectorAll(".note-body .subtasks .st-list li").length === 3, 15000);
+const boardSubs = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .subtasks");
+  return { code: !!document.querySelector(".note-body .app-block"), of: box?.querySelector(".st-of")?.textContent ?? "",
+    href: decodeURIComponent(box?.querySelector(".st-of")?.getAttribute("href") ?? ""), count: box?.querySelector(".st-count")?.textContent ?? "",
+    rows: box?.querySelectorAll(".st-list li").length ?? 0, add: !!box?.querySelector("button") };
+});
+check(!boardSubs.code && boardSubs.of === "of T-6Get set up" && boardSubs.href.endsWith("/Tasks/Get set up.md") && boardSubs.count === "2 of 3 done"
+  && boardSubs.rows === 3 && !boardSubs.add, "a ```subtasks block with task: shows that task's subtasks on another page, read only: " + JSON.stringify(boardSubs));
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelectorAll(".subtasks .st-list li").length === 3, 15000), "the epic lists its three subtasks");
 const subs = await page.evaluate(() => ({

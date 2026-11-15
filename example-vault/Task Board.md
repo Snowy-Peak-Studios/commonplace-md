@@ -20,6 +20,14 @@ Which fields a task has is set up per project: **[Set up task fields](#/settings
 
 New tasks start from [[Templates/Task|the task template]]: give each one the next `id`, and fill in who asked for it in `requested_by`.
 
+## Getting set up
+
+The epic [[Get set up]] and its subtasks, shown here by a ` ```subtasks ` block with a `task:` line (the task's ID, name or link). A task's ` ```subtasks `, ` ```relations ` and ` ```commits ` can show on any page this way; away from the task's own page they only read.
+
+```subtasks
+task: T-6
+```
+
 ## Sprints
 
 Each sprint is a note in `Sprints/` with its dates and goal; a task joins one in its `sprint` property. *Current sprint* shows the one going on today: open it to see its tasks by status. [[Sprints.base]] has them all.
