@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Work with tasks
 
+> [!TIP]
 > **tl;dr:** A task is a note in `Tasks/`, with its fields as pickers at the top and boxes for its subtasks, relations and commits. The Task Board shows them all.
 
 A task is a note in `Tasks/`. Its fields (status, priority, who it's for, and so on) are properties at the top of the note. Which fields there are is set once for the project: [Set up tasks](../Set%20up%20tasks.md).

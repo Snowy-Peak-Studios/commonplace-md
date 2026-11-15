@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Write and link notes
 
+> [!TIP]
 > **tl;dr:** Press **Edit**, write Markdown, press **Save**. Link with `[[Page]]`, and show a page or a picture inside a note with `![[...]]`.
 
 ## Write

@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Use your inbox
 
+> [!TIP]
 > **tl;dr:** Write ideas under **New tasks** and thoughts under **Notes**. **Needs attention** shows the questions and mentions waiting on you, and the top tasks show what to start, with **Claim**.
 
 The inbox is where you drop things first and sort them later. The **Inbox** button opens it.

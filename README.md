@@ -1,36 +1,42 @@
+<div align="center">
+
 # Commonplace.md
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
-Don't rely on your agent's memory: make your own vault with all the answers.
+*Don't rely on your agent's memory: make your own vault with all the answers.*
+
+</div>
 
 ## What it is
 
-A tool for your everyday. The big work tools cost a lot and do so much that most people on a team just don't use them. Commonplace.md is the simple alternative: a wiki, notes and a task board that the whole team actually opens.
+**Commonplace.md** is a wiki, notes and a task board that the whole team actually opens: the simple alternative to big work tools that cost a lot and do so much that most people never use them. No more paying for Notion, Jira or Azure DevOps.
 
-It's made for a team and AI together. Your notes are plain files, kept local and easy to reach. You set up your project's rules in the vault: AI agents follow their own rules, people follow theirs, and both work on the same pages. ([How it works with agents](#working-with-ai-agents-optional))
+It's made for people and AI agents together: you set up your project's rules in the vault, and both work on the same pages ([how](#working-with-ai-agents-optional)).
 
-No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
-
-Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
+Every page is a plain Markdown file in a GitHub repo you own, and every save is a commit, so nothing is ever lost. There's no server and no account of ours: **Commonplace.md** is a web page that talks straight to GitHub with a token you make.
 
 ## How to use it
 
-- **Your vault for everything** that makes your life and work easier: a project's wiki, your own notes, recipes, anything.
-- **Your AI agents' rules live in the project**, next to the notes they work on, not hidden in one agent's settings.
-- **A place for your AI reports and pipelines**: whatever your agents write ends up as notes you can read, link and keep.
-- **A task board** you use with your agent, or across a team.
-- **Yours to change**: the rules, the skills, the task fields and the code are all yours to edit. Soon you can also turn parts of the app on and off ([roadmap](ROADMAP.md)).
-- **Free**, and it works like a wiki: your notes are in your own GitHub repo, and a clone of it on your own device opens in any Markdown editor.
-- **No account of ours**, no payments, no sign-in to us: you need only a GitHub account and a token you make yourself. What you do is only yours; we make the app and suggest ways to use it.
+- 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
+- 🤖 **Your agents' rules and reports** live in the project, as notes you own.
+- ✅ **A task board** for you and your agent, or a whole team.
+- 🛠️ **Yours to change**: the rules, skills, task fields and code. Turning parts of the app on and off: soon ([roadmap](ROADMAP.md)).
+- 🆓 **Free, and only yours**: no account of ours, no payments. You need only GitHub and a token you make.
 
 ### How I use it
 
-1. I write my thoughts in my inbox, from my phone or my computer, whenever they come.
-2. I ask my agent to go through the inbox, so each thought becomes a task.
-3. I claim the tasks I want done now, and ask the agent to work on them.
-4. Meanwhile, I write my next thoughts in the inbox.
-5. Repeat.
+```mermaid
+flowchart LR
+    write["✍️ I write my thoughts<br/>in my inbox"]:::me --> sort["🤖 My agent turns<br/>them into tasks"]:::agent
+    sort --> claim["👆 I claim the ones<br/>I want done now"]:::me
+    claim --> work["🤖 My agent<br/>works on them"]:::agent
+    work -. "meanwhile: new thoughts, repeat" .-> write
+    classDef me fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef agent fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+```
+
+<sub>🟦 you &nbsp; 🟪 your agent</sub>
 
 ### Not sure it's for you?
 
@@ -104,36 +110,34 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 ## Quick start
 
-> **tl;dr:** Just you, on one device: a local vault, with no account at all (coming soon). A team, or several devices: keep the vault in a GitHub repo, the project's own or one of its own, and everyone syncs through it.
-
 ### Which way fits you
 
-The app is the same for everyone: the released app at its address, which updates by itself. What you pick is where your vault lives.
+The app is the same for everyone. What you pick is where your vault lives:
 
 ```mermaid
 flowchart LR
-    q1{"Just you, on one device?"}
-    q1 -- Yes --> local["A local vault on your device<br/>(coming soon)"]
-    q1 -- "No: a team, or several devices" --> q2{"Does the project have its own repo?"}
-    q2 -- "Yes: keep the notes with the code" --> project["In the project's repo"]
-    q2 -- "No, or keep them apart" --> own["In a repo of its own"]
+    q1{"Just you,<br/>on one device?"}
+    q1 -- Yes --> local["💻 A local vault<br/>on your device<br/>(coming soon)"]:::local
+    q1 -- "No: a team,<br/>or several devices" --> q2{"Does the project<br/>have its own repo?"}
+    q2 -- "Yes" --> project["📁 In the<br/>project's repo"]:::repo
+    q2 -- "No, or keep<br/>them apart" --> own["🔒 In a repo<br/>of its own"]:::repo
+    classDef local fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef repo fill:#fef3c7,stroke:#d97706,color:#78350f
 ```
 
-| Way | What it gives | What it costs | Steps |
-| --- | --- | --- | --- |
-| **A local vault** on your device (*coming soon*) | Nothing to set up: no GitHub account, no token, only the app. | It's only on that one device: no team, no other devices, no history. Kept in the browser, it's lost if the browser's data is cleared. | Not ready yet. Until then, use a repo of its own (it can be private). |
-| **In the project's repo**, in a folder next to the code | One repo: the notes move with the code, a commit can change both, and your agent sees both. Everyone on the project gets the vault. | Whoever can see the code sees the notes: a public project's notes are public. | The steps below, with a **Folder** ([step 2](#2-make-a-notes-repo)); [one per project](#one-per-project-or-one-for-the-whole-organization) for a team. |
-| **In a repo of its own** | Private notes even for a public project, and room for several projects, or your own notes and recipes. | One more repo, and each device's token must open it. | The steps below. |
+| Way | Good for | But |
+| --- | --- | --- |
+| 🟩 **A local vault** (*coming soon*) | No GitHub account, no token: only the app. | Only on that one device. Until it's here, use a repo of its own. |
+| 🟨 **In the project's repo** ([steps](#2-make-a-notes-repo)) | Notes next to the code; your agent sees both. | Whoever sees the code sees the notes. |
+| 🟨 **In a repo of its own** ([steps](#1-open-the-app)) | Private notes, even for a public project. | One more repo to make. |
 
-**Without a GitHub account?** Not yet: today every way needs a GitHub account and a token you make. The local vault, coming soon, needs neither.
-
-**Your own copy of the app?** You don't need one: whichever way you pick, your notes are in your own place and the app only reads and saves them. You can still host a copy ([step 1](#1-open-the-app), B), but it doesn't take the app's updates by itself.
+> [!NOTE]
+> **No GitHub account?** Every way needs one today; the local vault, coming soon, won't. **Your own copy of the app?** Not needed: you can [host one](#1-open-the-app), but it won't update by itself.
 
 ### Set it up with GitHub
 
-**Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
-
-Not sure yet? [Ask your agent first](#not-sure-its-for-you).
+> [!TIP]
+> Not sure yet? [Ask your agent first](#not-sure-its-for-you). Looking for one thing? The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each, and they open in the app too.
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
 

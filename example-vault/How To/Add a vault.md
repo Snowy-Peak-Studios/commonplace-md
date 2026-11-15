@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Add a vault
 
+> [!TIP]
 > **tl;dr:** A vault is a GitHub repo (or a folder in one) with your notes. It comes into the app by itself, through an invite link, or by hand in **Settings**.
 
 A vault is a GitHub repo (or a folder in one) that holds your notes. There are three ways to get one into the app.

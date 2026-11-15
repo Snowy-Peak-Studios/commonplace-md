@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Use it on a phone
 
+> [!TIP]
 > **tl;dr:** Install it from the browser's menu or **Share** button. On iPhone and iPad, connect and add your vaults once more inside it.
 
 Commonplace.md installs like an app: its own icon and window, opening straight to your notes.

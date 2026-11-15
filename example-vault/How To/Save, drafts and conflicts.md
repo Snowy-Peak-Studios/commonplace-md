@@ -4,6 +4,7 @@ parent: "[[How To]]"
 
 # Save, drafts and conflicts
 
+> [!TIP]
 > **tl;dr:** **Save** is one commit. Unsaved changes stay on the device as a draft. If someone saved the same note first, you see both versions and pick: nothing is lost.
 
 ## Save
