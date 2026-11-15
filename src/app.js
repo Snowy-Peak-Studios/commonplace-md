@@ -932,7 +932,7 @@ function renderPreview() {
   decorate(body, f.repo, f.path);
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
-  fillBases(body, f.repo);
+  fillBases(body, f.repo, f.path);
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
   // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
@@ -2361,14 +2361,17 @@ async function lastCommitDates(repo, tree, paths) {
 
 /** One load per base and tree version, shared by every embed of it: { base, notes, tree, dates }. */
 const baseLoads = new Map();
-function loadBase(repo, path) {
+function loadBase(repo, path, source = null) {
   const tree = app.trees.get(repo.id);
-  const prefix = `${repo.id}:${path}:`;
+  // A ```base block's view is its own text, so the text is part of the key: an edit to it is a new view.
+  const prefix = `${repo.id}:${path}:${source == null ? "" : `block:${source}:`}`;
   const key = prefix + tree.version;
   if (!baseLoads.has(key)) {
-    for (const k of baseLoads.keys()) if (k.startsWith(prefix)) baseLoads.delete(k);
+    // Typing in a block makes a new key each time: the page's older block loads go (its notes stay cached by sha).
+    const old = source == null ? prefix : `${repo.id}:${path}:block:`;
+    for (const k of baseLoads.keys()) if (k.startsWith(old)) baseLoads.delete(k);
     const load = (async () => {
-      const base = parseBase(await pageText(repo, path));
+      const base = parseBase(source ?? await pageText(repo, path));
       const notes = await baseNotes(repo, tree, candidatePaths(base, [...tree.files.keys()]));
       return { base, notes, tree, dates: null, datesLoading: null };
     })();
@@ -2378,7 +2381,12 @@ function loadBase(repo, path) {
   return baseLoads.get(key);
 }
 
-function fillBases(root, repo) {
+function fillBases(root, repo, fromPath = "") {
+  // A ```base block: the view written in the page itself, drawn like a .base file's (not inside an embedded page).
+  [...root.querySelectorAll(".base-block")].forEach((el, n) => {
+    if (el.parentElement.closest(".embed-page")) return;
+    el.replaceWith(baseView(repo, fromPath, { source: el.querySelector("code")?.textContent ?? "", n }));
+  });
   for (const el of root.querySelectorAll(".embed-base")) {
     const view = baseView(repo, el.dataset.path);
     // The embed is alone in its paragraph; the table takes the paragraph's place.
@@ -2389,8 +2397,9 @@ function fillBases(root, repo) {
 }
 
 /** A base's views as tabs over one table. The last tab chosen is remembered per base. */
-function baseView(repo, path) {
-  const tabKey = `baseTab:${repo.id}:${path}`;
+function baseView(repo, path, block = null) {
+  // A ```base block is known by its page and its place on it; a .base file by its path.
+  const tabKey = `baseTab:${repo.id}:${path}${block ? `#base${block.n}` : ""}`;
   const tabs = h("div", { class: "base-tabs", role: "tablist", "aria-label": "Views" });
   const count = h("span", { class: "base-count" });
   const body = h("div", { class: "base-body" }, h("div", { class: "sk" }), h("div", { class: "sk" }), h("div", { class: "sk" }));
@@ -2448,13 +2457,13 @@ function baseView(repo, path) {
     fill(body, h("p", { class: "note error" }, "The file list isn't loaded."));
     return view;
   }
-  loadBase(repo, path).then((l) => {
+  loadBase(repo, path, block?.source).then((l) => {
     loaded = l;
     if (!l.base.views.length) return fill(body, h("p", { class: "note" }, "This base has no views."));
     const saved = Number(store.get(tabKey, 0));
     tab = Number.isInteger(saved) && saved >= 0 && saved < l.base.views.length ? saved : 0;
     show();
-  }, (e) => fill(body, h("p", { class: "note error" }, `Couldn't load this view: ${e.message}`)));
+  }, (e) => fill(body, h("p", { class: "note error" }, `${block ? "This base block can't be read" : "Couldn't load this view"}: ${e.message}`)));
   return view;
 }
 

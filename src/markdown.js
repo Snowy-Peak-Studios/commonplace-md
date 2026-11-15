@@ -196,6 +196,9 @@ export function createMarkdown() {
       return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
         + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
+    // A ```base block: a base view written in the page (what a .base file holds); the app draws its table there.
+    // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
+    if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     if (APP_BLOCKS.includes(lang)) {
       return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;

@@ -198,6 +198,21 @@ const homeBox = await page.evaluate(() => ({
   rows: document.querySelectorAll(".note-body .suggest .suggest-list a.suggest-name").length,
 }));
 check(homeBox.box && !homeBox.code && homeBox.rows >= 1, "Home's top-tasks block shows the top tasks box: " + JSON.stringify(homeBox));
+// Home's ```base block: a view written in the page, drawn like a .base file's: only the done tasks.
+await page.waitForFunction(() => document.querySelector(".note-body .base-view .base-table tr[data-path]"), { timeout: 15000 }).catch(() => {});
+const homeBase = await page.evaluate(() => {
+  const view = document.querySelector(".note-body .base-view");
+  return { code: !!document.querySelector(".note-body .base-block"), tab: view?.querySelector(".base-tab")?.textContent ?? "",
+    count: view?.querySelector(".base-count")?.textContent ?? "", heads: [...(view?.querySelectorAll("th") ?? [])].map((t) => t.textContent.trim()),
+    rows: [...(view?.querySelectorAll("tr[data-path]") ?? [])].map((r) => r.dataset.path) };
+});
+const doneTasks = [];
+for (const t of ["Make a note template", "Write the welcome note"]) {
+  if (/^status: Done$/m.test((await realFile(`Tasks/${t}.md`)).text)) doneTasks.push(`Tasks/${t}.md`);
+}
+check(!homeBase.code && homeBase.tab === "Done tasks" && homeBase.heads.join("|").startsWith("Task|Done by")
+  && doneTasks.every((p) => homeBase.rows.includes(p)) && homeBase.rows.every((p) => p.startsWith("Tasks/")),
+  "Home's ```base block shows its own view, the done tasks: " + JSON.stringify(homeBase));
 // Its fields: line puts each task's parent first, as a link to it: "Try the app on a phone" is part of "Get set up".
 const homeFields = await page.evaluate(() => {
   const box = document.querySelector(".note-body .suggest");

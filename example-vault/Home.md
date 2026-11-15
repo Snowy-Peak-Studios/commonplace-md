@@ -48,6 +48,28 @@ owner: Your name
 fields: parent, state, priority, area
 ```
 
+## Done so far
+
+A table of notes written right in this page: a ` ```base ` block holds what a `.base` file would (its filters, columns and views), so a page can have a view of its own without a file next to it. Copy a view between a block and a file as it is.
+
+```base
+filters:
+  and:
+    - file.inFolder("Tasks")
+    - status == "Done"
+properties:
+  file.name:
+    displayName: Task
+  assignee:
+    displayName: Done by
+views:
+  - type: table
+    name: Done tasks
+    order:
+      - file.name
+      - assignee
+```
+
 ## How saving works
 
 ```mermaid

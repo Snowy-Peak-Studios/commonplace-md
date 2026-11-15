@@ -85,7 +85,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
   - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
-- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
+- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. A ` ```base ` block writes a view right in the page, with what a `.base` file holds, and shows the same table. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
 - **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
 - **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
@@ -442,6 +442,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
 - plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
+- ` ```base ` blocks: a base view written in the page
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths

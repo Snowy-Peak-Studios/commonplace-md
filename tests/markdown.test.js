@@ -104,6 +104,13 @@ test("a top-tasks block's fields: in the order written, lower case, each once; n
   assert.equal(topTasksOptions("range: 2").fieldsSet, false);
 });
 
+test("a base block becomes a placeholder holding its view's source as code", () => {
+  const src = 'filters:\n  and:\n    - file.inFolder("Tasks")\n    - status != "Done" && x > 1\nviews:\n  - type: table\n';
+  assert.equal(render("```base\n" + src + "```\n"),
+    '<div class="base-block"><pre><code>filters:\n  and:\n    - file.inFolder(&quot;Tasks&quot;)\n    - status != &quot;Done&quot; &amp;&amp; x &gt; 1\nviews:\n  - type: table\n</code></pre></div>\n');
+  assert.equal(render("```Base\n```\n"), '<div class="base-block"><pre><code></code></pre></div>\n');
+});
+
 test("a task's and a sprint's blocks become placeholders that keep their code", () => {
   for (const name of ["subtasks", "relations", "commits", "sprint"]) {
     assert.equal(render("```" + name + "\n```\n"), `<div class="app-block" data-block="${name}"><pre><code>${name}</code></pre></div>\n`);
