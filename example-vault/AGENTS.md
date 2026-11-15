@@ -99,7 +99,7 @@ Then move on to another task while it waits.
 
 ## Mentions
 
-- To point someone to a place, write `@` and their GitHub login there (the `github` of their inbox). The ` ```needs-attention ` block at the top of their inbox lists it; nothing else needs writing.
+- To point someone to a place, write `@` and their GitHub login there (the `github` of their inbox). The ` ```needs-attention ` block in their inbox lists it; nothing else needs writing.
 - A question for your own person still goes on its task (see Questions).
 
 ## Keep the vault in step

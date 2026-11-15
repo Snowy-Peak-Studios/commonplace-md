@@ -26,7 +26,7 @@ In Read mode it's a box with the items, and **Add** puts a new one in (then **Sa
 
 ## Needs attention: questions and mentions
 
-A ` ```needs-attention ` block at the top of your inbox shows what waits on you:
+A ` ```needs-attention ` block in your inbox, under the top tasks, shows what waits on you:
 
 - **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**.
 - **Mentions**: every place in the vault that says `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). Each row links to the heading it's under, with the line and when the note last changed, newest first.

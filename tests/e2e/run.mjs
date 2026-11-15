@@ -226,7 +226,7 @@ check(["All areas", "Top 3", "By priority, newest first", "Current sprint, then 
   "the inbox's box says its block's options: " + inboxHead);
 await shot("2-inbox-desktop");
 
-// 2a. The inbox's ```needs-attention block, before its top tasks: one box, its questions first, then its mentions.
+// 2a. The inbox's ```needs-attention block, under its top tasks: one box, its questions first, then its mentions.
 await page.waitForFunction(() => document.querySelectorAll(".note-body .attention .attention-list a.suggest-name").length >= 2, { timeout: 20000 }).catch(() => {});
 const attention = await page.evaluate(() => {
   const box = document.querySelector(".note-body .attention");
@@ -234,7 +234,7 @@ const attention = await page.evaluate(() => {
   return {
     code: !!document.querySelector(".note-body .attention-block"),
     boxes: document.querySelectorAll(".note-body .attention").length,
-    first: !!(box && top && box.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING),
+    underTop: !!(box && top && box.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_PRECEDING),
     title: box?.querySelector(".suggest-head strong")?.textContent ?? "",
     head: box?.querySelector(".suggest-head small")?.textContent ?? "",
     rows: [...(box?.querySelectorAll(".attention-list li") ?? [])].map((li) => ({
@@ -247,9 +247,9 @@ const qRow = attention.rows.findIndex((r) => r.kind === "Question" && r.name.inc
   && r.text === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md"));
 const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions")
   && r.text.includes("@your-github-login"));
-check(!attention.code && attention.boxes === 1 && attention.first && attention.title === "Needs your attention"
+check(!attention.code && attention.boxes === 1 && attention.underTop && attention.title === "Needs your attention"
   && attention.head.includes("for Your name") && attention.head.includes("of @your-github-login") && qRow >= 0 && mRow > qRow,
-  "the inbox's ```needs-attention block is one box before the top tasks: its question, then the Guide's mention, each linking to its place: " + JSON.stringify(attention));
+  "the inbox's ```needs-attention block is one box under the top tasks: its question, then the Guide's mention, each linking to its place: " + JSON.stringify(attention));
 await page.evaluate(() => document.querySelector(".note-body .attention")?.scrollIntoView({ block: "center" }));
 await shot("2a-inbox-attention");
 

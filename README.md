@@ -339,7 +339,7 @@ example-vault/
 │   ├── Sprint 1.md              a sprint: start, end and goal; its page lists its tasks by status
 │   └── Sprint 2.md              the next one
 ├── Notes/
-│   ├── Inbox.md                 the shared inbox: owner and github properties, Needs attention, Top tasks, New tasks and Notes sections
+│   ├── Inbox.md                 the shared inbox: owner and github properties, Top tasks, Needs attention, New tasks and Notes sections
 │   └── Inboxes/
 │       └── Your name.md         a personal inbox: copy it, rename it, put your GitHub login in github
 ├── Templates/
@@ -472,7 +472,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
 
   In Read mode it's a *New tasks* box with the items (links and formatting work) and how many; without `owner:` it says no agent will sort them. With write access, **Add** puts a new item at the end of the block, like ticking a checkbox: the note changes, and **Save** commits it. With the example vault's agent rules, your agent finds every block with your name in the vault, turns each item into a task, and takes it out of the block.
 - **Mentions:** write `@` and a GitHub login in any note to mention that person; in Edit mode, typing `@` offers the people of the vault (every inbox with a `github` login, by its `owner`). In Read mode, the mention is a link to their inbox. Not in code, and not in an email address or a path.
-- **Needs attention:** a ` ```needs-attention ` block (at the top of your inbox, or on any page) shows what waits on you. Everything it shows is written in it, one line each:
+- **Needs attention:** a ` ```needs-attention ` block (in your inbox, under the top tasks, or on any page) shows what waits on you. Everything it shows is written in it, one line each:
 
   ```needs-attention
   show: questions, mentions
