@@ -72,6 +72,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 <summary>Everything it does</summary>
 
 - **Local vaults:** a vault only on this device, with no GitHub at all: a folder on the disk in Chrome and Edge (real `.md` files your agent can change too), or kept in the browser elsewhere, with **Download a copy** as a zip ([more](#a-local-vault)).
+- **Offline:** every GitHub vault is kept on the device too, so it opens with no connection (a line above the note says it's the copy). The copy is kept in the browser, or (Chrome and Edge on a computer) in a folder you pick, like the repo's clone, so other tools and agents read the same files and each commit updates them ([more](#a-copy-on-this-device)).
 - **Up to date:** a Reload button beside Save, and a quiet banner when GitHub has newer notes than the ones you have open (checked when you come back to the tab and every few minutes, cheaply).
 - **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), an Up button to the note's `parent` page, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
 - **Markdown:**
@@ -92,7 +93,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes. Leaving a note with unsaved changes asks first: **Save**, **Keep as a draft** or **Discard** (or **Stay**).
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
-- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. A vault on GitHub needs a connection.
+- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. Reading works with no connection; saving to GitHub needs one.
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
@@ -146,6 +147,15 @@ Notes only on this device: not on GitHub, not on your other devices. No account 
    - **In this browser** (and always in Firefox, Safari and on phones, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
 
 **Save** saves on the device; nothing is sent anywhere. A local vault always says so, in the list of vaults (*on this device*) and in a line above the note.
+
+### A copy on this device
+
+Every vault on GitHub is also kept on the device you open it on, so it opens with no connection, on a train or when GitHub is down. A line above the note then says you're reading the copy, and from when. GitHub keeps the main copy; saving needs a connection.
+
+- **Where:** in the browser by default. In Chrome and Edge on a computer, the repo's card in **Settings** has **Keep it in a folder**: pick the repo's own folder (its clone, the one with `.git`) or an empty one. The notes are then real files that other Markdown editors and your agent read, and each commit (yours or anyone's) updates them when the vault opens or reloads.
+- **Changed on the disk:** a file changed there by another tool shows as it is, marked **Not on GitHub**, and is never overwritten by GitHub's version.
+- **A clone:** the app commits through GitHub, so your clone's git sees the app's saves as changed files until it pulls. Pull with `git pull --rebase --autostash`; a plain `git pull` can stop.
+- **Only what's needed:** each open asks GitHub for the list of files (one request) and downloads only the ones that changed. Images and PDFs are kept once you open them.
 
 ### Set it up with GitHub
 
@@ -481,7 +491,7 @@ What it doesn't do:
 - base views other than tables (the app says so, and shows the base's other views)
 - other template variables (`{{time}}`, custom date formats); they stay as written
 - editing images or other binary files
-- working offline with a vault on GitHub (a [local vault](#a-local-vault) never goes online)
+- saving with no connection (reading works: [a copy on this device](#a-copy-on-this-device))
 
 Folders and files starting with a dot (like `.trash/`) are left out of the tree.
 
@@ -638,6 +648,7 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 - The tokens are kept in this browser's storage (`localStorage`) on this device, and are sent only to `api.github.com`; each repo's requests carry its owner's token. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
 - A local vault's notes stay on the device: in the folder you picked, or in this browser's storage (IndexedDB). They're never sent anywhere.
+- A GitHub vault's copy on the device is kept the same way (IndexedDB, or the folder you picked), and only ever filled from GitHub with the same token. **Settings › This device** shows how much each takes, and drops it.
 - The page's Content Security Policy lets it connect to `api.github.com` and to the app's own site (for the example notes a new local vault can start with) only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
 - Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**). The released version and the one in development share this browser's storage (the same token, settings and drafts), and each keeps its own offline copy of the app.
@@ -703,6 +714,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
 | `src/local.js` | Local vaults: the same calls for a folder on the disk or the browser's storage, and a zip of a vault |
+| `src/mirror.js` | Each GitHub vault's copy on the device: kept in step with GitHub, opened from it with no connection |
 | `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it, a task's commits |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |

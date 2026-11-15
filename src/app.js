@@ -3,6 +3,7 @@
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
 import { LocalSource, withLocal, isLocal, canPickFolder, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
+import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
@@ -184,7 +185,9 @@ const ownerTokens = () => store.get("tokens", {}) || {};
 const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
 /** The local vaults' files (`src/local.js`): `gh` sends every call about a local vault there, never to GitHub. */
 const local = new LocalSource();
-const client = (token, tokens = {}) => withLocal(new GitHub(token, tokens), local);
+/** Each GitHub vault's copy on this device (`src/mirror.js`): its reads and saves go through it. */
+const mirror = new Mirror();
+const client = (token, tokens = {}) => withLocal(new GitHub(token, tokens), local, mirror);
 let gh = client(app.token, tokenMap());
 /** Whether the app can open a repo: one on GitHub needs a token, a local vault doesn't. */
 const usable = (repo = app.repo) => !!app.token || isLocal(repo);
@@ -246,6 +249,9 @@ async function loadTree(repo, force = false) {
   const tree = {
     files, index: new LinkIndex([...files.keys()]), truncated: data.truncated, version: ++treeVersion,
     head: head?.sha || null, etag: head?.etag || null, newer: false,
+    // From the copy on this device (src/mirror.js): opened with no connection, and the files changed here.
+    offline: !!data.offline, syncedAt: data.syncedAt ?? null,
+    changed: new Set([...(data.changed || [])].filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length))),
   };
   app.trees.set(repo.id, tree);
   findOwnInbox(repo, tree);
@@ -490,7 +496,7 @@ async function searchText(repo, query, host) {
     fill(host, 
       h("div", { class: "side-label" }, paths.length ? "Found inside" : "Nothing found inside notes"),
       ...paths.map((path) => fileRow(repo, path, iconFor(path), shownName(path), dirName(path) || null)),
-      isLocal(repo) ? null : h("p", { class: "side-empty" }, "GitHub's search can lag a few minutes behind the latest saves."),
+      isLocal(repo) || mirror.searchesHere(repo) ? null : h("p", { class: "side-empty" }, "GitHub's search can lag a few minutes behind the latest saves."),
     );
     markActive();
   } catch (e) {
@@ -572,7 +578,10 @@ function renderHeader() {
     const dir = dirName(f.path);
     fill(title, dir ? h("span", { class: "crumbs" }, dir.split("/").join(" / ") + " /") : null,
       h("span", { class: "name" }, shownName(f.path)), f.dirty ? h("span", { class: "dirty", title: "Not saved yet" }) : null,
-      writable ? null : h("span", { class: "badge", title: "You can read this repo but not change it" }, "Read only"));
+      writable ? null : h("span", { class: "badge", title: "You can read this repo but not change it" }, "Read only"),
+      app.trees.get(f.repo.id)?.changed?.has(f.path)
+        ? h("span", { class: "badge", title: "Changed on this device (by another tool or agent), not on GitHub. The app shows it as it is here and never overwrites it." }, "Not on GitHub")
+        : null);
     title.title = f.path;
   } else {
     fill(title, h("span", { class: "name" }, app.pageTitle));
@@ -2790,7 +2799,7 @@ async function save() {
 async function resolveConflict(f) {
   let latest;
   try {
-    latest = await gh.readText(f.repo, fullPath(f.repo, f.path));
+    latest = await gh.readText(f.repo, fullPath(f.repo, f.path), { fresh: true });
   } catch (e) {
     return toast(`Not saved, and the newer version couldn't be read: ${e.message}`, "error");
   }
@@ -3414,17 +3423,92 @@ function showWelcome(joining = null) {
 // Local vaults: notes only on this device (src/local.js)
 // ================================================================
 
-/** The line under the toolbar in a local vault: it's only here, and (kept in the browser) how to keep a copy. */
+/**
+ * The line under the toolbar: a local vault is only here (and, kept in the browser, how to keep a copy); a GitHub
+ * vault opened from its copy says so, and a copy in a folder that waits for the browser's OK asks for it.
+ */
 function renderLocalNote() {
   const el = $("#local-note");
   const r = app.repo;
-  el.hidden = !isLocal(r);
-  if (!isLocal(r) || el.dataset.repo === r.id) return;
-  el.dataset.repo = r.id;
+  const tree = r && app.trees.get(r.id);
+  const copy = r && !isLocal(r) ? mirror.info(r) : null;
+  const kind = isLocal(r) ? "local" : tree?.offline ? `offline:${tree.syncedAt}` : copy?.needsAllow ? "allow" : "";
+  el.hidden = !kind;
+  const key = `${r?.id}|${kind}`;
+  if (!kind || el.dataset.key === key) return;
+  el.dataset.key = key;
+  if (kind === "allow") {
+    return fill(el, h("span", {}, icon("folder"), h("span", {}, "This vault's copy is in the folder ", h("b", {}, copy.needsAllow),
+      ". The browser asks for your OK each time it's opened.")),
+    h("button", { class: "btn small", onclick: async () => {
+      if (!(await mirror.allow(r))) return toast("The browser didn't allow the folder.", "error");
+      app.trees.delete(r.id);
+      el.dataset.key = "";
+      app.repo = null;
+      route();
+    } }, icon("folder"), "Allow the folder"));
+  }
+  if (kind !== "local") {
+    const when = tree.syncedAt ? new Date(tree.syncedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
+    return fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Offline:"),
+      ` showing the copy on this device${when ? ` from ${when}` : ""}. Saving needs a connection.`)),
+    h("button", { class: "btn small", onclick: reloadFromGitHub }, icon("reload"), "Try again"));
+  }
   const browser = r.local === "browser";
   fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Only on this device:"), " not on GitHub, not on your other devices.",
     browser ? " Kept in this browser, so it's lost if the browser's data is cleared." : "")),
   browser ? h("button", { class: "btn small", onclick: () => downloadCopy(r) }, icon("download"), "Download a copy") : null);
+}
+
+const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
+
+/** A GitHub repo's copy on this device, on its card in Settings: where it's kept, and a folder instead of the browser. */
+function copyField(r) {
+  const text = h("small", {}, "…");
+  const actions = h("div", { class: "card-actions" });
+  const changed = () => { app.trees.delete(r.id); if (app.repo?.id === r.id) app.repo = null; showSettings(); };
+  (async () => {
+    const { folder, clone } = await mirror.place(r);
+    if (folder) {
+      fill(text, `Kept in the folder ${folder}: its files are the notes, so other tools and agents read them too. Each commit updates them; a file changed there by another tool shows as Not on GitHub and is never overwritten.`,
+        clone ? h("span", {}, " It's a git clone: pull with ", h("code", {}, "git pull --rebase --autostash"),
+          ", since the app's commits reach it as changed files until it pulls (a plain git pull can stop).") : null);
+      fill(actions,
+        canPickFolder() ? h("button", { class: "btn small", type: "button", onclick: async () => {
+          const handle = await pickCopyFolder(r);
+          if (handle) { await mirror.useFolder(r, handle); toast(`The copy is kept in ${handle.name} now.`, "ok"); changed(); }
+        } }, icon("folder"), "Pick another folder") : null,
+        h("button", { class: "btn small", type: "button", onclick: async () => {
+          await mirror.useBrowser(r);
+          toast(`The copy is kept in this browser now. ${folder} and its files stay on the disk.`, "ok", 6000);
+          changed();
+        } }, icon("device"), "Keep it in this browser instead"));
+    } else {
+      fill(text, "Kept in this browser, so the vault opens with no connection. ",
+        canPickFolder() ? "It can be a folder on the disk instead, like the repo's clone: other tools and agents then read the same files, and each commit updates them." : null);
+      fill(actions, canPickFolder() ? h("button", { class: "btn small", type: "button", onclick: async () => {
+        const handle = await pickCopyFolder(r);
+        if (handle) { await mirror.useFolder(r, handle); toast(`The copy is kept in ${handle.name} now.`, "ok"); changed(); }
+      } }, icon("folder"), "Keep it in a folder") : null);
+    }
+  })();
+  return h("div", { class: "field full copy-field" }, h("span", {}, "Copy on this device"), text, actions);
+}
+
+/**
+ * The folder for a repo's copy: the repo's top folder (a clone, with .git) or an empty one. The vault's own folder
+ * inside a clone (e.g. its Wiki) is refused, since the copy keeps the repo's paths.
+ */
+async function pickCopyFolder(r) {
+  const handle = await pickFolder();
+  if (!handle || !r.folder) return handle;
+  let clone = false;
+  try { await handle.getDirectoryHandle(".git"); clone = true; } catch { /* not a clone */ }
+  if (!clone && handle.name.toLowerCase() === baseName(r.folder.replace(/\/+$/, "")).toLowerCase()) {
+    toast(`That looks like the ${r.folder} folder itself. Pick the folder above it (the repo's own, with .git in it), or an empty folder.`, "error", 9000);
+    return null;
+  }
+  return handle;
 }
 
 /** Every file of a local vault as one zip, downloaded: the way to keep a copy of a vault kept in the browser. */
@@ -3711,6 +3795,7 @@ function showSettings(adding = false, tokenOwner = "") {
         field("Branch", "branch", r.branch, "The branch to read and save to. Empty: main."),
         field("Folder", "folder", r.folder, "Show only this folder of the repo, e.g. notes. Empty: the whole repo. The paths below are inside it."),
       ],
+      !loc && r.repo && r.id ? copyField(r) : null,
       field("Start page", "home", r.home, "The note that opens first, e.g. Home.md."),
       field("Inbox page", "inbox", r.inbox, "A note for quick notes and tasks, e.g. Notes/Inbox.md. It gets an Inbox button. Empty: no button."),
       field("Inboxes folder", "inboxes", r.inboxes, "A folder with one inbox per person, e.g. Notes/Inboxes. The Inbox button opens the note whose github property is your GitHub login."),
@@ -3810,8 +3895,27 @@ function showSettings(adding = false, tokenOwner = "") {
     store.set("version", dev ? "dev" : "main");
     if (dev !== DEV_BUILD) location.assign(versionHref(dev));
   };
+  const copies = h("ul", { class: "checks copies" });
+  const copyRepos = app.repos.filter((r) => !isLocal(r));
+  for (const r of copyRepos) {
+    const li = h("li", {}, icon("device"), h("span", {}, h("b", {}, r.label), " …"));
+    copies.append(li);
+    Promise.all([mirror.place(r), mirror.size(r)]).then(([{ folder }, size]) => {
+      fill(li, icon("device"), h("span", {}, h("b", {}, r.label), folder ? ` · in the folder ${folder}`
+        : size?.files ? ` · in this browser, ${size.files} files, ${formatSize(size.bytes)}` : " · in this browser, nothing kept yet"),
+      !folder && size?.files ? h("button", { class: "btn small", type: "button", title: "It's downloaded again the next time the vault opens", onclick: async () => {
+        await mirror.drop(r);
+        app.trees.delete(r.id);
+        toast(`${r.label}'s copy is dropped from this browser.`, "ok");
+        showSettings();
+      } }, icon("trash"), "Drop the copy") : null);
+    });
+  }
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
+      h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),
+      copies) : null,
     h("div", { class: "field" },
       h("span", {}, "App version"),
       h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },

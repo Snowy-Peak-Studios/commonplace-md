@@ -44,6 +44,10 @@ A local vault needs no GitHub account and no token. Its notes are not on GitHub 
 
 **Save** saves on the device. The vault says *on this device* in the list, and a line above the note says it's only here.
 
+## A copy on this device
+
+Every vault on GitHub is also kept on the device, so it opens with no connection; a line above the note says so. In Chrome and Edge on a computer, **Settings**, open the repo, **Keep it in a folder** keeps that copy in a folder instead (like the repo's clone): other tools read the same files, and each commit updates them. A file changed there by another tool is marked **Not on GitHub** and never overwritten.
+
 ## What you see
 
 The repo is in the list at the top of the files. Pick it there to switch between vaults; the last one opens next time.

@@ -111,6 +111,12 @@ page.on("request", async (req) => {
     data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" }, { path: PRE + MP3_PATH, type: "blob", sha: "mp3sha" });
     return req.respond(json(200, data));
   }
+  // The copy on the device asks for the test table by its sha too.
+  if (url.startsWith(`${REPO_API}/git/blobs/csvsha`)) {
+    return /raw/.test(req.headers().accept || "")
+      ? req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: CSV_TEXT })
+      : req.respond(json(200, { sha: "csvsha", size: CSV_TEXT.length, encoding: "base64", content: b64(CSV_TEXT) }));
+  }
   if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
     return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
   }
@@ -1395,6 +1401,47 @@ const upgraded = JSON.parse(moved["commonplace:repos"] || "[]")[0];
 check(upgraded?.notes === "Notes" && upgraded?.template === "Templates/Note.md", "its vault repo gets the New notes folder and template it used to imply");
 check(await until(() => location.hash.startsWith("#/old/") && !!document.querySelector(".preview h1"), 20000, old), "and it opens its notes as before");
 await oldContext.close();
+
+// 10f. The copy on this device: kept in step when a vault opens, and opened from it when GitHub can't be reached.
+const offContext = await browser.createBrowserContext();
+const off = await offContext.newPage();
+let cutOff = false;
+await off.setRequestInterception(true);
+off.on("request", (req) => (cutOff && req.url().startsWith(API) ? req.abort("internetdisconnected") : req.continue()));
+await off.setViewport({ width: 1280, height: 860 });
+await off.goto(BASE, { waitUntil: "networkidle0" });
+const copyRepo = { id: "copy", label: "Copy", owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md" };
+await off.evaluate((t, r) => {
+  localStorage.clear();
+  localStorage.setItem("commonplace:token", JSON.stringify(t));
+  localStorage.setItem("commonplace:repos", JSON.stringify([r]));
+}, token, copyRepo);
+await off.goto(BASE + "#/copy/Home.md", { waitUntil: "networkidle0" });
+await off.reload({ waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector(".preview h1"), 20000, off), "a vault opens online as before, with its copy on the device");
+const copied = () => new Promise((resolve) => {
+  const req = indexedDB.open("commonplace");
+  req.onerror = () => resolve(false);
+  req.onsuccess = () => {
+    if (!req.result.objectStoreNames.contains("meta")) return resolve(false);
+    const tx = req.result.transaction(["files", "meta"]);
+    const keys = tx.objectStore("files").getAllKeys();
+    const meta = tx.objectStore("meta").get("bases:mirror:copy");
+    tx.oncomplete = () => resolve(keys.result.filter((k) => k.startsWith("mirror:copy:")).length >= 30 && !!meta.result?.syncedAt);
+  };
+});
+check(await until(copied, 30000, off), "every text file of the vault is kept in the browser, with when it was brought up to date");
+cutOff = true;
+await off.goto(BASE + "#/copy/Guide.md");
+await off.reload({ waitUntil: "networkidle0" });
+check(await until(() => /Guide/.test(document.querySelector(".preview h1")?.textContent || ""), 20000, off), "with GitHub out of reach, the vault opens from the copy");
+check(await until(() => !document.querySelector("#local-note").hidden && /Offline/.test(document.querySelector("#local-note").textContent), 5000, off),
+  "and the line above the note says it's the copy on this device");
+await off.click("#tree a.file[data-path='Task Board.md']").catch(() => {});
+check(await until(() => /Task Board/.test(document.querySelector(".preview h1")?.textContent || "") && !!document.querySelector(".preview table tbody tr"), 20000, off),
+  "a link opens another note from the copy, and its base view is filled from the copy");
+await off.screenshot({ path: `${OUT}/17-offline-copy.png` });
+await offContext.close();
 
 // 11. Service worker registered.
 check(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())), "service worker registered");

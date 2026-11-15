@@ -26,11 +26,10 @@ const DB_NAME = "commonplace";
 let opening = null;
 function db() {
   opening ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const d = req.result;
-      if (!d.objectStoreNames.contains("files")) d.createObjectStore("files");
-      if (!d.objectStoreNames.contains("handles")) d.createObjectStore("handles");
+      for (const name of ["files", "handles", "meta"]) if (!d.objectStoreNames.contains(name)) d.createObjectStore(name);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -46,7 +45,8 @@ const done = (req) => new Promise((resolve, reject) => {
   req.onerror = () => reject(req.error);
 });
 
-async function idb(name, mode, use) {
+/** One request on one IndexedDB store (`files`, `handles` or `meta`), as a promise. */
+export async function idb(name, mode, use) {
   const st = (await db()).transaction(name, mode).objectStore(name);
   try {
     return await done(use(st));
@@ -57,7 +57,8 @@ async function idb(name, mode, use) {
 
 /** The folder a vault was given (a FileSystemDirectoryHandle), kept in IndexedDB: handles can't go anywhere else. */
 export const folderOf = (id) => idb("handles", "readonly", (st) => st.get(id)).catch(() => null);
-const keepFolder = (id, handle) => idb("handles", "readwrite", (st) => st.put(handle, id));
+export const keepFolder = (id, handle) => idb("handles", "readwrite", (st) => st.put(handle, id));
+export const forgetFolder = (id) => idb("handles", "readwrite", (st) => st.delete(id)).catch(() => {});
 
 // ---- where a vault's files are ----
 
@@ -66,11 +67,11 @@ const fileKey = (id, path) => `${id}:${path}`;
 const vaultRange = (id) => IDBKeyRange.bound(`${id}:`, `${id}:￿`);
 
 /** A vault kept in the browser: one IndexedDB record per file, { bytes, mtime }. */
-class BrowserFiles {
+export class BrowserFiles {
   constructor(id) {
     this.id = id;
   }
-  async list() {
+  async list(withDots = false, under = "") {
     const [keys, values] = await Promise.all([
       idb("files", "readonly", (st) => st.getAllKeys(vaultRange(this.id))),
       idb("files", "readonly", (st) => st.getAll(vaultRange(this.id))),
@@ -78,7 +79,7 @@ class BrowserFiles {
     return keys.map((k, i) => ({
       path: k.slice(this.id.length + 1), size: values[i].bytes.byteLength, mtime: values[i].mtime,
       bytes: async () => new Uint8Array(values[i].bytes),
-    }));
+    })).filter((f) => f.path.startsWith(under));
   }
   async read(path) {
     const rec = await idb("files", "readonly", (st) => st.get(fileKey(this.id, path)));
@@ -89,17 +90,21 @@ class BrowserFiles {
     const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     return idb("files", "readwrite", (st) => st.put({ bytes: copy, mtime: Date.now() }, fileKey(this.id, path)));
   }
+  remove(path) {
+    return idb("files", "readwrite", (st) => st.delete(fileKey(this.id, path)));
+  }
   clear() {
     return idb("files", "readwrite", (st) => st.delete(vaultRange(this.id)));
   }
 }
 
 /** A vault in a folder on the disk, through the File System Access API. Dot-folders (.git) are never walked. */
-class FolderFiles {
+export class FolderFiles {
   constructor(handle) {
     this.handle = handle;
   }
-  async list(withDots = false) {
+  /** Every file, or every file under the folder `under` ("Wiki/"), with its path from the top folder. */
+  async list(withDots = false, under = "") {
     const out = [];
     const walk = async (dir, prefix) => {
       for await (const [name, h] of dir.entries()) {
@@ -111,7 +116,13 @@ class FolderFiles {
         }
       }
     };
-    await walk(this.handle, "");
+    let start = this.handle;
+    try {
+      for (const seg of under.split("/").filter(Boolean)) start = await start.getDirectoryHandle(seg);
+    } catch {
+      return out; // the folder isn't there yet
+    }
+    await walk(start, under);
     return out;
   }
   async fileHandle(path, create = false) {
@@ -135,6 +146,14 @@ class FolderFiles {
     const w = await (await this.fileHandle(path, true)).createWritable();
     await w.write(bytes);
     await w.close();
+  }
+  async remove(path) {
+    const segs = path.split("/").filter(Boolean);
+    let dir = this.handle;
+    try {
+      for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
+      await dir.removeEntry(segs.at(-1));
+    } catch { /* gone already */ }
   }
 }
 
@@ -287,7 +306,7 @@ export class LocalSource {
   async remove(r) {
     this.vaults.delete(r.id);
     if (r.local === "browser") await new BrowserFiles(r.id).clear();
-    await idb("handles", "readwrite", (st) => st.delete(r.id)).catch(() => {});
+    await forgetFolder(r.id);
   }
 
   /** Every file of the vault, hidden ones too, as one zip (Uint8Array) to keep a copy. */
@@ -299,14 +318,20 @@ export class LocalSource {
 }
 
 const ROUTED = new Set(["tree", "headSha", "repo", "branch", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
+const MIRRORED = new Set(["tree", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
 
-/** The GitHub client, with every call about a local vault (its first argument) answered by `local` instead. */
-export function withLocal(github, local) {
+/**
+ * The GitHub client, with every call about a local vault (its first argument) answered by `local` instead, and,
+ * with a `mirror` (src/mirror.js), a GitHub vault's reads and saves going through its copy on this device.
+ */
+export function withLocal(github, local, mirror = null) {
   return new Proxy(github, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (!ROUTED.has(prop)) return typeof value === "function" ? value.bind(target) : value;
-      return (r, ...rest) => (isLocal(r) ? local[prop](r, ...rest) : value.call(target, r, ...rest));
+      return (r, ...rest) => (isLocal(r) ? local[prop](r, ...rest)
+        : mirror && MIRRORED.has(prop) ? mirror[prop](target, r, ...rest)
+          : value.call(target, r, ...rest));
     },
   });
 }
