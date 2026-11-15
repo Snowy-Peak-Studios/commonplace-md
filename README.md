@@ -14,6 +14,42 @@ No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown 
 
 Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
 
+## How to use it
+
+- **Your vault for everything** that makes your life and work easier: a project's wiki, your own notes, recipes, anything.
+- **Your AI agents' rules live in the project**, next to the notes they work on, not hidden in one agent's settings.
+- **A place for your AI reports and pipelines**: whatever your agents write ends up as notes you can read, link and keep.
+- **A task board** you use with your agent, or across a team.
+- **Yours to change**: the rules, the skills, the task fields and the code are all yours to edit. Soon you can also turn parts of the app on and off ([roadmap](ROADMAP.md)).
+- **Free**, and it works like a wiki: your notes are in your own GitHub repo, and a clone of it on your own device opens in any Markdown editor.
+- **No account of ours**, no payments, no sign-in to us: you need only a GitHub account and a token you make yourself. What you do is only yours; we make the app and suggest ways to use it.
+
+### How I use it
+
+1. I write my thoughts in my inbox, from my phone or my computer, whenever they come.
+2. I ask my agent to go through the inbox, so each thought becomes a task.
+3. I claim the tasks I want done now, and ask the agent to work on them.
+4. Meanwhile, I write my next thoughts in the inbox.
+5. Repeat.
+
+### Not sure it's for you?
+
+Ask your AI agent whether it would help you:
+
+<details>
+<summary><b>🤖 Ask your agent</b>: copy this prompt into any AI agent</summary>
+
+```text
+Read the README of Commonplace.md: https://github.com/Snowy-Peak-Studios/commonplace-md
+It's a free notes app: a wiki, notes and a task board, kept as Markdown files in my own GitHub repo,
+made to be used by people and AI agents together.
+Ask me a few short questions about how I work, what I keep notes on and which AI agents I use.
+Then tell me plainly whether it would help me, what I'd use it for, and what it would cost me in time.
+Don't set anything up yet.
+```
+
+</details>
+
 ## Why
 
 I was frustrated with the work tools I had to use, so I started making this for my own daily use. It grew until it became my main focus. Now I'm sharing it with everyone who has struggled with those tools like I did.
@@ -69,6 +105,8 @@ I was frustrated with the work tools I had to use, so I started making this for 
 ## Quick start
 
 **Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
+
+Not sure yet? [Ask your agent first](#not-sure-its-for-you).
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
 

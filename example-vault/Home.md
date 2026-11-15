@@ -2,6 +2,8 @@
 
 Welcome to your notes. This folder is an example vault for **Commonplace.md**: copy it into your own GitHub repo, open it in the app, and change anything you like. It's plain Markdown, so it also opens in any Markdown editor as it is.
 
+Use it for everything that makes your life and work easier: your notes and wiki, your AI agents' rules and reports, and a task board for you, your agent or your team. The [[How To]] pages show how.
+
 > [!tip] Start here
 > Read the [[Guide]] for what a note can hold, look at the [[Task Board]], or drop a thought in the [[Inbox]].
 
