@@ -34,6 +34,15 @@ What a note can hold. Open this page in Edit mode to see how each part is writte
 
 Write `@` and someone's GitHub login to mention them: @your-github-login, have a look at this part. In Edit mode, typing `@` offers everyone who has an inbox. A mention is a link to their inbox, and the ` ```needs-attention ` block at the top of their [[Inbox]] lists every place that mentions them, this line too. In code, like `@this`, and in an email address it isn't a mention.
 
+## New tasks anywhere
+
+A ` ```new-tasks ` block catches ideas right where you have them, on any page: write one per line, or use **Add** in the box. Its `owner:` says whose they are; their agent finds every such block in the vault and turns each item into a task.
+
+```new-tasks
+owner: Your name
+- Show the reading list on the Home page
+```
+
 ## Embeds
 
 An image from `Attachments/`, 120 pixels wide:

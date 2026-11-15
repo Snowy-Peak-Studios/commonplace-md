@@ -1158,6 +1158,32 @@ const currentShown = await page.evaluate(() => {
 });
 check(currentShown.tab === "Current sprint" && currentShown.count === currentView.count, "its Current sprint view shows the sprint going on today: " + JSON.stringify(currentShown));
 
+// 10a. The inbox's ```new-tasks block: a box with its items; Add puts one in the block, and Save would commit it.
+await page.goto(at("Notes/Inbox.md"), { waitUntil: "networkidle0" });
+await page.waitForSelector(".note-body section.newtasks .newtasks-add input", { timeout: 15000 }).catch(() => {});
+const newTasks = await page.evaluate(() => {
+  const box = document.querySelector(".note-body section.newtasks");
+  return {
+    head: box?.querySelector(".suggest-head small")?.textContent ?? "",
+    items: [...(box?.querySelectorAll(".newtasks-list li") ?? [])].map((li) => li.textContent),
+    link: box?.querySelector(".newtasks-list a.wikilink")?.dataset.path ?? null,
+    code: !!document.querySelector(".note-body pre code.language-new-tasks"),
+  };
+});
+check(!newTasks.code && newTasks.head.startsWith("For Your name · 2 items") && newTasks.items.includes("Try the app on a second device")
+  && newTasks.link === "Data/Reading list.csv", "the inbox's ```new-tasks block is a box with its items, links working: " + JSON.stringify(newTasks));
+await page.type(".note-body section.newtasks .newtasks-add input", "An idea from the browser check");
+await page.keyboard.press("Enter");
+await page.waitForFunction(() => [...document.querySelectorAll(".note-body section.newtasks .newtasks-list li")].some((li) => li.textContent === "An idea from the browser check"), { timeout: 5000 }).catch(() => {});
+const added = await page.evaluate(() => ({
+  items: document.querySelectorAll(".note-body section.newtasks .newtasks-list li").length,
+  save: !document.querySelector("#save-btn")?.disabled,
+  focus: document.activeElement?.matches(".newtasks-add input") ?? false,
+}));
+check(added.items === 3 && added.save && added.focus, "Add puts the item in the block, the note can be saved, and the field keeps the focus: " + JSON.stringify(added));
+await page.evaluate(() => document.querySelector(".note-body section.newtasks")?.scrollIntoView({ block: "center" }));
+await shot("2g-inbox-new-tasks");
+
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();
 const newcomer = await fresh.newPage();

@@ -8,9 +8,21 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 
 ## Write in it
 
-- **New tasks**: anything that should become a task. You, or your AI agent, turn each into a task note later.
+- **New tasks**: anything that should become a task, in a ` ```new-tasks ` block (below). You, or your AI agent, turn each into a task note later.
 - **Notes**: thoughts that aren't tasks. They stay.
 - **Needs attention**: what waits on you. A ` ```needs-attention ` block there lists the tasks with a question for you, and the places that mention you (below). Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
+
+## New tasks, on any page
+
+A ` ```new-tasks ` block holds ideas that should become tasks, one per line. Its first line says whose they are:
+
+```text
+owner: Your name
+- Try the app on a second device
+- Add three books to the reading list
+```
+
+In Read mode it's a box with the items, and **Add** puts a new one in (then **Save**). The block works on any page: write ideas down where you have them, like the one in the [Guide](../Guide.md). Your agent looks for every ` ```new-tasks ` block with your name in the whole vault, turns each item into a task, and takes it out of the block.
 
 ## Needs attention: questions and mentions
 

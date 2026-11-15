@@ -127,3 +127,13 @@ test("@login becomes a mention, but not in code, a link or an email", () => {
     '<p><a href="https://example.com">see @bob</a> and <strong><span class="mention" data-login="bob">@bob</span></strong></p>\n');
   assert.match(render("## Ask @bob\n"), /data-heading="Ask @bob"/);
 });
+
+test("a new-tasks block is a box with its items rendered, its owner, and its closing fence's line", () => {
+  const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
+  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
+  assert.match(html, /<small class="muted">For Ana Lee · 2 items · Your agent turns them into tasks<\/small>/);
+  assert.match(html, /<ul class="newtasks-list"><li>Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/li><li><strong>Bold<\/strong> one<\/li><\/ul><\/section>/);
+  const none = render("```new-tasks\n```\n");
+  assert.match(none, /No owner: line, so no agent sorts these/);
+  assert.match(none, /<li class="muted">Nothing yet\.<\/li>/);
+});

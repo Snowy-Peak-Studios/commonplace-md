@@ -1,6 +1,6 @@
 ---
 name: sort-inbox
-description: Start a working session in the notes - pull, read the current goals, and sort your person's inbox (New tasks into task notes, answers acted on), then commit and push. Use at the start of every session, or when your person says to check or sort the inbox.
+description: Start a working session in the notes - pull, read the current goals, and sort your person's inbox and new-tasks blocks (new tasks into task notes, answers acted on), then commit and push. Use at the start of every session, or when your person says to check or sort the inbox.
 ---
 
 # Sort the inbox
@@ -22,7 +22,9 @@ Read the **current goals** at the top of `Task Board.md`. Weigh every new task's
 
 ## 4. New tasks
 
-For each item under **New tasks**:
+The new tasks are in ` ```new-tasks ` blocks, on any page. Find them all: `grep -rln '^```new-tasks' --include=*.md .`. Yours are the blocks whose `owner:` line is your person; leave the others, and blocks with no `owner:`. An inbox may also have items written as a list under its **New tasks** heading: they count too.
+
+For each of your items (each line in the block but `owner:`):
 
 1. **Is there a task for it already?** Look for its words in the task file names first (`ls Tasks | grep -i <word>`), then in their text. If one covers it, add the item to that task: quote it in the task's notes with the date, and add or change an acceptance criterion if needed.
 2. **If not, make a task** from `Templates/Task.md`:
@@ -33,7 +35,7 @@ For each item under **New tasks**:
    - `area`: from the Areas table on `Task Board.md`, if there is one. `priority`: by the current goals.
    - In its notes, quote the item word for word, with the date: `From <owner>'s inbox, <date>: "..."`.
 3. **Unclear?** Make the task with what you know, and ask the rest on it: `question:` in its properties, a *Question* part with the options and an **Answer:** line, and, if the inbox has no ` ```needs-attention ` block showing questions, one line under **Needs attention** linking to the task (`AGENTS.md`, Questions).
-4. Delete the item from the inbox.
+4. Delete the item from its block (or the inbox). Keep the block itself, with its `owner:` line, even when it's empty.
 
 ## 5. Notes
 

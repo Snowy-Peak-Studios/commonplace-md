@@ -8,7 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -874,6 +874,8 @@ function renderPreview() {
   fillTopTasks(body, f);
   // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
   fillAttention(body, f);
+  // A ```new-tasks box gets its Add field, where the note can be changed.
+  fillNewTasks(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
@@ -1589,6 +1591,37 @@ function loadMentions(repo, login) {
     load.catch(() => mentionLoads.delete(key));
   }
   return mentionLoads.get(key);
+}
+
+// ---- new tasks: a ```new-tasks block's box ----
+
+/**
+ * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field: the item
+ * goes into the block like a ticked checkbox changes its line (the note changes, Save commits it), and the field
+ * keeps the focus, for the next one.
+ */
+function fillNewTasks(root, f) {
+  if (!canWrite(f.repo)) return;
+  const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
+  boxes.forEach((el, n) => {
+    const close = Number(el.dataset.close);
+    if (!(close >= 0)) return;
+    const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
+    el.append(h("form", { class: "newtasks-add", onsubmit: (e) => {
+      e.preventDefault();
+      const said = input.value.trim();
+      if (!said || app.file !== f) return;
+      const next = addNewTask(f.text, close, said);
+      if (next === f.text) return;
+      f.text = next;
+      if (f.editor) setEditorText(f.editor, f.text);
+      updateDirty();
+      const scroll = $("#main").scrollTop;
+      renderPreview();
+      $("#main").scrollTop = scroll;
+      [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n]?.querySelector(".newtasks-add input")?.focus();
+    } }, input, h("button", { class: "btn small", type: "submit" }, icon("plus"), "Add")));
+  });
 }
 
 // ---- needs your attention: questions and mentions ----

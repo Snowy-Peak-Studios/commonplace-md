@@ -36,9 +36,12 @@ owner: Your name
 
 ## New tasks
 
-*The notes below will be transferred to tasks.*
+*Write anything that should become a task: your agent turns each item into a task note.*
 
-- [ ] Rename this note
+```new-tasks
+owner: Your name
+- Rename this note
+```
 
 ## Notes
 

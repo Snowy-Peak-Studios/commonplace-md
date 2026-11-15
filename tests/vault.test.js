@@ -728,3 +728,20 @@ test("a vault's people come from its inboxes' github and owner, each login once"
     { login: "zedq", name: "Zed Q", path: "Notes/Inbox.md" },
   ]);
 });
+
+test("a new-tasks block: its owner and its items, list marks and checkboxes taken off", async () => {
+  const { newTasksBlock } = await import("../src/vault.js");
+  assert.deepEqual(newTasksBlock("owner: Ann Lee\n- Buy milk\n\n* [ ] Fix the [[Home]] page\n2. Call @bob\nPlain line: with a colon\n"),
+    { owner: "Ann Lee", items: ["Buy milk", "Fix the [[Home]] page", "Call @bob", "Plain line: with a colon"] });
+  assert.deepEqual(newTasksBlock(""), { owner: "", items: [] });
+  assert.deepEqual(newTasksBlock("  Owner : 'Bo'\n-   \n"), { owner: "Bo", items: [] });
+});
+
+test("an item added to a new-tasks block goes just above its closing fence, or last when it has none", async () => {
+  const { addNewTask } = await import("../src/vault.js");
+  const note = "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n```\n\nAfter\n";
+  assert.equal(addNewTask(note, 5, "  Two\nlines "), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n- Two lines\n```\n\nAfter\n");
+  assert.equal(addNewTask("```new-tasks\n- One", 1, "Two"), "```new-tasks\n- One\n- Two", "no closing fence: last");
+  assert.equal(addNewTask(note, 5, "   "), note, "nothing to add");
+  assert.equal(addNewTask(note, 99, "Two"), note, "no such line");
+});

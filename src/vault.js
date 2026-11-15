@@ -212,6 +212,38 @@ export function ownInboxPath(notes, login, fallback = "") {
 }
 
 // ================================================================
+// New tasks: a ```new-tasks block's items, sorted into tasks by agents
+// ================================================================
+
+/**
+ * A ```new-tasks block's content: its `owner:` line (whose items they are) and its items, one per other
+ * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `).
+ */
+export function newTasksBlock(src) {
+  const out = { owner: "", items: [] };
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*owner\s*:\s*(.*?)\s*$/i);
+    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); continue; }
+    const item = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
+    if (item) out.items.push(item);
+  }
+  return out;
+}
+
+/**
+ * The note with `- item` added to a ```new-tasks block, whose closing fence is line `close` (from 0): just
+ * above that line. A block left open (no closing fence) runs to the end of the note, so the item goes last.
+ */
+export function addNewTask(text, close, item) {
+  const lines = toLf(text).split("\n");
+  const said = String(item ?? "").replace(/\s*\n\s*/g, " ").trim();
+  if (!said || !(close >= 0 && close < lines.length)) return text;
+  const at = /^\s*(`{3,}|~{3,})\s*$/.test(lines[close]) ? close : lines.length;
+  lines.splice(at, 0, `- ${said}`);
+  return lines.join("\n");
+}
+
+// ================================================================
 // Mentions: `@login` in a note, found for that person's inbox
 // ================================================================
 

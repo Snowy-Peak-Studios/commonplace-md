@@ -32,7 +32,7 @@ If your person says the rules are already set up, just delete this section.
 1. `git pull --rebase --autostash`. People write from their phones and other devices all day. If the rebase stops on a conflict, sort it out first, keeping both sides' edits.
 2. Read the **current goals** at the top of `Task Board.md`. Weigh every task you pick and everything you propose against them, say which goal a task serves, and flag work that serves none.
 3. Read **your own person's inbox**, and no one else's: the note in `Notes/Inboxes/` whose `owner` is your `git config user.name` (`grep -rl "^owner: <name>$" Notes`); if there's none, the shared `Notes/Inbox.md`.
-   - **New tasks:** turn each item into a task note (or add it to a task that already covers it), with `requested_by` the inbox's owner. Then clear the item.
+   - **New tasks:** every ` ```new-tasks ` block in the vault whose `owner:` is your person, on any page (`grep -rln '^```new-tasks' --include=*.md .`), and the items written under **New tasks** in their inbox: turn each item into a task note (or add it to a task that already covers it), with `requested_by` your person. Then take the item out of its block. Blocks with someone else's `owner:`, or none, are not yours.
    - **Notes:** leave them as they are.
    - **Needs attention:** act on the answers to your own questions (or to questions on a task you've claimed), written on their tasks (see Questions), then clear them.
    - Commit and push the sorted inbox and the new tasks at once.

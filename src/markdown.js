@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -177,6 +177,18 @@ export function createMarkdown() {
         + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
         + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
+    }
+    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field. `data-close`
+    // is its closing fence's line, where Add puts a new item.
+    if (lang === "new-tasks") {
+      const { owner, items } = newTasksBlock(token.content);
+      const close = token.map ? token.map[1] - 1 : -1;
+      const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
+        : "No owner: line, so no agent sorts these";
+      const list = items.length ? items.map((item) => `<li>${md.renderInline(item, env)}</li>`).join("") : '<li class="muted">Nothing yet.</li>';
+      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
+        + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
+        + `<ul class="newtasks-list">${list}</ul></section>\n`;
     }
     // A ```needs-attention block: the app puts the questions and mentions box (or one of them) there.
     if (lang === "needs-attention") {

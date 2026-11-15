@@ -34,10 +34,13 @@ owner: Your name
 
 ## New tasks
 
-*The notes below will be transferred to tasks.*
+*Write anything that should become a task: your agent turns each item into a task note. The block works on any page.*
 
+```new-tasks
+owner: Your name
 - Try the app on a second device
 - Add three books to the [[Reading list.csv|reading list]]
+```
 
 ## Notes
 
