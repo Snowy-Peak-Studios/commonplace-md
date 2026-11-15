@@ -90,9 +90,9 @@ A question lives on the task it's about, with its answer next to it. The inbox o
      ```
 
      One question per task at a time; several open ones go in the same part as (1), (2).
-2. **In your person's inbox**, under **Needs attention**: one line, `- [[<task title>]]: <the question in a few words>`, nothing more.
+2. **In your person's inbox**, under **Needs attention**: a ` ```questions ` block there lists the task by itself (from its `question:`), so write nothing. With no block there, write one line, `- [[<task title>]]: <the question in a few words>`, nothing more.
 3. **The answer** is written under **Answer:** on the task. An answer written under the inbox's line counts the same.
-4. **Acting on it**: do what the answer says, then move it into the task's notes as a record (who, the date, the options in short, their words), take out the *Question* part, empty `question:`, take out the inbox's line, and tick the criterion it settles (and drop `ready: decision`).
+4. **Acting on it**: do what the answer says, then move it into the task's notes as a record (who, the date, the options in short, their words), take out the *Question* part, empty `question:`, take out the inbox's line if you wrote one, and tick the criterion it settles (and drop `ready: decision`).
 5. **A question with no task**: make the task first if it's work for this vault; if it isn't, ask it in the inbox as a whole item.
 
 Then move on to another task while it waits.

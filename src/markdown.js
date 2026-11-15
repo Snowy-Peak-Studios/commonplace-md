@@ -149,6 +149,11 @@ export function createMarkdown() {
         + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
+    // A ```questions block: the app lists the tasks with an open question there.
+    if (lang === "questions") {
+      return `<div class="questions-block" data-owner="${esc(questionsOptions(token.content).owner)}">`
+        + `<pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+    }
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     if (APP_BLOCKS.includes(lang)) {
       return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
@@ -203,6 +208,16 @@ export function topTasksOptions(src) {
     }
   }
   return out;
+}
+
+/**
+ * The options of a ```questions block, one per line, all written in the block: `owner: Your Name` (whose
+ * questions it lists: the tasks they asked for, review or whose agent has them; everyone's when left out).
+ * Other lines are ignored.
+ */
+export function questionsOptions(src) {
+  const line = String(src ?? "").split("\n").map((l) => l.match(/^\s*owner\s*:\s*(.*?)\s*$/i)).find(Boolean);
+  return { owner: line ? line[1].replace(/^["']|["']$/g, "").trim() : "" };
 }
 
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */

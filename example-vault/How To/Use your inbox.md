@@ -10,7 +10,7 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 
 - **New tasks**: anything that should become a task. You, or your AI agent, turn each into a task note later.
 - **Notes**: thoughts that aren't tasks. They stay.
-- **Needs attention**: questions waiting for your answer, one line each, linking to the task the question is on. Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
+- **Needs attention**: questions waiting for your answer. A ` ```questions ` block there lists the tasks with a question for you (below). Open the task and write your answer under **Answer:** there, so the question and its answer stay with the work.
 
 ## Your own inbox
 
@@ -35,3 +35,15 @@ owner: Your name
 - `owner`: whom **Claim** claims a task for.
 
 **Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Each task's priority and area can be changed right there, and **Not now** puts one off. The block works on any page: [Home](../Home.md) has one.
+
+## The questions for you
+
+A ` ```questions ` block lists the tasks with a question waiting for an answer: a task gets one when your agent writes it a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**. It takes one line:
+
+```text
+owner: Your name
+```
+
+- `owner`: whose questions: the tasks they asked for, review, or whose agent has them. Left out, everyone's.
+
+[Add a reading list](../Tasks/Add%20a%20reading%20list.md) has one, so your [inbox](../Notes/Inbox.md) lists it.

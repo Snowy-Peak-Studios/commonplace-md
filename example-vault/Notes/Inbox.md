@@ -33,6 +33,8 @@ owner: Your name
 
 ## Needs attention
 
-*Questions waiting for you, one line each, linking to the task it is on. Answer on the task.*
+*Questions waiting for you: the tasks with a question, found by the block below. Answer on the task.*
 
-- [[Add a reading list]]: should the list hold only books, or articles too?
+```questions
+owner: Your name
+```

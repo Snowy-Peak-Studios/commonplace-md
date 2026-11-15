@@ -37,7 +37,7 @@ One task at a time: finish this one before you claim another.
 
 ## 6. Does it still fit?
 
-**Is it ready?** Don't build a task that needs a decision first: an open criterion about deciding ("Decided with ..."), "TBD", or `ready: decision`. Ask the decision on the task (`AGENTS.md`, Questions: `question:`, a *Question* part with the options, a line under **Needs attention**), and pick another task meanwhile. Skip a placeholder (a title starting with "Placeholder" or ending in "- placeholder", the `placeholder` tag, `ready: placeholder`, or criteria still "..."): it isn't written out yet. The app's inbox shows each task's state the same way.
+**Is it ready?** Don't build a task that needs a decision first: an open criterion about deciding ("Decided with ..."), "TBD", or `ready: decision`. Ask the decision on the task (`AGENTS.md`, Questions: `question:`, and a *Question* part with the options), and pick another task meanwhile. Skip a placeholder (a title starting with "Placeholder" or ending in "- placeholder", the `placeholder` tag, `ready: placeholder`, or criteria still "..."): it isn't written out yet. The app's inbox shows each task's state the same way.
 
 An old task can go stale. See when it was made (`git log --follow --diff-filter=A --format=%as -- "Tasks/<title>.md" | tail -1`) and check its story and criteria still fit the notes and the goals. If not, rewrite or narrow it (and say so), or ask on the task (`AGENTS.md`, Questions) and move on to another task. Never build a stale task as written.
 

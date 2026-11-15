@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, questionsOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -99,4 +99,13 @@ test("a task's and a sprint's blocks become placeholders that keep their code", 
     assert.equal(render("```" + name + "\n```\n"), `<div class="app-block" data-block="${name}"><pre><code>${name}</code></pre></div>\n`);
   }
   assert.equal(render("```subtasks\nsome: thing\n```\n"), '<div class="app-block" data-block="subtasks"><pre><code>some: thing\n</code></pre></div>\n');
+});
+
+test("a questions block becomes a placeholder with its owner, holding its source", () => {
+  assert.equal(render("```questions\nowner: Ana Lee\n```\n"),
+    '<div class="questions-block" data-owner="Ana Lee"><pre><code>owner: Ana Lee\n</code></pre></div>\n');
+  assert.equal(render("```Questions\n```\n"), '<div class="questions-block" data-owner=""><pre><code>questions</code></pre></div>\n');
+  assert.match(render('```questions\nowner: "<b>"\n```\n'), /data-owner="&lt;b&gt;"/);
+  assert.deepEqual(questionsOptions("range: 3\n  Owner :  'Bo Park' \n"), { owner: "Bo Park" });
+  assert.deepEqual(questionsOptions(""), { owner: "" });
 });

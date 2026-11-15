@@ -215,6 +215,21 @@ check(["All areas", "Top 3", "By priority, newest first", "Current sprint, then 
   "the inbox's box says its block's options: " + inboxHead);
 await shot("2-inbox-desktop");
 
+// 2a. The inbox's ```questions block: the tasks with an open question for its owner, each linking to its task.
+await page.waitForSelector(".note-body .questions .questions-list a.suggest-name", { timeout: 15000 }).catch(() => {});
+const questions = await page.evaluate(() => ({
+  code: !!document.querySelector(".note-body .questions-block"),
+  head: document.querySelector(".note-body .questions .suggest-head small")?.textContent ?? "",
+  rows: [...document.querySelectorAll(".note-body .questions .questions-list li")].map((li) => ({
+    name: li.querySelector(".suggest-name")?.textContent ?? "", chip: li.querySelector(".chip.state")?.textContent ?? "",
+    question: li.querySelector(".question-text")?.textContent ?? "", href: decodeURIComponent(li.querySelector("a")?.getAttribute("href") ?? "") })),
+}));
+check(!questions.code && questions.head.includes("For Your name") && questions.rows.some((r) => r.name.includes("Add a reading list")
+  && r.chip === "Waiting for your answer" && r.question === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md")),
+  "the inbox's ```questions block lists the tasks with an open question, each linking to its task: " + JSON.stringify(questions));
+await page.evaluate(() => document.querySelector(".note-body .questions")?.scrollIntoView({ block: "center" }));
+await shot("2a-inbox-questions");
+
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
 const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
   name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent.includes("Claim")),
@@ -254,11 +269,13 @@ const stateChips = await page.$$eval(".suggest > .suggest-list > li", (li) => li
   const chip = x.querySelector(".chip.state");
   return chip ? { text: chip.textContent, title: chip.title } : null;
 }));
-check(stateChips.length === rows0.length && stateChips.every((c) => c?.text === "Ready" && c.title.startsWith("Ready to start")),
+// A task with an open question (a `question` property) needs a decision until it's answered; the rest are ready.
+check(stateChips.length === rows0.length && stateChips.every((c) => (c?.text === "Ready" && c.title.startsWith("Ready to start"))
+  || (c?.text === "Needs a decision" && c.title.startsWith("Waiting for an answer: "))),
   "every task shows whether it's ready, with the reason as a tooltip: " + JSON.stringify(stateChips));
 await page.click(".suggest > .suggest-list > li .chip.state");
-await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("Ready to start"), { timeout: 5000 }).catch(() => {});
-check(await page.$eval("#toast", (t) => t.classList.contains("show") && t.textContent.includes("Ready to start")), "tapping it says why (for phones, which have no tooltips)");
+await page.waitForFunction((why) => document.querySelector("#toast.show")?.textContent.includes(why), { timeout: 5000 }, stateChips[0]?.title ?? "").catch(() => {});
+check(await page.$eval("#toast", (t, why) => t.classList.contains("show") && t.textContent.includes(why), stateChips[0]?.title ?? "-"), "tapping it says why (for phones, which have no tooltips)");
 const putsBefore = puts.length;
 const first = free0[0]?.name ?? "";
 const firstId = first.split(" ")[0];

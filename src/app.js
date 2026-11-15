@@ -8,7 +8,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -871,6 +871,8 @@ function renderPreview() {
   fillBases(body, f.repo);
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
+  // The open questions show only where a ```questions block is, like the top tasks.
+  fillQuestions(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = app.token ? taskSetupOf(f.repo) : null;
   if (app.token && !setup) {
@@ -1502,6 +1504,60 @@ function fillTopTasks(root, f) {
   }
 }
 
+/** Puts the open questions box where each ```questions block is (an inbox's Needs attention), but not inside an embed. */
+function fillQuestions(root, f) {
+  for (const el of root.querySelectorAll(".questions-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const box = questionsBox(f.repo, el.dataset.owner || "");
+    if (box) el.replaceWith(box);
+  }
+}
+
+/** One look-up per tree version and owner, so typing in the inbox doesn't redo it. */
+const questionLoads = new Map();
+function loadQuestions(repo, who) {
+  const tree = app.trees.get(repo.id);
+  const key = `${repo.id}:${tree.version}:${who}`;
+  if (!questionLoads.has(key)) {
+    for (const k of questionLoads.keys()) if (k.startsWith(`${repo.id}:`)) questionLoads.delete(k);
+    const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then(async (notes) => {
+      const tasks = questionTasks(notes, who);
+      // Only the tasks with a question are read whole, to see whether an answer is written on them yet.
+      const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path)).catch(() => new Map());
+      return tasks.map((t) => ({ ...t, answer: answers.get(t.path) ?? "" }));
+    });
+    questionLoads.set(key, load);
+    load.catch(() => questionLoads.delete(key));
+  }
+  return questionLoads.get(key);
+}
+
+/**
+ * The tasks with an open question (a `question` property) for `who`, or everyone's: each links to its task,
+ * where the question's options and its Answer line are, with the question in a few words, and whether it's
+ * still waiting for an answer or answered and waiting for the agent. The head says whose they are.
+ */
+function questionsBox(repo, who) {
+  const tree = app.trees.get(repo.id);
+  if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
+  const list = h("ol", { class: "questions-list" }, h("li", { class: "muted" }, "Looking for questions…"));
+  const box = h("section", { class: "questions", "aria-label": "Questions waiting for an answer" },
+    h("div", { class: "suggest-head" }, icon("question"), h("strong", {}, "Questions for you"),
+      h("small", { class: "muted" }, who ? `For ${who} · Answer on the task` : "Everyone's: the block names no owner · Answer on the task")),
+    list);
+  const chip = (t) => t.answer
+    ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
+    : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
+  loadQuestions(repo, who).then((tasks) => {
+    list.replaceChildren(...(tasks.length ? tasks.map((t) => h("li", {},
+      h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
+      h("span", { class: "suggest-tags" }, chip(t)),
+      h("span", { class: "question-text" }, t.question)))
+      : [h("li", { class: "muted" }, "No questions waiting.")]));
+  }, () => list.replaceChildren(h("li", { class: "muted" }, "The tasks couldn't be read.")));
+  return box;
+}
+
 /** How the box's head says each sprint choice. */
 const SPRINT_SAID = { "current-only": "Current sprint only", "current-then-next": "Current sprint, then the next", off: "" };
 /** How the box's head says each order. */
@@ -2003,6 +2059,18 @@ async function taskStates(repo, tree, paths) {
     keepBaseCache("taskState", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
+}
+
+/** The answer written on each task (`taskAnswer`), from its whole text: cached by blob sha, like `taskStates`. */
+async function taskAnswers(repo, tree, paths) {
+  const cache = baseCache("taskAnswer", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskAnswer(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("taskAnswer", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? ""]));
 }
 
 /** "Last modified" is the date of the last commit that changed the note: a Map path -> Date. Failures leave gaps. */

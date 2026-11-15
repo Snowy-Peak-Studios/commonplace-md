@@ -298,6 +298,44 @@ export function claimedTasks(notes, owner) {
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
+/** A task's open question: its `question` property, trimmed; "" when it has none. */
+export const questionOf = (props) => (Array.isArray(props?.question) ? props.question.join(" ") : String(props?.question ?? "")).trim();
+
+/**
+ * The tasks with an open question (a `question` property), from [{ path, props }], each with its `question`.
+ * Only `owner`'s: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them
+ * (`assignee`, with or without the agent), names matched like `claimedTasks`; everyone's when `owner` is
+ * empty. Finished tasks don't count. Newest first.
+ */
+export function questionTasks(notes, owner = "") {
+  const me = foldName(owner);
+  const people = (v) => (Array.isArray(v) ? v : [v]).map((x) => foldName(splitAssignee(x).name));
+  const theirs = (n) => !me || [n.props.requested_by, n.props.reviewer, n.props.assignee].some((v) => people(v).includes(me));
+  return notes
+    .filter((n) => isTaskPath(n.path) && questionOf(n.props) && !FINISHED.test(String(n.props.status ?? "").trim()) && theirs(n))
+    .map((n) => ({ ...n, question: questionOf(n.props) }))
+    .sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+}
+
+/**
+ * The answer written on a task: what follows its `**Answer:**` line (or an *Answer* heading), up to the next
+ * heading, trimmed; "" when nothing is written there yet, or there's no such line.
+ */
+export function taskAnswer(text) {
+  const src = toLf(text);
+  const fm = splitFrontMatter(src);
+  const lines = (fm ? src.slice(fm.length) : src).split("\n");
+  const at = lines.findIndex((l) => /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(l));
+  if (at < 0) return "";
+  const first = lines[at].replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
+  const rest = [];
+  for (const l of lines.slice(at + 1)) {
+    if (/^#{1,6}\s/.test(l)) break;
+    rest.push(l);
+  }
+  return [first, ...rest].join("\n").trim();
+}
+
 /** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */
 export function taskAreas(notes) {
   const seen = new Map();
@@ -346,6 +384,9 @@ export function taskState(text) {
   if (ready === "placeholder") return { state: "placeholder", reason: "Marked as a placeholder (ready: placeholder)" };
   const body = fm ? src.slice(fm.length) : src;
   const clip = (s) => (s.length > 110 ? s.slice(0, 107).trimEnd() + "..." : s);
+  // An open question (a `question` property) waits for its answer first.
+  const question = String((fm && /^question:[ \t]*(.*?)[ \t]*$/m.exec(fm.raw)?.[1]) ?? "").replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (question) return { state: "decision", reason: `Waiting for an answer: ${clip(question)}` };
   const plain = body.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
   const title = /^#\s+(.*)$/m.exec(body)?.[1] ?? "";
   const tagged = !!fm && /^tags:.*\bplaceholder\b/im.test(fm.raw);

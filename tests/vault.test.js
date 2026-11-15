@@ -646,3 +646,45 @@ test("a plain Markdown link to another file in the repo, read as GitHub reads it
     assert.equal(relativeLink(href, "How To/Start.md"), null, String(href));
   }
 });
+
+test("the tasks with an open question, for their person: asked for, reviewing, or their agent has it; newest first", async () => {
+  const { questionTasks, questionOf } = await import("../src/vault.js");
+  const n = (path, props) => ({ path, props });
+  const notes = [
+    n("Tasks/A.md", { id: "T-1", question: "Books only?", requested_by: "Ann Lee" }),
+    n("Tasks/B.md", { id: "T-2", question: "  ", requested_by: "Ann Lee" }),
+    n("Tasks/C.md", { id: "T-3", question: "Which colour?", reviewer: "Bob" }),
+    n("Tasks/D.md", { id: "T-4", question: "Done anyway?", requested_by: "Ann Lee", status: "Done" }),
+    n("Tasks/E.md", { id: "T-5", question: "Where is it kept?", assignee: "Ánn Lee (Claude)" }),
+    n("Notes/F.md", { id: "T-6", question: "Not a task", requested_by: "Ann Lee" }),
+    n("Tasks/G.md", { id: "T-7", question: "Whose?", requested_by: ["Bob", "Ann Lee"] }),
+  ];
+  assert.deepEqual(questionTasks(notes, "ann lee").map((t) => [t.props.id, t.question]),
+    [["T-7", "Whose?"], ["T-5", "Where is it kept?"], ["T-1", "Books only?"]]);
+  assert.deepEqual(questionTasks(notes, "Bob").map((t) => t.props.id), ["T-7", "T-3"]);
+  assert.deepEqual(questionTasks(notes).map((t) => t.props.id), ["T-7", "T-5", "T-3", "T-1"], "no owner: everyone's");
+  assert.deepEqual(questionTasks(notes, "Nobody"), []);
+  assert.equal(questionOf({ question: ["a", "b"] }), "a b");
+  assert.equal(questionOf({}), "");
+});
+
+test("the answer written on a task: after its Answer line or heading, up to the next heading", async () => {
+  const { taskAnswer } = await import("../src/vault.js");
+  const task = (answer) => `---\nid: T-1\nquestion: "Books only?"\n---\n\n# Reading list\n\n## ❓ Question\n\n- **(a) Books only**\n\n${answer}\n## Acceptance criteria\n\n- [ ] Done\n`;
+  assert.equal(taskAnswer(task("**Answer:**\n")), "");
+  assert.equal(taskAnswer(task("**Answer:** a, books only\n")), "a, books only");
+  assert.equal(taskAnswer(task("**Answer:**\n\nArticles too.\nAnd films.\n")), "Articles too.\nAnd films.");
+  assert.equal(taskAnswer(task("### ✍️ Answer\n\nb\n")), "b");
+  assert.equal(taskAnswer("---\nid: T-2\n---\n# No question\n"), "");
+});
+
+test("a task with an open question needs a decision until it's answered and cleared", async () => {
+  const { taskState } = await import("../src/vault.js");
+  const body = "\n# A task\n\n**As** a reader, **I want** a list, **so that** I pick.\n\n- [ ] It works\n";
+  const s = taskState(`---\nid: T-1\nquestion: "Books only, or articles too?"\n---\n${body}`);
+  assert.equal(s.state, "decision");
+  assert.equal(s.reason, "Waiting for an answer: Books only, or articles too?");
+  assert.equal(taskState(`---\nid: T-1\nquestion: ""\n---\n${body}`).state, "ready", "an empty question is no question");
+  assert.equal(taskState(`---\nid: T-1\nquestion:\n---\n${body}`).state, "ready");
+  assert.equal(taskState(`---\nid: T-1\nready: yes\nquestion: "Still?"\n---\n${body}`).state, "ready", "ready: yes wins");
+});
