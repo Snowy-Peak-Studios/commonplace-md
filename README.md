@@ -1,6 +1,6 @@
 <div align="center">
 
-# Commonplace.md
+<img src="docs/images/banner.png" alt="Commonplace.md: a pixel-art cabin at night, with a green armchair, a table with an open book and a cup of coffee, and a fire" width="100%">
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
@@ -731,9 +731,12 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
+| `docs/images/` | The pictures in this README |
 
 </details>
 
 ## License
 
 MIT: see [LICENSE](LICENSE). The third-party code in `vendor/` keeps its own licenses, listed in [vendor/LICENSES.md](vendor/LICENSES.md).
+
+The logo (`icons/`) and the banner (`docs/images/`) are not under the MIT license: they belong to Snowy Peak Studios, all rights reserved.
