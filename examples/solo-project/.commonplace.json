@@ -1,0 +1,9 @@
+{
+  "label": "Trail Timer",
+  "vault": true,
+  "home": "Home.md",
+  "notes": "Notes",
+  "template": "Templates/Note.md",
+  "inbox": "Notes/Inbox.md",
+  "tasks": {}
+}

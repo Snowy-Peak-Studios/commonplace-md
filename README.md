@@ -142,7 +142,7 @@ Notes only on this device: not on GitHub, not on your other devices. No account 
 
 1. Open the app. On the first page press **Add a vault on this device** (or later: **Settings › Notes repos › Add a vault on this device**).
 2. Pick one (Chrome and Edge on a computer; in Brave, first turn on `brave://flags/#file-system-access-api` and restart it, since Brave keeps opening folders off):
-   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or the example notes). The app makes a new folder with the vault's name inside that location.
+   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or one of the [example vaults](#pick-a-starter-vault)). The app makes a new folder with the vault's name inside that location.
    - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
 3. Either way the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder. The browser shows the app only the folder's name, not its whole path.
 
@@ -416,6 +416,21 @@ A GitHub Action fills them in by itself. After each push, it adds every commit w
 
 <details>
 <summary>The files it comes with, and what each one shows</summary>
+
+### Pick a starter vault
+
+Open Commonplace.md and choose **Add a vault on this device**. Under **Start with**, pick **An example vault** and choose the one closest to what you do. The app copies its notes into your new local vault. You can try, edit and keep it without a GitHub account.
+
+| If you want to… | Choose |
+| --- | --- |
+| Plan and build an app by yourself, with an optional AI agent | [Solo project · Trail Timer](examples/solo-project/Home.md) |
+| Hand work between a few people with their own inboxes | [Small team · Pocket Garden](examples/small-team/Home.md) |
+| Plan a demo across roles, epics and sprints | [Large team · Signal Station](examples/large-team/Home.md) |
+| Keep recipes, a meal plan and a pantry list | [Personal notes · Kitchen Notebook](examples/personal-notes/Home.md) |
+
+Use **Download a copy** for a ZIP of your local vault. You can also copy the contents of any starter folder, including its hidden `.commonplace.json`, to the root of a new GitHub repo. Keep the folder structure and change the sample names and dates to suit your project.
+
+### Explore the features
 
 `example-vault/` is a small vault to copy into your notes repo. Each file shows something the app supports.
 
@@ -728,6 +743,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `vendor/vendor.js` | Third-party code in one bundled file, made by `tools/vendor` |
 | `vendor/mermaid.min.js` | Mermaid, copied by `tools/vendor`; loaded only when a page has a diagram |
 | `example-vault/` | The example vault to copy into a notes repo |
+| `examples/` | Four starter vaults for solo projects, teams and personal notes |
 | `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |

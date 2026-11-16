@@ -1,0 +1,16 @@
+{
+  "label": "Signal Station",
+  "vault": true,
+  "home": "Home.md",
+  "notes": "Notes",
+  "template": "Templates/Note.md",
+  "inbox": "Notes/Team Inbox.md",
+  "inboxes": "Notes/Inboxes",
+  "tasks": {
+    "fields": {
+      "reviewer": {
+        "on": true
+      }
+    }
+  }
+}

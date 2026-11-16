@@ -2,7 +2,7 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
-import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
@@ -3733,7 +3733,10 @@ async function addLocalVault() {
     choice("local-keep", "browser", "In this browser", "No folder: lost if the browser's data is cleared, so download a copy now and then."));
   const start = h("div", { class: "choices" },
     choice("local-start", "empty", "Empty", "One note to start from.", true),
-    choice("local-start", "example", "The example notes", "A note for every feature, to try them out. Needs the connection this once."));
+    choice("local-start", "example", "An example vault", "Try a set of notes you can edit and keep. Needs the connection this once."));
+  const examplePicker = h("select", { class: "input", "aria-label": "Example vault" },
+    EXAMPLE_VAULTS.map((example) => h("option", { value: example.key }, example.label)));
+  const selectedExample = () => EXAMPLE_VAULTS.find((example) => example.key === examplePicker.value);
   const pickLocation = h("button", { class: "btn small", type: "button", onclick: async () => {
     const handle = await pickFolder();
     if (handle) { location = handle; sync(); }
@@ -3750,7 +3753,7 @@ async function addLocalVault() {
   const openedField = h("div", { class: "field" }, h("span", {}, "Folder"), h("div", { class: "pick-line" }, pickOpened, openedText),
     h("small", { class: "hint" }, "Nothing is added to it. An empty folder starts with no notes."));
   const keepField = h("div", { class: "field" }, h("span", {}, "Where it's kept"), keep);
-  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start);
+  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start, examplePicker);
   const fine = h("p", { class: "fine" }, folderOk
     ? "The browser shows the app only the folder's name, not its whole path on the disk."
     : noFolderText("a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy)."));
@@ -3762,6 +3765,8 @@ async function addLocalVault() {
     locationField.hidden = !inFolder;
     openedField.hidden = !opening;
     startField.hidden = opening;
+    examplePicker.hidden = value(start) !== "example";
+    if (!opening && !named) name.value = examplePicker.hidden ? "My notes" : selectedExample().name;
     fill(locationText, picked(location, "No location picked yet"));
     fill(openedText, picked(opened, "No folder picked yet"));
     fill(where, location ? `The vault is made as a new folder, ${cleanName(name.value) || "My notes"}, inside ${location.name}.` : "The vault is made as a new folder with its name, inside the location you pick.");
@@ -3770,6 +3775,8 @@ async function addLocalVault() {
   // A name typed while creating doesn't stick to a folder opened afterwards: the folder names it, unless typed again.
   mode.addEventListener("change", () => { named = false; sync(); });
   keep.addEventListener("change", sync);
+  start.addEventListener("change", sync);
+  examplePicker.addEventListener("change", sync);
   sync();
   return modal({
     title: "Add a vault on this device",
@@ -3782,40 +3789,49 @@ async function addLocalVault() {
         const opening = folderOk && value(mode) === "open";
         const kind = opening || (folderOk && value(keep) === "folder") ? "folder" : "browser";
         const label = name.value.trim() || opened?.name || "My notes";
-        const example = !opening && value(start) === "example";
+        const example = !opening && value(start) === "example" ? selectedExample() : null;
+        const place = location;
+        const folderName = !opening && kind === "folder" ? cleanName(label) : "";
+        if (!opening && kind === "folder" && (!place || !folderName)) {
+          problem.textContent = place ? "The name needs letters or numbers, to name its folder." : "Pick a location first: the vault's folder is made inside it.";
+          return false;
+        }
+        let starter;
+        if (example) {
+          problem.textContent = "Getting the example notes…";
+          try { starter = await fetchExample(example); }
+          catch (e) { problem.textContent = e.message; return false; }
+        }
         let handle = null;
         if (opening) {
           if (!opened) { problem.textContent = "Pick the vault's folder first."; return false; }
           handle = opened;
         } else if (kind === "folder") {
-          if (!location) { problem.textContent = "Pick a location first: the vault's folder is made inside it."; return false; }
-          const folderName = cleanName(label);
-          if (!folderName) { problem.textContent = "The name needs letters or numbers, to name its folder."; return false; }
           try {
             let there = null;
-            try { there = await location.getDirectoryHandle(folderName); } catch { /* not there yet: made below */ }
+            try { there = await place.getDirectoryHandle(folderName); } catch { /* not there yet: made below */ }
             if (there) {
               for await (const [entry] of there.entries()) {
-                if (!entry.startsWith(".")) {
-                  problem.textContent = `${location.name} already has a folder ${folderName} with files in it. Open it instead (Open a folder as a vault), or pick another name.`;
+                if (!entry.startsWith(".") || starter?.files.some((file) => file.path.split("/")[0] === entry)) {
+                  problem.textContent = `${place.name} already has a folder ${folderName} with files in it. Open it instead (Open a folder as a vault), or pick another name.`;
                   return false;
                 }
               }
             }
-            handle = there || await location.getDirectoryHandle(folderName, { create: true });
+            handle = there || await place.getDirectoryHandle(folderName, { create: true });
           } catch (e) {
             problem.textContent = `The folder couldn't be made in ${location.name}: ${e?.message || e}`;
             return false;
           }
         }
-        problem.textContent = example ? "Getting the example notes…" : "Setting it up…";
+        problem.textContent = "Setting it up…";
         try {
-          const seed = opening ? [] : example ? await fetchExample() : emptyVault(label, kind);
+          const seed = opening ? [] : starter?.files ?? emptyVault(label, kind);
           let id = `local-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vault"}`;
           while (app.repos.some((x) => x.id === id)) id += "-2";
           const r = {
-            id, local: kind, label, owner: "", repo: "", branch: "", folder: "",
-            home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...(example ? EXAMPLE_SETTINGS : {}),
+            id, local: kind, owner: "", repo: "", branch: "", folder: "",
+            home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...starter?.settings, label,
           };
           const seeded = await local.create(r, { handle, seed });
           if (opening || !seeded) Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
