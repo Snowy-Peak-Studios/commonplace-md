@@ -164,6 +164,23 @@ export function hasBlock(text, name) {
   return new RegExp(`^ {0,3}(?:\`{3,}|~{3,})[ \\t]*${name}[ \\t]*$`, "mi").test(toLf(text));
 }
 
+/** What is written inside each fenced block of this name (```name ... ```), in order: one string per block. */
+export function blockContents(text, name) {
+  const out = [];
+  let open = null, body = [];
+  for (const line of toLf(text).split("\n")) {
+    if (open) {
+      const f = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(line);
+      if (f && f[1][0] === open[0] && f[1].length >= open.length) { out.push(body.join("\n")); open = null; }
+      else body.push(line);
+      continue;
+    }
+    const f = new RegExp(`^ {0,3}(\`{3,}|~{3,})[ \t]*${name}[ \t]*$`, "i").exec(line);
+    if (f) { open = f[1]; body = []; }
+  }
+  return out;
+}
+
 /**
  * The note with these blocks written in, each an empty fence, under its first `# ` heading (else at the
  * top of its body). A note that already has any of them keeps what it has: it chose its own.
@@ -217,17 +234,37 @@ export function ownInboxPath(notes, login, fallback = "") {
 
 /**
  * A ```new-tasks block's content: its `owner:` line (whose items they are) and its items, one per other
- * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `).
+ * non-empty line, without a leading list mark or checkbox (`- `, `* `, `1. `, `- [ ] `). `lines` has each item's
+ * line in the content (from 0), so the box can change it.
  */
 export function newTasksBlock(src) {
-  const out = { owner: "", items: [] };
-  for (const line of String(src ?? "").split("\n")) {
+  const out = { owner: "", items: [], lines: [] };
+  String(src ?? "").split("\n").forEach((line, n) => {
     const m = line.match(/^\s*owner\s*:\s*(.*?)\s*$/i);
-    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); continue; }
-    const item = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
-    if (item) out.items.push(item);
-  }
+    if (m) { out.owner = m[1].replace(/^["']|["']$/g, "").trim(); return; }
+    const item = line.replace(ITEM_MARK, "").trim();
+    if (item) { out.items.push(item); out.lines.push(n); }
+  });
   return out;
+}
+
+/** A new-tasks item's leading list mark and checkbox, if it has them. */
+const ITEM_MARK = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/;
+
+/**
+ * The note with the ```new-tasks item on line `line` (from 0) changed to `now`, keeping its list mark and
+ * checkbox, or taken out when `now` is empty. Nothing changes unless that line still holds the item `was`
+ * (the note may have changed since the box was drawn).
+ */
+export function editNewTask(text, line, was, now) {
+  const lines = toLf(text).split("\n");
+  if (!(line >= 0 && line < lines.length)) return text;
+  const mark = lines[line].match(ITEM_MARK)?.[0] ?? "";
+  if (lines[line].slice(mark.length).trim() !== String(was ?? "").trim()) return text;
+  const said = String(now ?? "").replace(/\s*\n\s*/g, " ").trim();
+  if (said) lines[line] = mark + said;
+  else lines.splice(line, 1);
+  return lines.join("\n");
 }
 
 /**
@@ -254,10 +291,54 @@ export function addNewTask(text, close, item) {
  */
 export const MENTION = /(^|[^\p{L}\p{N}.+\-_/@`])@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/gu;
 
+/** A reply line: it starts with `@login`, after spaces, `>`, a list mark or a checkbox. Group 1 is the login. */
+const REPLY = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?@([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})(?![\p{L}\p{N}_-])/u;
+
+/** The property of an inbox that keeps the mentions its person marked as seen: one key per mention. */
+export const SEEN_MENTIONS = "seen_mentions";
+
+/** The seen list as written (a list, or one key), as is: a note's path can have commas and capitals. */
+const seenList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).trim()).filter(Boolean);
+
 /**
- * Every mention in a note: [{ login, line, heading, text }], `line` counting from 1 in the whole file,
+ * A mention's key for the seen list: the note's path, `#`, and a short hash of the login and the line's words,
+ * so a mention stays seen while its line stays the same, and shows again when the line is changed.
+ */
+export function mentionKey(path, m) {
+  let h = 0x811c9dc5;
+  for (const ch of `${String(m.login).toLowerCase()}\n${m.text}`) {
+    h ^= ch.codePointAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${path}#${h.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * A person's mentions (each with its `path`) sorted for their inbox: `open` (not answered, not seen), `seen`
+ * (its key is in `seen`, the inbox's seen list) and `answered` (a reply is right under it), each in the order given.
+ */
+export function sortMentions(found, seen = []) {
+  const known = new Set(seenList(seen));
+  const out = { open: [], seen: [], answered: [] };
+  for (const m of found) (m.answered ? out.answered : known.has(mentionKey(m.path, m)) ? out.seen : out.open).push(m);
+  return out;
+}
+
+/**
+ * The inbox's new seen list: what it had plus the mentions in `add`, keeping only the keys of mentions in
+ * `found` that aren't answered (the others are gone, or cleared by a reply), so the list doesn't grow forever.
+ */
+export function withSeenMentions(seen, add, found) {
+  const live = new Set(found.filter((m) => !m.answered).map((m) => mentionKey(m.path, m)));
+  const keys = [...seenList(seen), ...add.map((m) => mentionKey(m.path, m))];
+  return [...new Set(keys)].filter((k) => live.has(k));
+}
+
+/**
+ * Every mention in a note: [{ login, line, heading, text, answered }], `line` counting from 1 in the whole file,
  * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
- * fenced code and inline code don't count. One per login and line.
+ * fenced code and inline code don't count. One per login and line. `answered` when the very next line is a
+ * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login.
  */
 export function findMentions(text) {
   const src = toLf(text);
@@ -281,7 +362,9 @@ export function findMentions(text) {
       if (seen.has(m[2].toLowerCase())) continue;
       seen.add(m[2].toLowerCase());
       const said = line.trim();
-      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said });
+      const reply = REPLY.exec(lines[i + 1] ?? "");
+      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
+        answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });
     }
   });
   return out;
@@ -954,6 +1037,20 @@ export function sprints(notes, today) {
   const now = (s) => s.start && s.start <= today && (!s.end || s.end >= today);
   const next = list.filter((s) => s.start > today).at(-1);
   return list.map((s) => ({ ...s, when: now(s) ? "now" : s === next ? "next" : s.start > today ? "later" : "past" }));
+}
+
+/**
+ * The sprint a ```sprint block's `sprint:` line names, from `sprints()`: `current` (or `now`) is the one going on
+ * today, `next` the next one to start, else a sprint's name or `[[link]]` (any case; `resolve` turns a link into
+ * a path, when given). Null when there's none.
+ */
+export function pickSprint(list, said, resolve = null) {
+  const s = linkName(said).toLowerCase();
+  if (!s) return null;
+  if (s === "current" || s === "now") return list.find((x) => x.when === "now") ?? null;
+  if (s === "next") return list.find((x) => x.when === "next") ?? null;
+  const path = resolve?.(linkName(said));
+  return list.find((x) => x.path === path) ?? list.find((x) => x.name.toLowerCase() === s) ?? null;
 }
 
 /** The sprint picker's order: the current sprint, the next one, then the rest, the latest first. */

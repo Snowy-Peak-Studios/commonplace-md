@@ -4,7 +4,30 @@ parent: "[[Home]]"
 
 # How To
 
-Short steps for the things people do in Commonplace.md, one page each. They read the same on GitHub and in the app: the links between them are plain Markdown links, which both follow.
+> [!TIP]
+> **tl;dr:** Pick your way below, then follow the short steps for each thing you do.
+
+*Don't rely on your agent's memory: make your own vault with all the answers.* These pages show how, one short page for each thing you do in **Commonplace.md**. They read the same on GitHub and in the app.
+
+## Which way fits you
+
+The app is the same for everyone. What you pick is where your vault lives:
+
+```mermaid
+flowchart LR
+    q1{"Just you,<br/>on one device?"}
+    q1 -- Yes --> local["💻 A local vault<br/>on your device<br/>(coming soon)"]:::local
+    q1 -- "No: a team,<br/>or several devices" --> q2{"Does the project<br/>have its own repo?"}
+    q2 -- "Yes" --> project["📁 In the<br/>project's repo"]:::repo
+    q2 -- "No, or keep<br/>them apart" --> own["🔒 In a repo<br/>of its own"]:::repo
+    classDef local fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef repo fill:#fef3c7,stroke:#d97706,color:#78350f
+```
+
+- 🟩 **Just you, on one device**: a local vault, with no GitHub account, only the app (*coming soon*; until then, a repo of its own).
+- 🟨 **A team, or several devices**: the vault in a GitHub repo, **the project's own** (next to the code) or **one of its own** (private, even for a public project).
+
+More on each, with what it costs: [the README](https://github.com/Snowy-Peak-Studios/commonplace-md#which-way-fits-you).
 
 ## Getting started
 

@@ -18,6 +18,7 @@ areas:
 order: priority-newest
 sprint: current-then-next
 owner: Your name
+fields: state, priority, area
 ```
 
 ## Needs attention

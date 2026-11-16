@@ -1,16 +1,60 @@
-# Commonplace.md
+<div align="center">
+
+<img src="docs/images/banner.png" alt="Commonplace.md: a pixel-art cabin at night, with a green armchair, a table with an open book and a cup of coffee, and a fire" width="100%">
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
+*Don't rely on your agent's memory: make your own vault with all the answers.*
+
+</div>
+
 ## What it is
 
-A tool for your everyday. The big work tools cost a lot and do so much that most people on a team just don't use them. Commonplace.md is the simple alternative: a wiki, notes and a task board that the whole team actually opens.
+**Commonplace.md** is a wiki, notes and a task board that the whole team actually opens: the simple alternative to big work tools that cost a lot and do so much that most people never use them. No more paying for Notion, Jira or Azure DevOps.
 
-It's made for a team and AI together. Your notes are plain files, kept local and easy to reach. You set up your project's rules in the vault: AI agents follow their own rules, people follow theirs, and both work on the same pages. ([How it works with agents](#working-with-ai-agents-optional))
+It's made for people and AI agents together: you set up your project's rules in the vault, and both work on the same pages ([how](#working-with-ai-agents-optional)).
 
-No more paying for Notion, Jira or Azure DevOps. Every page is a plain Markdown file in a repo you own, read and edited in the browser or on a phone, and every save is a commit, so nothing is ever lost. Keep the repo private and only you and the people you invite can see it.
+Every page is a plain Markdown file in a GitHub repo you own, and every save is a commit, so nothing is ever lost. There's no server and no account of ours: **Commonplace.md** is a web page that talks straight to GitHub with a token you make.
 
-Commonplace.md is a static web page (served by GitHub Pages) that talks straight to the GitHub API with a token you make. There's no server and no account of ours: your notes stay in your repo, and the app's repo holds none. The notes are plain Markdown, so the same folder opens in any Markdown editor too.
+## How to use it
+
+- 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
+- 🤖 **Your agents' rules and reports** live in the project, as notes you own.
+- ✅ **A task board** for you and your agent, or a whole team.
+- 🛠️ **Yours to change**: the rules, skills, task fields and code. Turning parts of the app on and off: soon ([roadmap](ROADMAP.md)).
+- 🆓 **Free, and only yours**: no account of ours, no payments. You need only GitHub and a token you make.
+
+### How I use it
+
+```mermaid
+flowchart LR
+    write["✍️ I write my thoughts<br/>in my inbox"]:::me --> sort["🤖 My agent turns<br/>them into tasks"]:::agent
+    sort --> claim["👆 I claim the ones<br/>I want done now"]:::me
+    claim --> work["🤖 My agent<br/>works on them"]:::agent
+    work -. "meanwhile: new thoughts, repeat" .-> write
+    classDef me fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef agent fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+```
+
+<sub>🟦 you &nbsp; 🟪 your agent</sub>
+
+### Not sure it's for you?
+
+Ask your AI agent whether it would help you:
+
+<details>
+<summary><b>🤖 Ask your agent</b>: copy this prompt into any AI agent</summary>
+
+```text
+Read the README of Commonplace.md: https://github.com/Snowy-Peak-Studios/commonplace-md
+It's a free notes app: a wiki, notes and a task board, kept as Markdown files in my own GitHub repo,
+made to be used by people and AI agents together.
+Ask me a few short questions about how I work, what I keep notes on and which AI agents I use.
+Then tell me plainly whether it would help me, what I'd use it for, and what it would cost me in time.
+Don't set anything up yet.
+```
+
+</details>
 
 ## Why
 
@@ -27,6 +71,8 @@ I was frustrated with the work tools I had to use, so I started making this for 
 <details>
 <summary>Everything it does</summary>
 
+- **Local vaults:** a vault only on this device, with no GitHub at all: a new folder in a place you pick, or a folder of notes you already have, opened as it is (Chrome and Edge: real `.md` files your agent can change too), or kept in the browser elsewhere, with **Download a copy** as a zip ([more](#a-local-vault)).
+- **Offline:** every GitHub vault is kept on the device too, so it opens with no connection (a line above the note says it's the copy). The copy is kept in the browser, or (Chrome and Edge on a computer) in a folder you pick, like the repo's clone, so other tools and agents read the same files and each commit updates them ([more](#a-copy-on-this-device)).
 - **Up to date:** a Reload button beside Save, and a quiet banner when GitHub has newer notes than the ones you have open (checked when you come back to the tab and every few minutes, cheaply).
 - **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), an Up button to the note's `parent` page, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
 - **Markdown:**
@@ -36,18 +82,18 @@ I was frustrated with the work tools I had to use, so I started making this for 
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).
-  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field; your agent finds every one in the vault and turns them into tasks.
+  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field, and each item can be changed or taken out right in the box; your agent finds every one in the vault and turns them into tasks.
   - A ` ```needs-attention ` block shows what waits on you: the tasks with a question for you, and the places that mention you, in one box or two.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
   - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
-- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
+- **Base views:** `.base` files show as tables, embedded with `![[X.base]]` or opened from the tree. A ` ```base ` block writes a view right in the page, with what a `.base` file holds, and shows the same table. Their views are tabs, with filters, sorting, groups and formulas (with `if()`, `today()` and `date()`); "Last modified" is the date of the note's last commit.
 - **CSV and TSV:** opens as an editable table (add or delete rows and columns) or as text, and saves back as it was: quotes, line breaks in cells, `,` `;` or tab separators, Excel's byte order mark and `sep=` line. A big table shows 500 rows at a time.
 - **Other files:** JSON, YAML, TOML, HTML, CSS, JavaScript, Python, shell and other code open as text with colours, any other text file as plain text. PDFs show in the page on a computer, with **Open in a new tab** and **Download** everywhere. Anything else (audio, video, Word, Excel, archives) offers a **Download**.
 - **Saving:** one commit per save. If the file changed on GitHub in the meantime, GitHub refuses the save and the app shows both versions side by side, so nothing is overwritten.
 - **Drafts:** unsaved changes stay in the browser and are offered back after the page closes. Leaving a note with unsaved changes asks first: **Save**, **Keep as a draft** or **Discard** (or **Stay**).
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
-- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width. It needs a connection.
+- **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](#5-install-it-as-an-app-optional)). Works at phone width, and with no connection: notes saved offline go to GitHub when it's back.
 - **Look:** light and dark, following the device.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
@@ -56,7 +102,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Relations:** a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
 - **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](#task-fields)).
 - **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
-- **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button.
+- **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button. A dot on the button says something there waits on you.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
 
@@ -66,7 +112,58 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 ## Quick start
 
-**Looking for how to do one thing?** The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each: connect, add a vault, invite someone, tasks, sprints, the inbox, saving, the phone. They're in the example vault too, so they open in the app.
+### Which way fits you
+
+The app is the same for everyone. What you pick is where your vault lives:
+
+```mermaid
+flowchart LR
+    q1{"Just you,<br/>on one device?"}
+    q1 -- Yes --> local["💻 A local vault<br/>on your device"]:::local
+    q1 -- "No: a team,<br/>or several devices" --> q2{"Does the project<br/>have its own repo?"}
+    q2 -- "Yes" --> project["📁 In the<br/>project's repo"]:::repo
+    q2 -- "No, or keep<br/>them apart" --> own["🔒 In a repo<br/>of its own"]:::repo
+    classDef local fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef repo fill:#fef3c7,stroke:#d97706,color:#78350f
+```
+
+| Way | Good for | But |
+| --- | --- | --- |
+| 🟩 **A local vault** ([steps](#a-local-vault)) | No GitHub account, no token: only the app. | Only on that one device. In Firefox, Safari and on phones it's kept in the browser, and lost if the browser's data is cleared. |
+| 🟨 **In the project's repo** ([steps](#2-make-a-notes-repo)) | Notes next to the code; your agent sees both. | Whoever sees the code sees the notes. |
+| 🟨 **In a repo of its own** ([steps](#1-open-the-app)) | Private notes, even for a public project. | One more repo to make. |
+
+> [!NOTE]
+> **No GitHub account?** A [local vault](#a-local-vault) doesn't need one; the other ways do. **Your own copy of the app?** Not needed: you can [host one](#1-open-the-app), but it won't update by itself.
+
+### A local vault
+
+Notes only on this device: not on GitHub, not on your other devices. No account and no token.
+
+1. Open the app. On the first page press **Add a vault on this device** (or later: **Settings › Notes repos › Add a vault on this device**).
+2. Pick one (Chrome and Edge on a computer; in Brave, first turn on `brave://flags/#file-system-access-api` and restart it, since Brave keeps opening folders off):
+   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or the example notes). The app makes a new folder with the vault's name inside that location.
+   - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
+3. Either way the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder. The browser shows the app only the folder's name, not its whole path.
+
+A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari, on phones, and in Brave until it's turned on, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
+
+**Save** saves on the device; nothing is sent anywhere. A local vault always says so, in the list of vaults (*on this device*) and in a line above the note.
+
+### A copy on this device
+
+Every vault on GitHub is also kept on the device you open it on, so it opens with no connection, on a train or when GitHub is down. A line above the note then says you're reading the copy, and from when. GitHub keeps the main copy.
+
+- **Where:** in the browser by default. In Chrome and Edge on a computer, the repo's card in **Settings** has **Keep it in a folder**: pick the repo's own folder (its clone, the one with `.git`) or an empty one. The notes are then real files that other Markdown editors and your agent read, and each commit (yours or anyone's) updates them when the vault opens or reloads.
+- **Changed on the disk:** a file changed there by another tool shows as it is, marked **Not on GitHub**, and is never overwritten by GitHub's version. It's uploaded only when you press **Upload** (Save, on that note) or **Upload** in **Settings › This device**, which lists everything that waits.
+- **A clone:** the app commits through GitHub, so your clone's git sees the app's saves as changed files until it pulls. Pull with `git pull --rebase --autostash`; a plain `git pull` can stop.
+- **Saving offline:** Save keeps the note in the copy, marked **Waiting to upload** (a dot in the file list, and a count above the note). When the connection is back (or you press **Upload now**), each waiting save goes to GitHub as its own commit, the oldest first. If the note changed on GitHub meanwhile, GitHub refuses it and the app shows both versions to pick or merge; if it was deleted there, it offers **Save it as a new note**. Nothing waiting is dropped, but it's only on this device until it's uploaded.
+- **Only what's needed:** each open asks GitHub for the list of files (one request) and downloads only the ones that changed. Images and PDFs are kept once you open them.
+
+### Set it up with GitHub
+
+> [!TIP]
+> Not sure yet? [Ask your agent first](#not-sure-its-for-you). Looking for one thing? The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each, and they open in the app too.
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
 
@@ -115,7 +212,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 </details>
 
-### 1. Open the app
+#### 1. Open the app
 
 Either:
 
@@ -129,7 +226,7 @@ Either:
 
    To serve the version in development too, fork with every branch (untick *Copy the main branch only*), and pick Source *GitHub Actions* in step 2 instead: `.github/workflows/pages.yml` then serves `main` at the address and `dev` under `dev/`, each time either branch moves. In **Settings › Environments › github-pages**, let the `dev` branch deploy too.
 
-### 2. Make a notes repo
+#### 2. Make a notes repo
 
 Make a new repo on GitHub for your notes ([github.com/new](https://github.com/new)), or use one you already have, such as a project's own repo (then put the vault in a folder, see below). **Private is fine**, and usually what you want. Then fill it with the example vault, so you start with something that shows every feature.
 
@@ -155,7 +252,7 @@ This puts the vault at the top of the repo. To keep it in a folder instead (say 
 
 The vault comes with `AGENTS.md` and `CLAUDE.md`, rules for AI agents, and their skills in `.agents/` and `.claude/`. Keep them if you work with agents (see [Working with AI agents](#working-with-ai-agents-optional)); otherwise delete them.
 
-### 3. Make a token
+#### 3. Make a token
 
 Make a fine-grained token at [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new):
 
@@ -169,7 +266,7 @@ Make one token per device, so you can revoke one without the others.
 
 **Notes with more than one owner** (your own account and an organization, say): a fine-grained token opens one owner's repos, so the device keeps one per owner. The token you connect with opens the rest; for each other owner, **Settings › Tokens for other owners** has **Make it on GitHub**, a link to GitHub's form with the owner, *Contents: Read and write* and a year already filled in: pick the repos, press **Generate token**, and paste it back. An invite link (or a repo the device's token can't open) asks for that owner's token by itself, with the same link. Each repo then goes with its owner's token.
 
-### 4. Connect and add the repo
+#### 4. Connect and add the repo
 
 1. Open the app, paste the token and press **Connect**.
 2. The app takes you to **Settings › Notes repos** with a new repo to fill in. **Owner** and **Repo** are enough to start; for the example vault, also set:
@@ -183,7 +280,7 @@ Make one token per device, so you can revoke one without the others.
 
 That's it: pick the repo at the top of the file list and start writing.
 
-### 5. Install it as an app (optional)
+#### 5. Install it as an app (optional)
 
 Commonplace.md can be installed like any other app: it gets its own window and icon, and opens straight to your notes.
 
@@ -228,6 +325,8 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 | New notes folder | `notes` | New note asks only for a title and puts the note here. Empty: you pick the name, kind (note or CSV) and folder each time. | `Notes` |
 | Note template | `template` | A note that new Markdown notes start from. `{{title}}` becomes the title and `{{date}}` today's date (YYYY-MM-DD). Empty, or the file isn't there: a new note starts with `# Title`. | `Templates/Note.md` |
 | Vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
+
+A local vault has only Name shown and the fields from Start page down: it has no owner, repo, branch or folder, and no invite link.
 
 Settings live in this browser's storage, so each device has its own. An invite link copies them to another device, and so does a repo's `.commonplace.json` (see [Sharing](#sharing)).
 
@@ -275,7 +374,9 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 - The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
 - A new task gets the three task blocks under its title, unless its template already has any of them; a new sprint gets ` ```sprint `.
-- In other Markdown editors, and on a page that isn't a task or a sprint, a block shows as a short code block.
+- **Another task's box, on any page:** a `task:` line in a ` ```subtasks `, ` ```relations ` or ` ```commits ` block (the task's ID, name or `[[link]]`) shows that task's box there, naming it; away from the task's own page it only reads. The example vault's Task Board shows its epic's subtasks this way.
+- **A sprint's box, on any page:** a `sprint:` line in a ` ```sprint ` block shows that sprint's box there, naming it: `current` (the one going on today), `next`, or a sprint's name or `[[link]]`. When there's none it says so; **Start the next sprint** stays on the sprint's own page. The example vault's Home shows the current sprint this way.
+- In other Markdown editors, and on a page that isn't a task or a sprint (without a `task:` line), a block shows as a short code block.
 
 **Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
 
@@ -371,6 +472,9 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
 - plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
+- ` ```base ` blocks: a base view written in the page
+- a task's ` ```subtasks `, ` ```relations ` and ` ```commits ` blocks on any page, with `task:` and the task's ID, name or link
+- a ` ```sprint ` block on any page, with `sprint: current`, `next`, or a sprint's name or link
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths
@@ -390,7 +494,6 @@ What it doesn't do:
 - base views other than tables (the app says so, and shows the base's other views)
 - other template variables (`{{time}}`, custom date formats); they stay as written
 - editing images or other binary files
-- working offline
 
 Folders and files starting with a dot (like `.trash/`) are left out of the tree.
 
@@ -460,9 +563,10 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   order: priority-newest
   sprint: current-only
   owner: Your Name
+  fields: parent, state, priority, area
   ```
 
-  `range` is how many (up to 20; three when the block doesn't say, and the box says so; older blocks' `count` still works). `areas` keeps only those areas (empty or left out: every area). `order` is `priority-newest` (High, Medium, Low, then none; the newest first within each: also when left out, and the box says so), `priority-oldest`, `newest` or `oldest` (by the number in the task's `id`, priority not counted); it sorts the waiting list too. `sprint` is `current-only`, `current-then-next` or `off` (every task, also when left out). `owner` is whom **Claim** claims for: it sets the task's `status` to *In Progress* and its `assignee` to the owner, in one commit; with no `owner`, nothing can be claimed. The box's head says every option in use. A page without the block, an inbox too, has no box. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints** (and `sprint: current-then-next`), the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit. With sprints, **Not now** becomes **Push to the next sprint**: it moves the task into the next sprint (one commit of its sprint line); when there's no sprint after the task's yet, it says so and offers the waiting list instead. With `sprint: current-only`, it never reaches into the next sprint, and says so when no sprint is running. **On any page** (your Home, a project page, a sprint) the same block shows the same box. Other Markdown editors show the block as plain code.
+  `range` is how many (up to 20; three when the block doesn't say, and the box says so; older blocks' `count` still works). `areas` keeps only those areas (empty or left out: every area). `order` is `priority-newest` (High, Medium, Low, then none; the newest first within each: also when left out, and the box says so), `priority-oldest`, `newest` or `oldest` (by the number in the task's `id`, priority not counted); it sorts the waiting list too. `sprint` is `current-only`, `current-then-next` or `off` (every task, also when left out). `owner` is whom **Claim** claims for: it sets the task's `status` to *In Progress* and its `assignee` to the owner, in one commit; with no `owner`, nothing can be claimed. `fields` is what each task shows besides its name and **Claim** (always there), in that order: `parent` (a link to the task it's part of, from `part_of` or the property your Task fields keep it in), `state` (whether it can be started now), `priority`, `area`, or any other property by its name; left out, `state, priority, area`, and the box says so; empty, the names only. The box's head says every option in use. A page without the block, an inbox too, has no box. Tasks claimed by the owner stay in the box, above the free ones, until they're done: *Claimed* while they wait, or *Claude is on it* once an agent has taken one (its `assignee` is then `<owner> (<agent>)`). With the example vault's agent rules, a task you claim this way is the first one your agent starts. Each task's **priority** and **area** can be changed right there, from a small picker: one commit that changes only that line, and the box sorts again. **Not now** puts a task on the waiting list (`status: Waiting`): it stops being suggested, shows in a folded *Waiting* list under the box, and **Bring back** sets it to *To Do* again. Each task also shows whether it can be started now: *Ready*, *Needs a decision* (an open criterion about deciding, or "TBD") or *Placeholder* (not written out yet); its tooltip, or a tap on a phone, says why. A `ready` property (`yes`, `decision`, `placeholder`) settles it by hand. **With sprints** (and `sprint: current-then-next`), the free tasks are the current sprint's, and the box names the sprint; when it has none left, a few from the next sprint show, marked *Next sprint*, and **Claim** on one of those also moves it into the current sprint, in the same commit. With sprints, **Not now** becomes **Push to the next sprint**: it moves the task into the next sprint (one commit of its sprint line); when there's no sprint after the task's yet, it says so and offers the waiting list instead. With `sprint: current-only`, it never reaches into the next sprint, and says so when no sprint is running. **On any page** (your Home, a project page, a sprint) the same block shows the same box. Other Markdown editors show the block as plain code.
 - **New tasks:** a ` ```new-tasks ` block (in your inbox's *New tasks*, or on any page) holds ideas that should become tasks, one per line (a leading `- ` or `- [ ] ` is fine), and an `owner:` line saying whose they are:
 
   ```new-tasks
@@ -480,7 +584,8 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   login: your-github-login
   ```
 
-  `show` is `questions, mentions` for one box, *Needs your attention*, with both (also when left out, and the box says so), or just `questions` (*Questions for you*) or `mentions` (*Mentions of you*): two blocks make two separate boxes. **Questions** are the tasks with an open question (a `question` property with the question in a few words) for `owner`: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them (`assignee`). Each links to its task, where the question's options are, and shows *Waiting for your answer* or *Answered, waiting for the agent* (something is written under the task's `**Answer:**` line); those waiting come first. Such a task shows *Needs a decision* among the top tasks, until the agent acts on the answer and empties `question`. **Mentions** are every place in the vault that mentions `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first, after the questions. The box reads every note once and keeps what it found per note version on the device, so later looks only read what changed. Nothing is written into the inbox: a mention stays listed while the note says it. Without `owner` or `login`, the box says which is missing.
+  `show` is `questions, mentions` for one box, *Needs your attention*, with both (also when left out, and the box says so), or just `questions` (*Questions for you*) or `mentions` (*Mentions of you*): two blocks make two separate boxes. **Questions** are the tasks with an open question (a `question` property with the question in a few words) for `owner`: the tasks they asked for (`requested_by`), review (`reviewer`) or whose agent has them (`assignee`). Each links to its task, where the question's options are, and shows *Waiting for your answer* or *Answered, waiting for the agent* (something is written under the task's `**Answer:**` line); those waiting come first. Such a task shows *Needs a decision* among the top tasks, until the agent acts on the answer and empties `question`. **Mentions** are every place in the vault that mentions `login`: the note and the heading above, as a link to that place, the line's words, and when the note last changed, newest first, after the questions. The box reads every note once and keeps what it found per note version on the device, so later looks only read what changed. A mention leaves the box when someone replies right under it: the very next line starts with `@` and another person's login. **Seen** (or **All seen**) folds it under *Seen*: it's kept in your inbox's `seen_mentions` property, one commit, so every device agrees, and it shows again if its line changes. Without `owner` or `login`, the box says which is missing.
+- **The Inbox dot:** when your own inbox's ` ```needs-attention ` block has a question waiting for your answer, or a mention with no reply that isn't seen, the Inbox button (and the Inbox row in the sidebar) shows a red dot. It's checked in the background with the box's own look-ups, so it reads nothing new after the first time.
 
 </details>
 
@@ -544,7 +649,9 @@ task notes. Then tell me which task you'd pick next and why, and wait for my go-
 
 - The tokens are kept in this browser's storage (`localStorage`) on this device, and are sent only to `api.github.com`; each repo's requests carry its owner's token. Anyone who can use this browser profile could read it, so revoke it on GitHub if a device is lost.
 - Make tokens for the notes repos only (*Only select repositories*), with *Contents* as the only permission.
-- The page's Content Security Policy lets it connect to `api.github.com` only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
+- A local vault's notes stay on the device: in the folder you picked, or in this browser's storage (IndexedDB). They're never sent anywhere.
+- A GitHub vault's copy on the device is kept the same way (IndexedDB, or the folder you picked), and only ever filled from GitHub with the same token. **Settings › This device** shows how much each takes, and drops it.
+- The page's Content Security Policy lets it connect to `api.github.com` and to the app's own site (for the example notes a new local vault can start with) only. There's no server, no analytics and no account of ours. (An image a note links from the web loads from that site. A PDF is shown from a copy in the page's own memory, never from another site.)
 - The app's repo holds code only. Your notes are in your repo, private if you made it private; GitHub Pages serves only the app.
 - Unsaved drafts stay in this browser until saved or discarded (**Settings › This device**). The released version and the one in development share this browser's storage (the same token, settings and drafts), and each keeps its own offline copy of the app.
 
@@ -608,6 +715,8 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
 | `src/github.js` | The GitHub REST and GraphQL calls |
+| `src/local.js` | Local vaults: the same calls for a folder on the disk or the browser's storage, and a zip of a vault |
+| `src/mirror.js` | Each GitHub vault's copy on the device: kept in step with GitHub, opened from it with no connection |
 | `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it, a task's commits |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
@@ -622,9 +731,12 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
 | `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
+| `docs/images/` | The pictures in this README |
 
 </details>
 
 ## License
 
 MIT: see [LICENSE](LICENSE). The third-party code in `vendor/` keeps its own licenses, listed in [vendor/LICENSES.md](vendor/LICENSES.md).
+
+The logo (`icons/`) and the banner (`docs/images/`) are not under the MIT license: they belong to Snowy Peak Studios, all rights reserved.

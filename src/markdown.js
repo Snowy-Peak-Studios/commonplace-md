@@ -117,6 +117,11 @@ function headingRule(state) {
 
 export function createMarkdown() {
   const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
+  // `.md` is a web domain (Moldova's), so a note's file name like `art.md#heading` would become a link to
+  // http://art.md/. A bare address (no `http://`, no `www.`) whose host ends in `.md` stays text.
+  const match = md.linkify.match.bind(md.linkify);
+  md.linkify.match = (text) => (match(text) || [])
+    .filter((m) => m.schema || /^www\./i.test(m.raw) || !/\.md$/i.test(m.raw.split(/[/?#:]/)[0]));
   const esc = md.utils.escapeHtml;
   md.inline.ruler.before("link", "wikilink", wikilinkRule);
   md.core.ruler.after("block", "callouts", calloutRule);
@@ -172,20 +177,23 @@ export function createMarkdown() {
     const token = tokens[idx];
     const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
     if (lang === "top-tasks") {
-      const { areas, count, countSet, order, orderSet, sprint, owner } = topTasksOptions(token.content);
+      const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
         + `${countSet ? "" : ' data-count-default="1"'} data-order="${order}"${orderSet ? "" : ' data-order-default="1"'}`
-        + ` data-sprint="${sprint}" data-owner="${esc(owner)}">`
+        + ` data-sprint="${sprint}" data-owner="${esc(owner)}" data-fields="${esc(fields.join(","))}"${fieldsSet ? "" : ' data-fields-default="1"'}>`
         + `<pre><code>${esc(token.content)}</code></pre></div>\n`;
     }
-    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field. `data-close`
-    // is its closing fence's line, where Add puts a new item.
+    // A ```new-tasks block: a box with its items, rendered like any line; the app adds the Add field, and Edit
+    // and Remove on each item. `data-close` is its closing fence's line, where Add puts a new item; each item
+    // has its own line and text (`data-line`, `data-item`).
     if (lang === "new-tasks") {
-      const { owner, items } = newTasksBlock(token.content);
+      const { owner, items, lines } = newTasksBlock(token.content);
       const close = token.map ? token.map[1] - 1 : -1;
       const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
         : "No owner: line, so no agent sorts these";
-      const list = items.length ? items.map((item) => `<li>${md.renderInline(item, env)}</li>`).join("") : '<li class="muted">Nothing yet.</li>';
+      const at = (i) => (token.map ? ` data-line="${token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
+      const list = items.length ? items.map((item, i) => `<li${at(i)}><span class="newtasks-text">${md.renderInline(item, env)}</span></li>`).join("")
+        : '<li class="muted">Nothing yet.</li>';
       return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
         + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
         + `<ul class="newtasks-list">${list}</ul></section>\n`;
@@ -196,9 +204,14 @@ export function createMarkdown() {
       return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
         + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
+    // A ```base block: a base view written in the page (what a .base file holds); the app draws its table there.
+    // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
+    if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
+    // A `task:` line shows another task's box, on any page.
     if (APP_BLOCKS.includes(lang)) {
-      return `<div class="app-block" data-block="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+      const { task, sprint } = appBlockOptions(token.content);
+      return `<div class="app-block" data-block="${lang}"${task ? ` data-task="${esc(task)}"` : ""}${sprint ? ` data-sprint="${esc(sprint)}"` : ""}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
@@ -221,20 +234,33 @@ export const TOP_TASKS_SPRINTS = ["current-only", "current-then-next", "off"];
 const SPRINT_WORDS = { current: "current-only", "current-and-next": "current-then-next", next: "current-then-next", none: "off", no: "off", all: "off" };
 
 /**
+ * What each task in a top tasks box shows besides its name and Claim, when the block has no `fields:` line:
+ * whether it can be started now, its priority and its area. `state` and `parent` are the box's own; any other
+ * name is a task property (or a Task field, kept in the property the project's setup names).
+ */
+export const TOP_TASKS_FIELDS = ["state", "priority", "area"];
+
+/**
  * The options of a ```top-tasks block, one per line, all written in the block, nothing taken from elsewhere:
  * `range: 3` (how many tasks; `count` in older blocks), `areas: Features, Docs` (or `[Features, Docs]`),
- * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`) and
- * `owner: Your Name` (whom Claim claims for). Other lines are ignored. A missing or odd range is three, and a
- * missing or odd order `priority-newest`, with `countSet` or `orderSet` false so the box can say so.
+ * `order: priority-newest` (see `TASK_ORDERS`), `sprint: current-only` (see `TOP_TASKS_SPRINTS`),
+ * `owner: Your Name` (whom Claim claims for) and `fields: parent, state, priority, area` (what each task shows
+ * besides its name and Claim, in that order; lower case, each once; an empty line shows nothing more). Other lines
+ * are ignored. A missing or odd range is three, a missing or odd order `priority-newest`, and missing fields
+ * `TOP_TASKS_FIELDS`, with `countSet`, `orderSet` or `fieldsSet` false so the box can say so.
  */
 export function topTasksOptions(src) {
-  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "" };
+  const out = { areas: [], count: TOP_TASKS_COUNT, countSet: false, order: "priority-newest", orderSet: false, sprint: "off", owner: "",
+    fields: [...TOP_TASKS_FIELDS], fieldsSet: false };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(areas|count|range|order|sprint|owner)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(areas|count|range|order|sprint|owner|fields)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
     const key = m[1].toLowerCase();
-    if (key === "areas") {
+    if (key === "fields") {
+      const names = m[2].replace(/^\[|\]$/g, "").split(",").map((f) => unquote(f).toLowerCase()).filter((f) => f && f !== "name" && f !== "claim");
+      Object.assign(out, { fields: [...new Set(names)], fieldsSet: true });
+    } else if (key === "areas") {
       out.areas = m[2].replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
     } else if (key === "sprint") {
       const v = unquote(m[2]).toLowerCase().replace(/[\s_]+/g, "-");
@@ -248,6 +274,20 @@ export function topTasksOptions(src) {
       out.count = Math.min(TOP_TASKS_MAX, Math.max(1, Number(m[2])));
       out.countSet = true;
     }
+  }
+  return out;
+}
+
+/**
+ * The options of a task's or a sprint's block (```subtasks, ```relations, ```commits, ```sprint), one per line:
+ * `task: C-12` (a task's ID, name or `[[link]]`: show that task's box, on any page) and, for ```sprint,
+ * `sprint: current` (or `next`, or a sprint's name or link). Left out, the page's own. Other lines are ignored.
+ */
+export function appBlockOptions(src) {
+  const out = { task: "", sprint: "" };
+  for (const line of String(src ?? "").split("\n")) {
+    const m = line.match(/^\s*(task|sprint)\s*:\s*(.*?)\s*$/i);
+    if (m) out[m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, "").trim();
   }
   return out;
 }

@@ -39,6 +39,7 @@ const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
 let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
+let fakeLogin = null; // answer "who is signed in?" with this login, to be the example inboxes' person
 
 const CSV_PATH = "Data/Test table.csv";
 const CSV_TEXT = 'Name,Price,Note\nApples,3,\nPears,5,"the best, by far"\n';
@@ -99,6 +100,7 @@ page.on("request", async (req) => {
     return req.respond({ status: 200, contentType: "text/plain", body: fakeHead,
       headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });
   }
+  if (fakeLogin && req.method() === "GET" && url === `${API}/user`) return req.respond(json(200, { login: fakeLogin, avatar_url: "" }));
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
@@ -108,6 +110,12 @@ page.on("request", async (req) => {
     const data = await res.json();
     data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" }, { path: PRE + MP3_PATH, type: "blob", sha: "mp3sha" });
     return req.respond(json(200, data));
+  }
+  // The copy on the device asks for the test table by its sha too.
+  if (url.startsWith(`${REPO_API}/git/blobs/csvsha`)) {
+    return /raw/.test(req.headers().accept || "")
+      ? req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: CSV_TEXT })
+      : req.respond(json(200, { sha: "csvsha", size: CSV_TEXT.length, encoding: "base64", content: b64(CSV_TEXT) }));
   }
   if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
     return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
@@ -196,6 +204,32 @@ const homeBox = await page.evaluate(() => ({
   rows: document.querySelectorAll(".note-body .suggest .suggest-list a.suggest-name").length,
 }));
 check(homeBox.box && !homeBox.code && homeBox.rows >= 1, "Home's top-tasks block shows the top tasks box: " + JSON.stringify(homeBox));
+// Home's ```base block: a view written in the page, drawn like a .base file's: only the done tasks.
+await page.waitForFunction(() => document.querySelector(".note-body .base-view .base-table tr[data-path]"), { timeout: 15000 }).catch(() => {});
+const homeBase = await page.evaluate(() => {
+  const view = document.querySelector(".note-body .base-view");
+  return { code: !!document.querySelector(".note-body .base-block"), tab: view?.querySelector(".base-tab")?.textContent ?? "",
+    count: view?.querySelector(".base-count")?.textContent ?? "", heads: [...(view?.querySelectorAll("th") ?? [])].map((t) => t.textContent.trim()),
+    rows: [...(view?.querySelectorAll("tr[data-path]") ?? [])].map((r) => r.dataset.path) };
+});
+const doneTasks = [];
+for (const t of ["Make a note template", "Write the welcome note"]) {
+  if (/^status: Done$/m.test((await realFile(`Tasks/${t}.md`)).text)) doneTasks.push(`Tasks/${t}.md`);
+}
+check(!homeBase.code && homeBase.tab === "Done tasks" && homeBase.heads.join("|").startsWith("Task|Done by")
+  && doneTasks.every((p) => homeBase.rows.includes(p)) && homeBase.rows.every((p) => p.startsWith("Tasks/")),
+  "Home's ```base block shows its own view, the done tasks: " + JSON.stringify(homeBase));
+// Its fields: line puts each task's parent first, as a link to it: "Try the app on a phone" is part of "Get set up".
+const homeFields = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .suggest");
+  const li = [...(box?.querySelectorAll(".suggest-list li") ?? [])].find((x) => x.querySelector("a.suggest-name")?.textContent.includes("Try the app on a phone"));
+  const tags = li?.querySelector(".suggest-tags");
+  return { head: box?.querySelector(".suggest-head small")?.textContent ?? "", first: tags?.firstElementChild?.className ?? "",
+    parent: tags?.querySelector("a.parent-chip")?.textContent ?? "", href: decodeURIComponent(tags?.querySelector("a.parent-chip")?.getAttribute("href") ?? "") };
+});
+check(homeFields.head.includes("Shows parent, state, priority, area") && /parent-chip/.test(homeFields.first)
+  && homeFields.parent === "Get set up" && homeFields.href.endsWith("/Tasks/Get set up.md"),
+  "Home's fields: line shows each task's parent first, linking to it: " + JSON.stringify(homeFields));
 await page.evaluate(() => document.querySelector(".note-body .suggest")?.scrollIntoView({ block: "center" }));
 await shot("1c-home-top-tasks");
 await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));
@@ -1040,6 +1074,17 @@ await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].
 // 8f. Parent tasks and subtasks: the example epic lists its three tasks, the parent picker refuses a loop,
 // and Add subtask makes a new task under it.
 const epic = "Tasks/Get set up.md";
+// On the Task Board, a ```subtasks block with task: T-6 shows the epic's subtasks there, read only, naming the epic.
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+await until(() => document.querySelectorAll(".note-body .subtasks .st-list li").length === 3, 15000);
+const boardSubs = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .subtasks");
+  return { code: !!document.querySelector(".note-body .app-block"), of: box?.querySelector(".st-of")?.textContent ?? "",
+    href: decodeURIComponent(box?.querySelector(".st-of")?.getAttribute("href") ?? ""), count: box?.querySelector(".st-count")?.textContent ?? "",
+    rows: box?.querySelectorAll(".st-list li").length ?? 0, add: !!box?.querySelector("button") };
+});
+check(!boardSubs.code && boardSubs.of === "of T-6Get set up" && boardSubs.href.endsWith("/Tasks/Get set up.md") && boardSubs.count === "2 of 3 done"
+  && boardSubs.rows === 3 && !boardSubs.add, "a ```subtasks block with task: shows that task's subtasks on another page, read only: " + JSON.stringify(boardSubs));
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelectorAll(".subtasks .st-list li").length === 3, 15000), "the epic lists its three subtasks");
 const subs = await page.evaluate(() => ({
@@ -1104,6 +1149,20 @@ check(await until(() => document.querySelector(".subtasks .st-count")?.textConte
 // 8g. Sprints: a sprint's page lists its tasks by status with how much is done; the picker puts the current sprint
 // first; Start the next sprint makes the next one and moves what's left, in one commit; the board shows the current one.
 const realSprints = await Promise.all(["Sprints/Sprint 1.md", "Sprints/Sprint 2.md"].map(async (p) => ({ path: p, props: noteProps((await realFile(p)).text) })));
+// Home's ```sprint block with sprint: current shows the sprint going on today, naming it, with no Start button.
+const nowSprint = sprints(realSprints, isoDate()).find((s) => s.when === "now") ?? null;
+await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
+await until(() => !!document.querySelector(".note-body .sprint-box"), 15000);
+const homeSprint = await page.evaluate(() => {
+  const box = document.querySelector(".note-body .sprint-box");
+  return { code: !!document.querySelector(".note-body .app-block"), of: box?.querySelector(".st-of")?.textContent ?? "",
+    href: decodeURIComponent(box?.querySelector(".st-of")?.getAttribute("href") ?? ""), when: box?.querySelector(".sprint-when")?.textContent ?? "",
+    empty: box?.querySelector(".sprint-empty")?.textContent ?? "", start: !!box?.querySelector("button") };
+});
+check(!homeSprint.code && !homeSprint.start && (nowSprint
+  ? homeSprint.of === nowSprint.name && homeSprint.href.endsWith(`/${nowSprint.path}`) && homeSprint.when === "Now"
+  : homeSprint.empty === "No sprint is going on today."),
+  `Home's sprint block with sprint: current shows ${nowSprint?.name ?? "that no sprint is going on"}: ` + JSON.stringify(homeSprint));
 await page.goto(at("Sprints/Sprint 1.md"), { waitUntil: "networkidle0" });
 await page.evaluate(() => document.querySelector("#mode").children[0].click()); // Read: Add subtask left it in Edit
 check(await until(() => document.querySelectorAll(".sprint-box .sprint-group").length === 3, 15000), "a sprint's page lists its tasks by status");
@@ -1194,6 +1253,47 @@ const added = await page.evaluate(() => ({
 check(added.items === 3 && added.save && added.focus, "Add puts the item in the block, the note can be saved, and the field keeps the focus: " + JSON.stringify(added));
 await page.evaluate(() => document.querySelector(".note-body section.newtasks")?.scrollIntoView({ block: "center" }));
 await shot("2g-inbox-new-tasks");
+
+// 10a2. The Inbox dot: signed in as the example inboxes' person, something waits on them (the reading
+// list's question, the Guide's mention), so the Inbox button and the sidebar's Inbox row show a dot. In the
+// inbox, Seen on the Guide's mention folds it under Seen and saves the inbox's seen_mentions at once.
+fakeLogin = "your-github-login";
+await page.goto(at("Home.md"), { waitUntil: "networkidle0" });
+// Only the #hash changed, so the page is reloaded for the app to ask GitHub again who is signed in.
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector("#inbox-btn.has-dot", { timeout: 30000 }).catch(() => {});
+const dot = await page.evaluate(() => ({
+  button: document.querySelector("#inbox-btn")?.classList.contains("has-dot") ?? false,
+  label: document.querySelector("#inbox-btn")?.getAttribute("aria-label") ?? "",
+  row: !!document.querySelector("#shortcuts .row .inbox-dot"),
+}));
+check(dot.button && dot.label === "Inbox: something needs you" && dot.row,
+  "the Inbox button and the sidebar's Inbox row show a dot when something waits on you: " + JSON.stringify(dot));
+await page.evaluate(() => document.querySelector("#main").scrollTo(0, 0));
+await shot("2h-inbox-dot");
+// The new-tasks check above left the inbox changed: leaving kept it as a draft, which would come back.
+await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("commonplace:draft:")).forEach((k) => localStorage.removeItem(k)));
+await page.click("#inbox-btn");
+await page.waitForFunction(() => [...document.querySelectorAll(".note-body .attention .attention-list li")].some((li) => li.textContent.includes("Mention") && li.querySelector(".attention-seen-btn")), { timeout: 20000 }).catch(() => {});
+const putsBeforeSeen = puts.length;
+await page.evaluate(() => [...document.querySelectorAll(".note-body .attention .attention-list li")]
+  .find((li) => li.querySelector("a.suggest-name")?.textContent.startsWith("Guide") && li.querySelector(".attention-seen-btn"))
+  ?.querySelector(".attention-seen-btn").click());
+await page.waitForFunction((n) => document.querySelector(".attention-seen summary") && n, { timeout: 10000 }, putsBeforeSeen).catch(() => {});
+await new Promise((r) => setTimeout(r, 1500));
+const seenAfter = await page.evaluate(() => ({
+  summary: document.querySelector(".note-body .attention .attention-seen summary")?.textContent ?? "",
+  folded: [...document.querySelectorAll(".note-body .attention .attention-seen li a.suggest-name")].map((a) => a.textContent),
+  head: document.querySelector(".note-body .attention .suggest-head small")?.textContent ?? "",
+  toast: document.querySelector("#toast")?.textContent ?? "", dirty: !document.querySelector("#save-btn")?.disabled,
+}));
+const seenPut = puts.slice(putsBeforeSeen).find((p) => p.text.includes("seen_mentions:"));
+check(seenAfter.summary === "Seen (1)" && seenAfter.folded.some((t) => t.startsWith("Guide")) && seenAfter.head.includes("1 seen")
+  && /seen_mentions: \["Guide\.md#[0-9a-f]{8}"\]/.test(seenPut?.text ?? ""),
+  "Seen folds the Guide's mention under Seen and saves seen_mentions in the inbox at once: " + JSON.stringify({ ...seenAfter, put: seenPut?.text.split("\n").slice(0, 7), puts: puts.slice(putsBeforeSeen).map((p) => p.url.split("/").pop()) }));
+await page.evaluate(() => document.querySelector(".note-body .attention")?.scrollIntoView({ block: "center" }));
+await shot("2i-inbox-mention-seen");
+fakeLogin = null;
 
 // 10b. A device without a token sees the first-run screen.
 const fresh = await browser.createBrowserContext();
@@ -1301,6 +1401,78 @@ const upgraded = JSON.parse(moved["commonplace:repos"] || "[]")[0];
 check(upgraded?.notes === "Notes" && upgraded?.template === "Templates/Note.md", "its vault repo gets the New notes folder and template it used to imply");
 check(await until(() => location.hash.startsWith("#/old/") && !!document.querySelector(".preview h1"), 20000, old), "and it opens its notes as before");
 await oldContext.close();
+
+// 10f. The copy on this device: kept in step when a vault opens, and opened from it when GitHub can't be reached.
+const offContext = await browser.createBrowserContext();
+const off = await offContext.newPage();
+let cutOff = false;
+await off.setRequestInterception(true);
+const offPuts = [];
+off.on("request", (req) => {
+  if (cutOff && req.url().startsWith(API)) return req.abort("internetdisconnected");
+  if (req.method() === "PUT" && req.url().startsWith(API)) {
+    const body = JSON.parse(req.postData());
+    offPuts.push({ url: req.url(), body, text: Buffer.from(body.content, "base64").toString("utf8") });
+    return req.respond(json(200, { content: { sha: "offfake" + offPuts.length }, commit: { sha: "offc" + offPuts.length } }));
+  }
+  return req.continue();
+});
+await off.setViewport({ width: 1280, height: 860 });
+await off.goto(BASE, { waitUntil: "networkidle0" });
+const copyRepo = { id: "copy", label: "Copy", owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md" };
+await off.evaluate((t, r) => {
+  localStorage.clear();
+  localStorage.setItem("commonplace:token", JSON.stringify(t));
+  localStorage.setItem("commonplace:repos", JSON.stringify([r]));
+}, token, copyRepo);
+await off.goto(BASE + "#/copy/Home.md", { waitUntil: "networkidle0" });
+await off.reload({ waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector(".preview h1"), 20000, off), "a vault opens online as before, with its copy on the device");
+const copied = () => new Promise((resolve) => {
+  const req = indexedDB.open("commonplace");
+  req.onerror = () => resolve(false);
+  req.onsuccess = () => {
+    if (!req.result.objectStoreNames.contains("meta")) return resolve(false);
+    const tx = req.result.transaction(["files", "meta"]);
+    const keys = tx.objectStore("files").getAllKeys();
+    const meta = tx.objectStore("meta").get("bases:mirror:copy");
+    tx.oncomplete = () => resolve(keys.result.filter((k) => k.startsWith("mirror:copy:")).length >= 30 && !!meta.result?.syncedAt);
+  };
+});
+check(await until(copied, 30000, off), "every text file of the vault is kept in the browser, with when it was brought up to date");
+cutOff = true;
+await off.goto(BASE + "#/copy/Guide.md");
+await off.reload({ waitUntil: "networkidle0" });
+check(await until(() => /Guide/.test(document.querySelector(".preview h1")?.textContent || ""), 20000, off), "with GitHub out of reach, the vault opens from the copy");
+check(await until(() => !document.querySelector("#local-note").hidden && /Offline/.test(document.querySelector("#local-note").textContent), 5000, off),
+  "and the line above the note says it's the copy on this device");
+await off.click("#tree a.file[data-path='Task Board.md']").catch(() => {});
+check(await until(() => /Task Board/.test(document.querySelector(".preview h1")?.textContent || "") && !!document.querySelector(".preview table tbody tr"), 20000, off),
+  "a link opens another note from the copy, and its base view is filled from the copy");
+await off.screenshot({ path: `${OUT}/17-offline-copy.png` });
+// Saving offline: it waits in the copy, then goes to GitHub as one commit when the connection is back.
+const offTask = "Tasks/Try the app on a phone.md";
+await off.goto(BASE + "#/copy/" + encPath(offTask));
+await off.waitForSelector(".preview input.task:not([checked])", { timeout: 15000 }).catch(() => {});
+await off.click(".preview input.task:not([checked])").catch(() => {});
+await wait(200);
+await off.click("#save-btn").catch(() => {});
+check(await until(() => /Saved on this device/.test(document.querySelector("#toast").textContent), 5000, off), "offline, Save keeps the note on this device, to upload later");
+check(await until(() => /Waiting to upload/.test(document.querySelector("#title").textContent) && /1 waiting/.test(document.querySelector("#local-note").textContent), 5000, off),
+  "the note says it's waiting to upload, and the line above it counts it");
+check(await off.evaluate((path) => !!document.querySelector(`#tree a.file[data-path="${path}"] .wait-dot`), offTask), "and the file list marks it");
+await off.screenshot({ path: `${OUT}/17b-offline-waiting.png` });
+check(offPuts.length === 0, "nothing reached GitHub while it was out of reach");
+cutOff = false;
+await off.evaluate(() => window.dispatchEvent(new Event("online")));
+for (const end = Date.now() + 10000; Date.now() < end && !offPuts.length; await wait(150));
+const offReal = await realFile(offTask);
+check(offPuts.length === 1 && offPuts[0].url === contentsUrl(offTask) && offPuts[0].body.sha === offReal.sha
+  && offPuts[0].body.message === `Edit ${offTask} from ${APP}` && offPuts[0].text.split("\n").filter((l, i) => l !== offReal.text.split("\n")[i]).length === 1,
+  "back online, it's uploaded as one commit, based on the version it started from: " + JSON.stringify(offPuts.map((x) => x.body.message)));
+check(await until(() => !/Waiting to upload/.test(document.querySelector("#title").textContent) && document.querySelector("#local-note").hidden, 5000, off),
+  "and nothing is marked as waiting any more");
+await offContext.close();
 
 // 11. Service worker registered.
 check(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())), "service worker registered");

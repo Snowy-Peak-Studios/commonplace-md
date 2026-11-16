@@ -481,6 +481,22 @@ test("sprints: the latest first, and which is now and next", () => {
   assert.equal(sprints(SPRINTS, "2026-11-16").find((s) => s.when === "now").name, "Sprint 2");
 });
 
+test("a sprint block's sprint: current, next, a name or a link", async () => {
+  const { pickSprint } = await import("../src/vault.js");
+  const list = sprints(SPRINTS, "2026-11-14");
+  const name = (said, resolve) => pickSprint(list, said, resolve)?.name ?? null;
+  assert.equal(name("current"), "Sprint 1");
+  assert.equal(name("Now"), "Sprint 1");
+  assert.equal(name("next"), "Sprint 2");
+  assert.equal(name("sprint 3"), "Sprint 3");
+  assert.equal(name("[[Sprint 0]]"), "Sprint 0");
+  assert.equal(name("[[S0]]", (t) => (t === "S0" ? list[3].path : null)), "Sprint 0", "a link is found by where it leads");
+  assert.equal(name("Sprint 9"), null);
+  assert.equal(name(""), null);
+  assert.equal(pickSprint(sprints(SPRINTS, "2030-01-01"), "current"), null, "no sprint going on");
+  assert.equal(pickSprint(sprints(SPRINTS, "2030-01-01"), "next"), null);
+});
+
 test("the next sprint counts on, starts after the last ends (or today), and lasts the setup's length", () => {
   const last = sprints(SPRINTS, "2026-11-14")[0];
   assert.deepEqual(nextSprint(last, 14, "2026-11-14"), { name: "Sprint 4", start: "2026-12-14", end: "2026-12-27" });
@@ -712,6 +728,50 @@ test("mentions in a note: @login, not in code, an email or a path; with the head
   assert.equal(findMentions("x ".repeat(100) + "@long").at(0).text.length, 160);
 });
 
+test("a mention with a reply right under it is answered: the next line starts with someone else's @login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = [
+    "@ann what do you think?",
+    "@bob Fine by me.",
+    "@ann and this one?",
+    "",
+    "@bob no reply: a blank line comes first",
+    "@bob the same person again is no reply",
+    "- @ann in a list",
+    "  - [x] @bob replied in the list",
+    "> @ann quoted",
+    "> @bob quoted reply",
+    "@ann the last line",
+  ].join("\n");
+  assert.deepEqual(findMentions(note).map((m) => [m.login, m.line, m.answered]), [
+    ["ann", 1, true], ["bob", 2, true], ["ann", 3, false], ["bob", 5, false], ["bob", 6, true],
+    ["ann", 7, true], ["bob", 8, true], ["ann", 9, true], ["bob", 10, true], ["ann", 11, false],
+  ], "a talk back and forth: each line answers the one above it");
+});
+
+test("mentions sort into open, seen and answered, and the seen list keeps only live mentions", async () => {
+  const { mentionKey, sortMentions, withSeenMentions } = await import("../src/vault.js");
+  const a = { path: "Tasks/One, two.md", login: "Ann", text: "@Ann look", answered: false };
+  const b = { path: "Notes/B.md", login: "ann", text: "@ann and here", answered: false };
+  const c = { path: "Notes/B.md", login: "ann", text: "@ann replied to", answered: true };
+  assert.match(mentionKey(a.path, a), /^Tasks\/One, two\.md#[0-9a-f]{8}$/);
+  assert.equal(mentionKey(a.path, a), mentionKey(a.path, { ...a, login: "ann" }), "the login's case doesn't count");
+  assert.notEqual(mentionKey(a.path, a), mentionKey(a.path, { ...a, text: "@Ann look again" }), "a changed line shows again");
+  const seen = [mentionKey(a.path, a)];
+  assert.deepEqual(sortMentions([a, b, c], seen), { open: [b], seen: [a], answered: [c] });
+  assert.deepEqual(sortMentions([a, b, c], mentionKey(a.path, a)).seen, [a], "one key written as text");
+  assert.deepEqual(sortMentions([a, b], null).open, [a, b]);
+  assert.deepEqual(withSeenMentions([...seen, "Gone.md#00000000"], [b, c], [a, b, c]),
+    [mentionKey(a.path, a), mentionKey(b.path, b)], "gone and answered mentions drop out, each key once");
+});
+
+test("blockContents gives what each fenced block of a name holds", async () => {
+  const { blockContents } = await import("../src/vault.js");
+  const note = "# Inbox\n```needs-attention\nshow: mentions\nlogin: ann\n```\n\n~~~~ needs-attention\nowner: Ann\n```\nstill in\n~~~~\n```other\nx\n```";
+  assert.deepEqual(blockContents(note, "needs-attention"), ["show: mentions\nlogin: ann", "owner: Ann\n```\nstill in"]);
+  assert.deepEqual(blockContents("```needs-attention\nnever closed", "needs-attention"), []);
+});
+
 test("a vault's people come from its inboxes' github and owner, each login once", async () => {
   const { vaultPeople } = await import("../src/vault.js");
   const people = vaultPeople([
@@ -732,9 +792,21 @@ test("a vault's people come from its inboxes' github and owner, each login once"
 test("a new-tasks block: its owner and its items, list marks and checkboxes taken off", async () => {
   const { newTasksBlock } = await import("../src/vault.js");
   assert.deepEqual(newTasksBlock("owner: Ann Lee\n- Buy milk\n\n* [ ] Fix the [[Home]] page\n2. Call @bob\nPlain line: with a colon\n"),
-    { owner: "Ann Lee", items: ["Buy milk", "Fix the [[Home]] page", "Call @bob", "Plain line: with a colon"] });
-  assert.deepEqual(newTasksBlock(""), { owner: "", items: [] });
-  assert.deepEqual(newTasksBlock("  Owner : 'Bo'\n-   \n"), { owner: "Bo", items: [] });
+    { owner: "Ann Lee", items: ["Buy milk", "Fix the [[Home]] page", "Call @bob", "Plain line: with a colon"], lines: [1, 3, 4, 5] });
+  assert.deepEqual(newTasksBlock(""), { owner: "", items: [], lines: [] });
+  assert.deepEqual(newTasksBlock("  Owner : 'Bo'\n-   \n"), { owner: "Bo", items: [], lines: [] });
+});
+
+test("a new-tasks item is changed on its line, keeping its mark, or taken out when empty", async () => {
+  const { editNewTask } = await import("../src/vault.js");
+  const note = "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\nThree\n```\n";
+  assert.equal(editNewTask(note, 4, "One", "  One, said\nbetter "), "# Inbox\n\n```new-tasks\nowner: Ann\n- One, said better\n* [ ] Two\nThree\n```\n");
+  assert.equal(editNewTask(note, 5, "Two", "2"), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] 2\nThree\n```\n");
+  assert.equal(editNewTask(note, 6, "Three", "3"), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\n3\n```\n");
+  assert.equal(editNewTask(note, 5, "Two", "  "), "# Inbox\n\n```new-tasks\nowner: Ann\n- One\nThree\n```\n", "empty: taken out");
+  assert.equal(editNewTask(note.replace(/\n/g, "\r\n"), 4, "One", "1"), "# Inbox\n\n```new-tasks\nowner: Ann\n- 1\n* [ ] Two\nThree\n```\n", "CRLF");
+  assert.equal(editNewTask(note, 4, "Something else", "1"), note, "the line changed since: nothing");
+  assert.equal(editNewTask(note, 99, "One", "1"), note, "no such line");
 });
 
 test("an item added to a new-tasks block goes just above its closing fence, or last when it has none", async () => {

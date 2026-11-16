@@ -4,6 +4,9 @@ parent: "[[How To]]"
 
 # Save, drafts and conflicts
 
+> [!TIP]
+> **tl;dr:** **Save** is one commit. Unsaved changes stay on the device as a draft. If someone saved the same note first, you see both versions and pick: nothing is lost.
+
 ## Save
 
 Press **Save** (or Ctrl+S). Each save is one commit in your repo. A note with unsaved changes has a dot in its title.
@@ -31,3 +34,11 @@ Nothing is lost until you pick.
 ## Newer notes on GitHub
 
 When someone saves from another device, a quiet banner says there are newer notes. Press its **Reload** to read them.
+
+## With no connection
+
+**Save** still works: the note is kept on this device, marked **Waiting to upload**, with a dot in the file list and a count in the line above the note. When the connection is back (or you press **Upload now**), it goes to GitHub as its own commit.
+
+- If the note changed on GitHub meanwhile, the line above it says so: **Compare** shows both versions, as above.
+- If it was deleted or moved on GitHub, **Save it as a new note** puts it back.
+- Until it's uploaded it's only on this device: **Settings › This device** lists what waits.

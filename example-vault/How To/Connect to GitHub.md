@@ -4,6 +4,9 @@ parent: "[[How To]]"
 
 # Connect to GitHub
 
+> [!TIP]
+> **tl;dr:** Make a token on GitHub that opens only your notes repo (**Contents**: *Read and write*), one per device, and paste it into the app.
+
 The app reads and saves your notes with a token: a key you make on GitHub that opens only the repos you pick. It stays on your device and goes only to GitHub.
 
 ## Make a token

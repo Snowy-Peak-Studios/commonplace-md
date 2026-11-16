@@ -22,9 +22,9 @@ export function encodeBase64(text) {
   return btoa(bin);
 }
 
-/** The sha git gives a file's text: SHA-1 of "blob <bytes>\0" and the bytes, as the tree lists it. */
+/** The sha git gives a file (its text, or its bytes): SHA-1 of "blob <bytes>\0" and the bytes, as the tree lists it. */
 export async function blobSha(text) {
-  const body = new TextEncoder().encode(text);
+  const body = typeof text === "string" ? new TextEncoder().encode(text) : new Uint8Array(text);
   const head = new TextEncoder().encode(`blob ${body.length}\0`);
   const all = new Uint8Array(head.length + body.length);
   all.set(head);

@@ -2,6 +2,8 @@
 
 Welcome to your notes. This folder is an example vault for **Commonplace.md**: copy it into your own GitHub repo, open it in the app, and change anything you like. It's plain Markdown, so it also opens in any Markdown editor as it is.
 
+Use it for everything that makes your life and work easier: your notes and wiki, your AI agents' rules and reports, and a task board for you, your agent or your team. The [[How To]] pages show how.
+
 > [!tip] Start here
 > Read the [[Guide]] for what a note can hold, look at the [[Task Board]], or drop a thought in the [[Inbox]].
 
@@ -24,6 +26,14 @@ The goals live on the Task Board; this is that section, embedded here:
 
 ![[Task Board#Current goals]]
 
+## This sprint
+
+The sprint going on today, with its tasks by status: a ` ```sprint ` block with `sprint: current`. It can also say `next`, or a sprint's name or link; without the line it only works on a sprint's own page.
+
+```sprint
+sprint: current
+```
+
 ## What to start next
 
 The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block. Everything it shows is written in it, one option per line:
@@ -32,7 +42,8 @@ The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block.
 - `areas:` only these areas (empty: every area);
 - `order:` `priority-newest` (High, Medium, Low, the newest first within each), `priority-oldest`, `newest` or `oldest` (priority not counted);
 - `sprint:` `current-only`, `current-then-next` (the next sprint's when the current one has none left), or `off` (every task);
-- `owner:` whom **Claim** claims a task for.
+- `owner:` whom **Claim** claims a task for;
+- `fields:` what each task shows besides its name and **Claim**, in that order: `parent` (the task it's part of), `state` (*Ready*, *Needs a decision*, ...), `priority`, `area`, or any other property. Left out: `state, priority, area`.
 
 Nothing is taken from anywhere else. Other Markdown editors show it as a small code block.
 
@@ -42,6 +53,29 @@ areas:
 order: priority-newest
 sprint: current-then-next
 owner: Your name
+fields: parent, state, priority, area
+```
+
+## Done so far
+
+A table of notes written right in this page: a ` ```base ` block holds what a `.base` file would (its filters, columns and views), so a page can have a view of its own without a file next to it. Copy a view between a block and a file as it is.
+
+```base
+filters:
+  and:
+    - file.inFolder("Tasks")
+    - status == "Done"
+properties:
+  file.name:
+    displayName: Task
+  assignee:
+    displayName: Done by
+views:
+  - type: table
+    name: Done tasks
+    order:
+      - file.name
+      - assignee
 ```
 
 ## How saving works
