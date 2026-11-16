@@ -38,6 +38,7 @@ More on each, with what it costs: [the README](https://github.com/Snowy-Peak-Stu
 ## Every day
 
 - [Write and link notes](Write%20and%20link%20notes.md)
+- [Markdown and blocks](Markdown%20and%20blocks.md) shows what to write and how it looks in the app.
 - [Save, drafts and conflicts](Save%2C%20drafts%20and%20conflicts.md)
 - [Use your inbox](Use%20your%20inbox.md), and its top tasks to start
 

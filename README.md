@@ -163,7 +163,7 @@ Every vault on GitHub is also kept on the device you open it on, so it opens wit
 ### Set it up with GitHub
 
 > [!TIP]
-> Not sure yet? [Ask your agent first](#not-sure-its-for-you). Looking for one thing? The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each, and they open in the app too.
+> Not sure yet? [Ask your agent first](#not-sure-its-for-you). Looking for one thing? The [How To](example-vault/How%20To/How%20To.md) pages have short steps for each, and they open in the app too. See [Markdown and blocks](docs/markdown-and-blocks.md) for syntax and live examples.
 
 Five steps, about ten minutes. Or let your AI agent do most of them:
 
