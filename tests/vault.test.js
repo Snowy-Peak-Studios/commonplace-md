@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, sortAssignments, withSeenAssignments,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -957,6 +957,27 @@ test("assignee suggestions merge vault users and GitHub collaborators without du
   assert.deepEqual(assigneeOptions([{ name: "Zoë", login: "zoe" }], []), [{ label: "Zoë", value: "@zoe" }]);
   assert.ok(assigneeMatches("Zoe (Codex)", { name: "Zoë", login: "zoe" }));
   assert.ok(assigneeMatches("@ZOE", { name: "Different name", login: "zoe" }));
+  assert.ok(assigneeMatches("Zoe", { name: "Different name", login: "zoe" }));
   assert.equal(assigneeMatches("zoe@example.com", { name: "Zoë", login: "zoe" }), false);
   assert.match(setProps("---\nassignee: Old name\n---\n", [["assignee", "@zoe"]]), /assignee: "@zoe"/);
+});
+
+
+test("an open task matches the inbox identity and a reassignment surfaces after Seen", () => {
+  const setup = taskSetup({ fields: { assignee: { prop: "person" }, status: { prop: "stage" } } });
+  const zoe = { name: "Zoë", login: "zoe" };
+  const pat = { name: "Pat", login: "pat" };
+  const task = (person, rest = {}) => ({ path: "Tasks/One.md", props: { id: "T-1", person, stage: "To Do", ...rest } });
+  assert.equal(assignmentTasks([task("Zoe (agent)")], setup, zoe).length, 1);
+  assert.equal(assignmentTasks([task("@zoe", { stage: "Done" }), task("@zoe", { type: "Epic" })], setup, zoe).length, 0);
+  assert.equal(assignmentTasks([task("zoe@example.com")], setup, { name: "zoe@example.com", login: "zoe" }).length, 0);
+  const before = assignmentTasks([task("@Zoe", { assignment_id: "first" })], setup, zoe);
+  const seen = withSeenAssignments([], before, before);
+  assert.equal(sortAssignments(before, seen).open.length, 0);
+  assert.equal(sortAssignments(before, seen).seen.length, 1);
+  const elsewhere = task("@pat", { assignment_id: "second" });
+  assert.equal(assignmentTasks([elsewhere], setup, zoe).length, 0);
+  assert.equal(sortAssignments(assignmentTasks([elsewhere], setup, pat), seen).open.length, 1);
+  const after = assignmentTasks([task("@Zoe", { assignment_id: "third" })], setup, zoe);
+  assert.equal(sortAssignments(after, seen).open.length, 1);
 });

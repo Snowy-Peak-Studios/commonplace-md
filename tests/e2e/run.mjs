@@ -1463,7 +1463,7 @@ await page.$eval("#board-edit-assignee", (input) => {
   input.dispatchEvent(new Event("change"));
 });
 check(await until(() => document.querySelector("#toast")?.textContent.includes("assignee updated"), 10000)
-  && puts.length === boardAssigneePuts + 1 && puts.at(-1).text === beforeBoardAssignee.replace(/^assignee: Your name$/m, 'assignee: "@collaborator-test"'),
+  && puts.length === boardAssigneePuts + 1 && puts.at(-1).text.replace(/^assignment_id: [^\n]+\n/m, "") === beforeBoardAssignee.replace(/^assignee: Your name$/m, 'assignee: "@collaborator-test"'),
   "editing a card assignee commits only the assignee");
 await page.waitForSelector("#board-edit-assignee:enabled");
 await page.click("dialog .modal-foot .primary");

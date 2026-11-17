@@ -421,6 +421,8 @@ const REPLY = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?@([A-Za-z0
 
 /** The property of an inbox that keeps the mentions its person marked as seen: one key per mention. */
 export const SEEN_MENTIONS = "seen_mentions";
+export const SEEN_ASSIGNMENTS = "seen_assignments";
+export const ASSIGNMENT_ID = "assignment_id";
 
 /** The seen list as written (a list, or one key), as is: a note's path can have commas and capitals. */
 const seenList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).trim()).filter(Boolean);
@@ -580,10 +582,11 @@ export function splitAssignee(value) {
 /** Compare a GitHub handle or an older assignee name, with or without its agent. */
 export function assigneeMatches(value, { name = "", login = "" }) {
   const assignee = splitAssignee(value).name;
-  const github = assignee.startsWith("@") ? assignee.slice(1).toLowerCase() : "";
-  if (github) return github === String(login).trim().replace(/^@/, "").toLowerCase();
+  const handle = String(login).trim().replace(/^@/, "").toLowerCase();
+  const account = assignee.replace(/^@/, "").toLowerCase();
+  if (handle && account === handle) return true;
   const named = foldName(assignee);
-  return !!named && named === foldName(name);
+  return !assignee.startsWith("@") && !!named && named === foldName(name);
 }
 
 /** Suggestions keep the GitHub handle as the value and use a vault name as its label when available. */
@@ -1327,4 +1330,32 @@ export function boardColumns(notes, options, setup, { sprint = null, resolve, id
     column.cards.push({ path, status, id: term(props.id), priority: term(props[keys.priority]), assignee, area });
   }
   return columns;
+}
+
+
+/** The open tasks assigned to the person's GitHub login or vault name. */
+export function assignmentTasks(notes, setup, identity) {
+  const key = fieldProp(setup, "assignee");
+  const status = fieldProp(setup, "status");
+  const type = fieldProp(setup, "type");
+  return notes.filter(({ props }) => {
+    const assignee = splitAssignee(props[key]).name;
+    return !/^[^@\s]+@[^@\s]+$/.test(assignee) && assigneeMatches(assignee, identity)
+      && !isDoneStatus(props[status], setup) && foldName(props[type]) !== "epic";
+  }).sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path)).map(({ path, props }) => ({
+    path, id: props.id,
+    key: JSON.stringify([path, props[key], props[ASSIGNMENT_ID] ?? ""]),
+  }));
+}
+
+export function sortAssignments(tasks, seen) {
+  const known = new Set(seenList(seen));
+  const out = { open: [], seen: [] };
+  for (const task of tasks) (known.has(task.key) ? out.seen : out.open).push(task);
+  return out;
+}
+
+export function withSeenAssignments(seen, add, tasks) {
+  const known = new Set([...seenList(seen), ...add.map((task) => task.key)]);
+  return tasks.map((task) => task.key).filter((key) => known.has(key));
 }

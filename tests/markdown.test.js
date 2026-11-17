@@ -173,6 +173,8 @@ test("a needs-attention block's options: show (both, or one), owner and login; o
   assert.deepEqual(attentionOptions("show: [Mention]").show, ["mentions"]);
   assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true }, "always questions first");
   assert.deepEqual(attentionOptions("show: both").show, both);
+  assert.deepEqual(attentionOptions("show: all").show, ["questions", "mentions", "assignments"]);
+  assert.deepEqual(attentionOptions("show: assignment").show, ["assignments"]);
   assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false });
 });
 

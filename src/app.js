@@ -11,7 +11,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -390,6 +390,8 @@ async function checkInboxDot(repo) {
       for (const b of await inboxAttention(repo, tree, inbox)) {
         if (b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
           && (await loadQuestions(repo, b.owner, b.login)).some((t) => !t.answer)) waits = true;
+        if (!waits && b.show.includes("assignments") && (b.owner || b.login)
+          && sortAssignments(await loadAssignments(repo, b.owner, b.login), note.props[SEEN_ASSIGNMENTS]).open.length) waits = true;
         if (!waits && b.show.includes("mentions") && b.login
           && sortMentions((await loadMentions(repo, b.login)).found, note.props[SEEN_MENTIONS]).open.length) waits = true;
         if (waits) break;
@@ -1086,7 +1088,7 @@ function renderPreview() {
   }
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
-  // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
+  // Inbox items show only where a ```needs-attention block is, like the top tasks.
   fillAttention(body, f);
   // New tasks and Comments get their inline forms where the note can be changed.
   fillNewTasks(body, f);
@@ -1100,7 +1102,7 @@ function renderPreview() {
   const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
   // A task with a ```commits block shows its commits there, not again among its properties.
   const ownCommits = isTask && hasBlock(f.text, "commits");
-  const inForm = isTask ? new Set([...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
+  const inForm = isTask ? new Set([ASSIGNMENT_ID, ...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
   let props = null;
   if (isTask && frontMatter) try { props = yamlLoad(frontMatter); } catch { /* the properties box shows what's wrong */ }
   const isSprint = setup && !isTask && isSprintNote(setup, f.path);
@@ -1714,7 +1716,9 @@ async function setTaskField(f, field, input, control) {
   }
   const value = fieldValue(field, input);
   if (value == null) return toast(`${field.label}: that isn't a ${field.kind === "date" ? "date" : "number"}.`, "error");
-  const next = withProps(f.text, [[field.prop, value]]);
+  const assigned = field.key === "assignee" && value !== shownValue(noteProps(f.text)[field.prop]).trim();
+  const entries = [[field.prop, value], ...(assigned ? assignmentEdits(value) : [])];
+  const next = withProps(f.text, entries);
   if (next === toLf(f.text)) return;
   const redraw = () => {
     const scroll = $("#main").scrollTop;
@@ -1736,11 +1740,12 @@ async function setTaskField(f, field, input, control) {
     wroteCommit(f.repo, res);
     baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
     treeChanged(f.repo, f.path, res.sha);
+    if (assigned) checkInboxDot(f.repo);
     if (app.file === f) {
       f.sha = res.sha;
       f.saved = next;
       // Typed into the editor meanwhile: those edits stay, with the field's new line in them.
-      f.text = f.dirty ? withProps(f.text, [[field.prop, value]]) : next;
+      f.text = f.dirty ? withProps(f.text, entries) : next;
       if (f.editor) setEditorText(f.editor, f.text);
       updateDirty();
       if (!f.dirty) store.remove(draftKey(f));
@@ -2072,7 +2077,18 @@ function fillAttention(root, f) {
 }
 
 /** Each kind of box: its name, and the icon in its head. */
-const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"] };
+function assignmentEdits(value) {
+  return value ? [[ASSIGNMENT_ID, crypto.randomUUID()]] : [];
+}
+
+async function loadAssignments(repo, name, login) {
+  const setup = await loadTaskSetup(repo);
+  const entry = taskNotes(repo, setup);
+  await entry.load;
+  return assignmentTasks(entry.notes ?? [], setup, { name, login });
+}
+
+const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"], assignments: ["Assigned to you", "check"] };
 
 /**
  * What waits on someone, as one box or one of its halves (`show`): the questions waiting on `owner` (tasks with
@@ -2085,37 +2101,44 @@ const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["
 function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, note = null }) {
   const tree = app.trees.get(repo.id);
   if (!tree) return null;
-  const wantQ = show.includes("questions"), wantM = show.includes("mentions");
-  const [title, iconName] = ATTENTION_TITLES[wantQ && wantM ? "both" : wantQ ? "questions" : "mentions"];
+  const wantQ = show.includes("questions"), wantM = show.includes("mentions"), wantA = show.includes("assignments");
+  const [title, iconName] = ATTENTION_TITLES[show.length === 1 ? show[0] : "both"];
   const parts = () => [
     wantQ ? (owner ? `Questions for ${owner}` : "No owner: line, so no questions") : "",
     wantM ? (login ? `Mentions of @${login}` : "No login: line, so no mentions") : "",
+    wantA ? (owner || login ? "Assigned to " + (owner || "@" + login) : "Add owner or login to show assignments") : "",
     showSet ? "" : "Both (the block sets no show)",
   ].filter(Boolean);
   const head = h("small", { class: "muted" }, parts().join(" · "));
   const list = h("ol", { class: "attention-list" }, h("li", { class: "muted" }, "Looking…"));
   const box = h("section", { class: "attention", "aria-label": title },
     h("div", { class: "suggest-head" }, icon(iconName), h("strong", {}, title), head), list);
-  const askQ = wantQ && owner, askM = wantM && login;
-  if (!askQ && !askM) {
+  const askQ = wantQ && owner, askM = wantM && login, askA = wantA && (owner || login);
+  if (!askQ && !askM && !askA) {
     list.replaceChildren(h("li", { class: "muted" }, wantQ && wantM ? "Add owner: (your name) and login: (your GitHub login) to the block."
-      : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
+      : wantA ? "Add owner or login to the block." : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
     return box;
   }
   const hasTasks = [...tree.files.keys()].some(isTaskPath);
-  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, k === "question" ? "Question" : "Mention");
+  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, ({ question: "Question", mention: "Mention", assignment: "Assignment" })[k]);
   const state = (t) => t.answer
     ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
     : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
-  const questionRow = (t) => h("li", {}, wantM ? kind("question") : null,
+  const questionRow = (t) => h("li", {}, show.length > 1 ? kind("question") : null,
     h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
     h("span", { class: "suggest-tags" }, state(t)),
     h("span", { class: "attention-text" }, t.question));
   const seenNow = note ? noteProps(note.text)[SEEN_MENTIONS] : [];
   const canMark = !!note && canWrite(repo) && usable(repo);
   let allFound = [];
-  const markSeen = (ms) => markMentionsSeen(note, ms, allFound);
-  const mentionRow = (m, seen = false) => h("li", {}, wantQ ? kind("mention") : null,
+  let allAssignments = [];
+  const markSeen = (mentions, assignments = []) => markInboxSeen(note, mentions, allFound, assignments, allAssignments);
+  const assignmentRow = (task, seen = false) => h("li", {}, show.length > 1 ? kind("assignment") : null,
+    h("a", { href: hrefFor(repo, task.path), class: "suggest-name" },
+      task.id ? h("span", { class: "muted" }, task.id + " ") : null, shownName(task.path)),
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button",
+      title: "Mark assignment as seen", onclick: () => markSeen([], [task]) }, icon("check"), "Seen") : null);
+  const mentionRow = (m, seen = false) => h("li", {}, show.length > 1 ? kind("mention") : null,
     h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
       m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
     m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
@@ -2125,33 +2148,42 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
   Promise.all([
     askQ && hasTasks ? loadQuestions(repo, owner, login) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
-  ]).then(([tasks, { found, read }]) => {
+    askA ? loadAssignments(repo, owner, login) : [],
+  ]).then(([tasks, { found, read }, assignments]) => {
     allFound = found;
+    allAssignments = assignments;
     const ms = sortMentions(found, seenNow);
+    const assigned = sortAssignments(assignments, note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
     const said = parts();
     if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
     if (askM) said[wantQ ? 1 : 0] = `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes`
       + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "");
+    if (askA) said[Number(wantQ) + Number(wantM)] = assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s");
     head.textContent = said.join(" · ");
-    if (canMark && ms.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button",
-      title: "Mark every new mention as seen", onclick: () => markSeen(ms.open) }, icon("check"), "All seen"));
-    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...ms.open.map((m) => mentionRow(m))];
-    if (ms.seen.length) rows.push(h("li", { class: "attention-seen" }, h("details", {},
-      h("summary", { class: "muted" }, `Seen (${ms.seen.length})`),
-      h("ol", { class: "attention-list" }, ms.seen.map((m) => mentionRow(m, true))))));
+    if (canMark && ms.open.length + assigned.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button",
+      title: "Mark every new item as seen", onclick: () => markSeen(ms.open, assigned.open) }, icon("check"), "All seen"));
+    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow),
+      ...assigned.open.map((task) => assignmentRow(task)), ...ms.open.map((m) => mentionRow(m))];
+    const seenRows = [...assigned.seen.map((task) => assignmentRow(task, true)), ...ms.seen.map((m) => mentionRow(m, true))];
+    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {},
+      h("summary", { class: "muted" }, `Seen (${seenRows.length})`),
+      h("ol", { class: "attention-list" }, seenRows))));
     list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
 }
 
 /**
- * Marks mentions as seen in the open note's `seen_mentions` property (keeping only mentions still there and not
- * answered). The note changes like a ticked checkbox; with nothing else unsaved it's saved at once, one commit.
+ * Saves the inbox's seen lists in one commit, or with its existing draft.
  */
-function markMentionsSeen(f, ms, found) {
-  if (app.file !== f || !ms.length) return;
+function markInboxSeen(f, mentions, found, assignments, allAssignments) {
+  if (app.file !== f || (!mentions.length && !assignments.length)) return;
   const was = f.dirty;
-  const next = setProps(f.text, [[SEEN_MENTIONS, withSeenMentions(noteProps(f.text)[SEEN_MENTIONS], ms, found)]]);
+  const props = noteProps(f.text);
+  const entries = [];
+  if (mentions.length) entries.push([SEEN_MENTIONS, withSeenMentions(props[SEEN_MENTIONS], mentions, found)]);
+  if (assignments.length) entries.push([SEEN_ASSIGNMENTS, withSeenAssignments(props[SEEN_ASSIGNMENTS], assignments, allAssignments)]);
+  const next = setProps(f.text, entries);
   if (!next || next === f.text) return;
   f.text = next;
   if (f.editor) setEditorText(f.editor, f.text);
@@ -2337,7 +2369,7 @@ async function claimSuggested(repo, path, who, button, move = null, waitDays = 7
     const taken = String(now.assignee ?? "").trim();
     const eligible = suggestTasks([returnFromWaiting({ path, props: now }, waitDays)]).length > 0;
     const extra = move ? [[move.prop, `[[${move.name}]]`]] : [];
-    const next = eligible ? claimTask(text, who, [...extra, ...clearWaitingDate(now)]) : null;
+    const next = eligible ? claimTask(text, who, [...extra, ...clearWaitingDate(now), ...assignmentEdits(who)]) : null;
     // What was just read or written is known, so the list needn't read the task again.
     const known = baseCache("baseProps", repo);
     if (!next) {
@@ -2401,6 +2433,7 @@ async function changeTask(repo, path, key, value, picker, { said = "", also = ()
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
+      checkInboxDot(repo);
       toast(said ? `${shownName(path)}: ${said}` : key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
         : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
@@ -2922,6 +2955,7 @@ function editBoardCard(f, card, fields) {
       controls.forEach((input) => { input.disabled = true; });
       pending = changeTask(f.repo, card.path, field.prop, value, control, {
         said: list ? "assignee updated" : "",
+        also: () => list ? assignmentEdits(value) : [],
         allow: (props) => shownValue(props[field.prop]).trim() === current,
       }).then((saved) => {
         if (saved) current = value;

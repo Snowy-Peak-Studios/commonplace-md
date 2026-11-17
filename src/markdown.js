@@ -316,17 +316,18 @@ export function appBlockOptions(src) {
 }
 
 /** What a ```needs-attention block can show, in the order the box lists them. */
-export const ATTENTION_SHOWS = ["questions", "mentions"];
+const DEFAULT_ATTENTION = ["questions", "mentions"];
+export const ATTENTION_SHOWS = [...DEFAULT_ATTENTION, "assignments"];
 
 /**
  * The options of a ```needs-attention block, one per line, all written in the block: `show: questions, mentions`
- * (or one of them; "both" and "all" mean both; left out or not known, both, with `showSet` false so the box can
+ * (plus optional "assignments"; "both" means questions and mentions, "all" shows the three; omitted, both, with `showSet` false so the box can
  * say so), `owner: Your Name` (whose questions: the tasks they asked for, review or whose agent has them) and
  * `login: your-login` (whose mentions: `@` and that GitHub login; the `@` may be written too). Other lines are
  * ignored.
  */
 export function attentionOptions(src) {
-  const out = { owner: "", login: "", show: [...ATTENTION_SHOWS], showSet: false };
+  const out = { owner: "", login: "", show: [...DEFAULT_ATTENTION], showSet: false };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
     const m = line.match(/^\s*(owner|login|show)\s*:\s*(.*?)\s*$/i);
@@ -336,8 +337,9 @@ export function attentionOptions(src) {
     else if (key === "login") out.login = unquote(m[2]).replace(/^@/, "");
     else {
       const words = m[2].toLowerCase().replace(/^\[|\]$/g, "").split(/[\s,]+/).map(unquote).filter(Boolean);
-      const both = words.some((w) => w === "both" || w === "all");
-      const picked = both ? [...ATTENTION_SHOWS] : ATTENTION_SHOWS.filter((s) => words.some((w) => w === s || w + "s" === s));
+      const picked = words.includes("all") ? [...ATTENTION_SHOWS]
+        : ATTENTION_SHOWS.filter((kind) => words.some((word) => word === kind || word + "s" === kind
+          || (word === "both" && DEFAULT_ATTENTION.includes(kind))));
       if (picked.length) Object.assign(out, { show: picked, showSet: true });
     }
   }

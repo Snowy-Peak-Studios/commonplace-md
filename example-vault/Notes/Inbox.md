@@ -23,15 +23,15 @@ fields: state, priority, area
 
 ## Needs attention
 
-*What waits on you: the questions on tasks, and the places that mention you, in one box. Answer a question on its task.*
+*What waits on you: tasks assigned to you, questions on tasks, and the places that mention you, in one box. Answer a question on its task.*
 
 ```needs-attention
-show: questions, mentions
+show: questions, mentions, assignments
 owner: Your name
 login: your-github-login
 ```
 
-`show:` is what the box shows: `questions, mentions` in one box, or one of them (two blocks make two boxes, as in [[Your name]]). `owner:` is whose questions (your name), `login:` whose mentions (your GitHub login).
+`show:` is what the box shows: `questions, mentions` in one box, or add assignments as above. A separate block makes another box, as in [[Your name]]. `owner:` is whose questions (your name), `login:` whose mentions (your GitHub login).
 
 ## New tasks
 
