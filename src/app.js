@@ -4185,7 +4185,10 @@ function showSettings(adding = false, tokenOwner = "") {
     h("div", { class: "page-head" },
       h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
-    github, ownersCard, repos, device));
+    github, ownersCard, repos, device,
+    h("section", { class: "card" },
+      h("h2", {}, "Support Commonplace.md"),
+      h("a", { class: "btn", href: "https://ko-fi.com/jansnieg", target: "_blank", rel: "noopener noreferrer" }, "Support on Ko-fi"))));
   // #/settings?token=<owner> opens straight to adding a token for that owner.
   if (tokenOwner) { ownersCard.scrollIntoView({ block: "start" }); ownerTokenInput.focus(); }
 }
