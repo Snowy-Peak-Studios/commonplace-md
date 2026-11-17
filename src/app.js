@@ -2114,13 +2114,15 @@ function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, coun
     const none = noSprintNow ? "No sprint is running now, and this box shows the current sprint only."
       : sprint ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
       : "No free tasks right now.";
-    const claimed = mine.map((n) => row(n, [h("span", {
-      class: `chip claimed${n.agent ? " working" : ""}`,
-      title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed"),
-    editable && !n.agent ? h("button", { class: "btn small ghost", type: "button",
-      title: "Return this task to To Do", onclick: (e) => unclaimSuggested(repo, n.path, who, e.currentTarget),
-    }, "Unclaim") : null]));
+    const claimed = mine.map((n) => row(n, editable && !n.agent
+      ? h("button", { class: "chip claimed unclaim", type: "button",
+        "aria-label": `Claimed task. Unclaim ${shownName(n.path)}`,
+        onclick: (e) => unclaimSuggested(repo, n.path, who, e.currentTarget),
+      }, h("span", { class: "claim-state", "aria-hidden": "true" }, "Claimed"),
+      h("span", { class: "claim-action", "aria-hidden": "true" }, "Unclaim"))
+      : h("span", { class: `chip claimed${n.agent ? " working" : ""}`,
+        title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
+      }, n.agent ? `${n.agent} is on it` : "Claimed")));
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,

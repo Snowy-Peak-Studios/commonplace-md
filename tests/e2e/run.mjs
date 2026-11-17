@@ -289,8 +289,8 @@ await shot("2a-inbox-attention");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
 const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
-  name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent.includes("Claim")),
-  claimed: x.querySelector(".chip.claimed")?.textContent ?? null,
+  name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent === "Claim"),
+  claimed: x.querySelector(".claim-state, span.chip.claimed")?.textContent ?? null,
 })));
 const rows0 = await boxRows();
 const free0 = rows0.filter((r) => !r.claimed);
@@ -338,7 +338,7 @@ const first = free0[0]?.name ?? "";
 const firstId = first.split(" ")[0];
 const firstTitle = first.slice(firstId.length + 1);
 await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
-  ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), firstTitle);
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Claim") b.click(); }), firstTitle);
 await page.waitForSelector("dialog.modal[open] .btn.primary");
 await page.click("dialog.modal .btn.primary");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
@@ -371,16 +371,19 @@ check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s
 // A person can release their own claim before their agent starts.
 const taskAction = (title, label) => page.evaluate((title, label) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
   .find((li) => li.querySelector(".suggest-name")?.textContent.includes(title))
-  ?.querySelectorAll("button").forEach((button) => { if (button.textContent === label) button.click(); }), title, label);
+  ?.querySelectorAll("button").forEach((button) => { if (label === "Unclaim" ? button.matches(".unclaim") : button.textContent === label) button.click(); }), title, label);
 const waitForFreeTask = (title) => page.waitForFunction((title) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
   .some((li) => li.querySelector(".suggest-name")?.textContent.includes(title) &&
-    [...li.querySelectorAll("button")].some((b) => b.textContent.includes("Claim"))), { timeout: 15000 }, title);
+    [...li.querySelectorAll("button")].some((b) => b.textContent === "Claim")), { timeout: 15000 }, title);
 const claimedActions = await page.$$eval(".suggest > .suggest-list > li", (rows) => rows
   .filter((row) => row.querySelector(".claimed"))
-  .map((row) => [...row.querySelectorAll("button")].map((b) => b.textContent)));
+  .map((row) => [...row.querySelectorAll("button")].map((b) => b.matches(".unclaim") ? "Unclaim" : b.textContent)));
 check(claimedActions.length > 0 && claimedActions.every((actions) => actions.includes("Unclaim") &&
   !actions.some((label) => ["Not now", "Push to the next sprint"].includes(label))),
   "claimed tasks can be unclaimed, and only free tasks can be put off");
+check(await page.$$eval(".suggest > .suggest-list > li", (rows) => rows.filter((row) => row.querySelector(".claimed"))
+  .every((row) => row.querySelectorAll(".claimed").length === 1 && row.querySelector("button.claimed.unclaim"))),
+  "each personal claim has one control for its state and Unclaim");
 const putsBeforeUnclaim = puts.length;
 await taskAction(firstTitle, "Unclaim");
 await page.waitForSelector("dialog.modal[open] .btn.primary");
@@ -447,7 +450,7 @@ if (inboxSprints.find((x) => x.when === "now") && sprintNext) {
   check(pushPut?.body.message?.startsWith(`T-3: pushed to ${sprintNext.name}`), "the commit says so: " + pushPut?.body.message);
   // The box is drawn again after the change; wait until it has its tasks back.
   await page.waitForFunction(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")
-    && [...li.querySelectorAll("button")].some((b) => b.textContent.includes("Claim"))), { timeout: 15000 }).catch(() => {});
+    && [...li.querySelectorAll("button")].some((b) => b.textContent === "Claim")), { timeout: 15000 }).catch(() => {});
 } else {
   log("SKIP  Push to the next sprint: the example vault has no current and next sprint today");
 }
@@ -459,7 +462,7 @@ if (sprintNow && fromNext) {
   const putsBeforeNext = puts.length;
   await shot("2d-from-the-next-sprint");
   await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
-    ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), nextTitle);
+    ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Claim") b.click(); }), nextTitle);
   await page.waitForSelector("dialog.modal[open] .btn.primary");
   const askNext = await page.$eval("dialog.modal[open]", (d) => d.textContent);
   check(askNext.includes(`moves into ${sprintNow.name}`), "claiming one from the next sprint says it moves into the current one: " + askNext);

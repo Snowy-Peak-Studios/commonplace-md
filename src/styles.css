@@ -721,6 +721,24 @@ a.chip.parent-chip:hover { border-color: var(--accent); }
 .chip.parent-chip .icon { width: 12px; height: 12px; flex: none; }
 .chip.claimed { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); font-weight: 600; }
 .chip.claimed.working { color: var(--ok); border-color: transparent; background: var(--bg-soft); }
+.chip.unclaim {
+  display: inline-grid;
+  place-items: center;
+  min-height: 24px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.chip.unclaim > span { grid-area: 1 / 1; }
+.chip.unclaim .claim-state { visibility: hidden; }
+.chip.unclaim:is(:hover, :focus-visible) { border-color: var(--accent); }
+.chip.unclaim:disabled { opacity: 0.6; cursor: progress; }
+@media (hover: hover) {
+  .chip.unclaim:not(:hover):not(:focus-visible) .claim-state { visibility: visible; }
+  .chip.unclaim:not(:hover):not(:focus-visible) .claim-action { visibility: hidden; }
+}
+@media (pointer: coarse) {
+  .chip.unclaim { min-height: 32px; }
+}
 .chip.sprint-chip { color: var(--accent); cursor: help; }
 .chip.next-sprint { color: var(--warn); background: var(--warn-soft); border-color: transparent; cursor: help; }
 .suggest-waiting { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
