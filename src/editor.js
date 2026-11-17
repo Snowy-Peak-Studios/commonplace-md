@@ -204,7 +204,7 @@ export function createEditor(parent, text, { onChange, resolve, isMarkdown = tru
         vault ? protectNavBox : [],
         isMarkdown && people && !readOnly ? mentionPicker(people) : [],
         readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
-        EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString()); }),
+        EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString(), u.changes); }),
         extra,
       ],
     }),

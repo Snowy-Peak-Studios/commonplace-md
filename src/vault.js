@@ -8,6 +8,34 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 export const toLf = (text) => text.replace(/\r\n?/g, "\n");
 export const isImagePath = (path) => IMAGE.test(path);
+const IMAGE_TYPES = new Map([
+  ["image/png", "png"], ["image/jpeg", "jpg"], ["image/gif", "gif"], ["image/webp", "webp"],
+  ["image/svg+xml", "svg"], ["image/bmp", "bmp"], ["image/avif", "avif"],
+]);
+export const IMAGE_ACCEPT = [...IMAGE_TYPES.keys(), ...[...IMAGE_TYPES.values(), "jpeg"].map((ext) => "." + ext)].join(",");
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/** Pick a safe, vault-wide unique basename so the inserted wikilink resolves from any note. */
+export function imageAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
+  const extension = IMAGE_TYPES.get(file.type) ?? ((!file.type || file.type === "application/octet-stream")
+    && isImagePath(file.name) ? file.name.split(".").at(-1).toLowerCase() : "");
+  if (!extension) throw new Error("Choose a PNG, JPEG, GIF, WebP, SVG, BMP or AVIF image.");
+  if (!file.size) throw new Error("This image is empty.");
+  if (file.size > MAX_IMAGE_BYTES) throw new Error("This image is over 10 MiB. Resize it before adding it.");
+  const directory = markerDir(settings) || notePath.split("/").slice(0, -1).join("/");
+  if (directory && directory.split("/").some((part) => !part || part.startsWith(".") || part.includes("\\") || /[<>:"|?*\x00-\x1f]/.test(part)
+    || /[. ]$/.test(part))) throw new Error("Choose a valid Attachments folder in Settings.");
+  const dot = file.name.lastIndexOf(".");
+  const stem = (dot > 0 ? file.name.slice(0, dot) : file.name).normalize("NFKD").replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60) || "image";
+  const date = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const base = `${stem}-${date}-${key.slice(0, 8)}`;
+  const used = new Set([...paths].map((path) => path.split("/").at(-1).toLowerCase()));
+  let name = `${base}.${extension}`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}-${n}.${extension}`;
+  return { name, path: directory ? `${directory}/${name}` : name, link: `![[${name}]]` };
+}
+
 const blankOut = (s) => s.replace(/[^\n]/g, "");
 
 /** Splits `[[target#heading|alias]]` (the part inside the brackets). */
@@ -97,6 +125,17 @@ function* proseLines(lines) {
       yield { line, text, section };
     }
   }
+}
+
+/** An embed belongs in the note body when the editor's cursor starts in its properties. */
+export function imageInsertion(text, at, link) {
+  const front = splitFrontMatter(text);
+  if (!front || at > front.length) {
+    const heading = (at === 0 || text[at - 1] === "\n") && /^#{1,6}[ \t]/.test(text.slice(at));
+    return { at, insert: heading ? link + "\n\n" : link };
+  }
+  const newline = text[front.length - 1] === "\n" ? "" : "\n";
+  return { at: front.length, insert: `${newline}${link}\n` };
 }
 
 /** Every `[[link]]` and `![[embed]]` outside code, as written. */
@@ -725,7 +764,7 @@ export function parentTarget(text) {
 /** The file that marks a repo as holding a vault, with the settings an invite link would carry. */
 export const MARKER = ".commonplace.json";
 
-const MARKER_PATHS = ["folder", "home", "inbox", "inboxes", "notes", "template"];
+const MARKER_PATHS = ["folder", "home", "inbox", "inboxes", "notes", "template", "attachments"];
 const markerDir = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/g, "") : "");
 /** `owner/repo`, the same however it's spelled. */
 export const repoKey = (r) => `${r.owner}/${r.repo}`.toLowerCase();

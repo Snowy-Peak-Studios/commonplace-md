@@ -80,7 +80,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
-  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties.
+  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add image** on a phone.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).
@@ -326,6 +326,7 @@ Each repo in **Settings › Notes repos** has these fields. Paths are inside the
 | Inboxes folder | `inboxes` | A folder with one inbox per person. The Inbox button opens the one whose `github` property is your login. | `Notes/Inboxes` |
 | New notes folder | `notes` | New note asks only for a title and puts the note here. Empty: you pick the name, kind (note or CSV) and folder each time. | `Notes` |
 | Note template | `template` | A note that new Markdown notes start from. `{{title}}` becomes the title and `{{date}}` today's date (YYYY-MM-DD). Empty, or the file isn't there: a new note starts with `# Title`. | `Templates/Note.md` |
+| Attachments folder | `attachments` | Added images go here, inside the vault. Leave empty to save them next to the note. | `Attachments` |
 | Vault rules | `vault=1` | The generated navigation box (between `%% nav: … %%` and `%% /nav %%`) shows folded and can't be edited, links that lead to no page are warned about, and a new note's title must not already be a page anywhere. | on |
 
 A local vault has only Name shown and the fields from Start page down: it has no owner, repo, branch or folder, and no invite link.
@@ -490,6 +491,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
 - plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
+- In **Edit**, paste or drop an image or press **Add image** to choose one. The image has its own commit on GitHub, or is saved in a local vault. The editor inserts its embed at the cursor. **Save** keeps the link in the note. Images up to 10 MiB are accepted. See [Write and link notes](example-vault/How%20To/Write%20and%20link%20notes.md#add-an-image).
 - ` ```base ` blocks: a base view written in the page
 - a task's ` ```subtasks `, ` ```relations ` and ` ```commits ` blocks on any page, with `task:` and the task's ID, name or link
 - `description`, `acceptance-criteria`, `comments` and `work-history` for Markdown task sections. Comments also work on regular notes.

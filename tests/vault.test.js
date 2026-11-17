@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
+  LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, imageAttachment, imageInsertion, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
@@ -263,10 +263,38 @@ test("a task's state: ready, needs a decision, or a placeholder", async () => {
 });
 
 
+test("images get dated safe names that resolve from the note and avoid collisions across the vault", () => {
+  const now = new Date("2026-11-17T12:03:04Z");
+  const image = { name: "My |[screenshot].PNG", type: "image/png", size: 128 };
+  const base = "My-screenshot-2026-11-17-12-03-04-deadbeef";
+  const used = ["Elsewhere/" + base.toUpperCase() + ".PNG"];
+  const upload = imageAttachment(image, "Notes/A note.md", "/Attachments/", used, now, "deadbeeff00d");
+  assert.equal(upload.path, "Attachments/" + base + "-2.png");
+  assert.equal(upload.link, `![[${base}-2.png]]`);
+  assert.equal(new LinkIndex([...used, upload.path]).resolve(upload.name, "Notes/A note.md"), upload.path);
+  assert.equal(imageAttachment({...image, name: ""}, "Notes/A note.md", "", [], now, "deadbeef").path,
+    "Notes/image-2026-11-17-12-03-04-deadbeef.png");
+  assert.equal(imageAttachment({...image, name: "Photo.JPEG", type: ""}, "Home.md", "", [], now, "deadbeef").path,
+    "Photo-2026-11-17-12-03-04-deadbeef.jpeg");
+  assert.throws(() => imageAttachment(image, "Home.md", "../elsewhere", []), /valid Attachments folder/);
+  assert.throws(() => imageAttachment({...image, size: 10 * 1024 * 1024 + 1}, "Home.md", "", []), /10 MiB/);
+  assert.throws(() => imageAttachment({...image, type: "text/plain"}, "Home.md", "", []), /Choose a PNG/);
+});
+
+test("an image inserts at the cursor or after the note's properties", () => {
+  const link = "![[picture.png]]";
+  const front = "---\nowner: Alex\n---";
+  const note = front + "\n\n# Note\n";
+  assert.deepEqual(imageInsertion(note, 5, link), { at: front.length + 1, insert: link + "\n" });
+  assert.deepEqual(imageInsertion(front, front.length, link), { at: front.length, insert: "\n" + link + "\n" });
+  assert.deepEqual(imageInsertion(note, note.length, link), { at: note.length, insert: link });
+  assert.deepEqual(imageInsertion("# Title", 0, link), { at: 0, insert: link + "\n\n" });
+});
+
 test("a vault's marker file round-trips its settings", () => {
   assert.equal(MARKER, ".commonplace.json");
   const r = { owner: "Org", repo: "Game", label: "The game", branch: "dev", folder: "Wiki", home: "Home.md",
-    inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", vault: true };
+    inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments", vault: true };
   const back = parseMarker(markerText(r), "Org", "Game");
   assert.deepEqual(back, r);
 });
@@ -274,7 +302,7 @@ test("a vault's marker file round-trips its settings", () => {
 test("a marker keeps only what an invite link can set, with defaults", () => {
   const r = parseMarker('{"folder": "/Wiki/", "token": "x", "vault": "yes", "home": 3}', "o", "notes");
   assert.deepEqual(r, { owner: "o", repo: "notes", label: "notes", branch: "", folder: "Wiki", home: "README.md",
-    inbox: "", inboxes: "", notes: "", template: "", vault: false });
+    inbox: "", inboxes: "", notes: "", template: "", attachments: "", vault: false });
   assert.equal(parseMarker("not json", "o", "r"), null);
   assert.equal(parseMarker("[1]", "o", "r"), null);
   assert.equal(parseMarker("null", "o", "r"), null);

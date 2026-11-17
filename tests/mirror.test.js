@@ -183,6 +183,27 @@ test("a save goes to GitHub, then into the copy", async () => {
   await assert.rejects(m.writeText(gh, repo, "README.md", "x", null, "Edit"), (e) => unreachable(e));
 });
 
+test("an image upload keeps exact bytes in the mirror and reports an offline error without queuing a file", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n" });
+  const bytes = new Uint8Array([0, 100, 128, 255]);
+  const path = "Wiki/Attachments/test.png";
+  gh.writeBytes = async (r, receivedPath, received, message) => {
+    gh.check();
+    assert.equal(receivedPath, path);
+    assert.equal(message, "Add image");
+    assert.deepEqual(received, bytes);
+    return { sha: await blobSha(bytes), commit: "image-commit" };
+  };
+  const saved = await m.writeBytes(gh, repo, path, bytes, "Add image");
+  assert.equal(saved.commit, "image-commit");
+  assert.deepEqual(mem.files.get(path).bytes, bytes);
+  gh.online = false;
+  assert.deepEqual(new Uint8Array(await (await m.readBlob(gh, repo, saved.sha)).arrayBuffer()), bytes);
+  await assert.rejects(m.writeBytes(gh, repo, "Wiki/failed.png", bytes, "Add image"), (e) => unreachable(e));
+  assert.equal(m.state(repo).pending.size, 0);
+  assert.equal(mem.files.has("Wiki/failed.png"), false);
+});
+
 async function synced(start, local = {}) {
   const gh = await fakeGitHub(start);
   const mem = memoryFiles(local);

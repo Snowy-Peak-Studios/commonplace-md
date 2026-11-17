@@ -153,7 +153,7 @@ const storedRepos = (on = page) => on.evaluate(() => JSON.parse(localStorage.get
 // 0. Joining: the device starts empty and gets the example vault through an invite link.
 const invite = new URLSearchParams({
   owner: OWNER, repo: REPO, branch: BRANCH, label: "Example vault", vault: "1",
-  inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md",
+  inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments",
 });
 if (FOLDER) invite.set("folder", FOLDER);
 await page.setViewport({ width: 1280, height: 860 });
@@ -169,7 +169,7 @@ await page.click(".welcome .btn.primary");
 await until(() => !location.hash.startsWith("#/join") && !!document.querySelector(".preview h1"), 20000);
 check(page.url().includes(`#/${ID}/`), "after connecting, the invited repo opens: " + page.url());
 const joined = await storedRepos();
-const want = { owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md" };
+const want = { owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments" };
 check(joined?.length === 1 && Object.entries(want).every(([k, v]) => joined[0][k] === v),
   "the device has only the invited repo, with every setting from the link: " + JSON.stringify(joined));
 check(await page.evaluate(() => !Object.keys(localStorage).some((k) => k.startsWith("notes-app:"))), "everything is stored under commonplace:");
@@ -647,6 +647,52 @@ const real = await realFile(taskPath);
 const diff = real.text.split("\n").map((l, i) => [l, p1?.text.split("\n")[i]]).filter(([a, b]) => a !== b);
 check(diff.length === 1 && diff[0][0].includes("[ ]") && diff[0][1].includes("[x]"), "exactly one line changed, [ ] to [x]: " + JSON.stringify(diff));
 check(p1?.body.sha === real.sha, "save used the file's current sha");
+
+// 5a. Editing: paste binary image data at the cursor and commit only the attachment.
+await page.evaluate(() => document.querySelectorAll("#mode button")[1].click());
+await page.waitForSelector(".image-tools button");
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIAK+Y6GQAAAABJRU5ErkJggg==";
+const putsBeforeImage = puts.length;
+const pasteImage = () => page.$eval(".editor-pane .cm-editor", async (node, png) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(node);
+  const before = view.state.doc.toString();
+  view.dispatch({ selection: { anchor: before.length } });
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([Uint8Array.from(atob(png), c => c.charCodeAt(0))], "Screenshot.png", { type: "image/png" }));
+  view.contentDOM.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+  return before;
+}, png);
+const imageNote = await pasteImage();
+check(await until(() => [...document.querySelectorAll(".editor-pane .cm-line")].some(x => x.textContent.includes("![[Screenshot-"))),
+  "pasting an image inserts a dated embed at the cursor");
+const imagePut = puts.length === putsBeforeImage + 1 ? puts.at(-1) : null;
+const imageName = imagePut?.url.split("/").at(-1);
+check(Boolean(imagePut && /^Screenshot-.*[.]png$/.test(imageName)
+  && imagePut.url === contentsUrl("Attachments/" + imageName) && imagePut.body.content === png && !imagePut.body.sha && imagePut.body.branch === BRANCH),
+  "the paste sends exact image bytes in its own create-only commit to the invite link's Attachments folder");
+const imageDraft = await page.$eval(".editor-pane .cm-editor", async (node, before) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(node);
+  const text = view.state.doc.toString();
+  view.dispatch({ changes: { from: 0, to: text.length, insert: before }, filter: false });
+  return text;
+}, imageNote);
+check(imageDraft === imageNote + `![[${imageName}]]`, "the note stays a draft with only the embed added");
+
+const putsBeforeOfflineImage = puts.length;
+await page.evaluate(() => Object.defineProperty(navigator, "onLine", { configurable: true, value: false }));
+try {
+  await pasteImage();
+  check(await until(() => document.querySelector("#toast").textContent.includes("Connect to GitHub before adding an image")),
+    "offline, adding an image explains how to continue");
+  check(puts.length === putsBeforeOfflineImage && await page.$eval(".editor-pane .cm-editor", async (node, text) => {
+    const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+    return EditorView.findFromDOM(node).state.doc.toString() === text;
+  }, imageNote), "the offline image is not uploaded or added to the note");
+} finally {
+  await page.evaluate(() => delete navigator.onLine);
+}
 
 // 6. Edit mode: the nav box can't be changed, typing at the end works.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
@@ -1378,6 +1424,7 @@ await page.waitForSelector(".preview input.task");
 check(await page.$eval("#title .badge", (b) => b.textContent === "Read only").catch(() => false), "a read-only repo says so in the toolbar");
 check(await page.evaluate(() => ["#mode", "#save-btn", "#side-new"].every((s) => document.querySelector(s).hidden)), "no Edit, Save or New note there");
 check(await page.$$eval(".preview input.task", (bs) => bs.length > 0 && bs.every((b) => b.disabled)), "its checkboxes can't be ticked");
+check(!(await page.$(".image-tools")), "a read-only vault has no Add image control");
 await shot("10-read-only");
 readOnlyRepo = false;
 

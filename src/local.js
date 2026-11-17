@@ -255,14 +255,21 @@ export class LocalSource {
    * Saves a file, refusing like GitHub does when it changed since it was read (`sha` no longer the file's),
    * or when it's there already and no `sha` was given. Then the app offers to merge, as for a GitHub save.
    */
-  async writeText(r, path, text, sha) {
+  writeText(r, path, text, sha) {
+    return this.writeFile(r, path, encode(text), sha);
+  }
+
+  writeBytes(r, path, bytes) {
+    return this.writeFile(r, path, bytes);
+  }
+
+  async writeFile(r, path, bytes, sha) {
     const files = await this.files(r);
     let current = null;
     try { current = await blobSha(await files.read(path)); } catch (e) { if (e.status !== 404) throw e; }
     if (current && current !== sha) {
       throw new GitHubError(409, sha ? `${path} changed on this device since it was opened.` : `${path} is there already.`);
     }
-    const bytes = encode(text);
     await files.write(path, bytes);
     const next = await blobSha(bytes);
     this.state(r).paths.set(next, path);
@@ -321,8 +328,8 @@ export class LocalSource {
   }
 }
 
-const ROUTED = new Set(["tree", "headSha", "repo", "branch", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
-const MIRRORED = new Set(["tree", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
+const ROUTED = new Set(["tree", "headSha", "repo", "branch", "readText", "readBlob", "readBlobText", "writeText", "writeBytes", "commitFiles", "searchCode"]);
+const MIRRORED = new Set(["tree", "readText", "readBlob", "readBlobText", "writeText", "writeBytes", "commitFiles", "searchCode"]);
 
 /**
  * The GitHub client, with every call about a local vault (its first argument) answered by `local` instead, and,
@@ -437,7 +444,7 @@ export const EXAMPLE_FILES = [
 
 /** The example vault's settings, as its README suggests them. */
 const EXAMPLE_SETTINGS = {
-  home: "Home.md", inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", vault: true,
+  home: "Home.md", inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments", vault: true,
 };
 
 /** Starter vaults copied by the local vault dialog. Each starter folder can also be copied on its own. */

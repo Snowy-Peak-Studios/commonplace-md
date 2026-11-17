@@ -16,7 +16,10 @@ export class GitHubError extends Error {
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
 
 export function encodeBase64(text) {
-  const bytes = new TextEncoder().encode(text);
+  return encodeBytes(new TextEncoder().encode(text));
+}
+
+function encodeBytes(bytes) {
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
@@ -186,8 +189,17 @@ export class GitHub {
   }
 
   /** One commit per save. Without a `sha` it creates the file; with a stale one GitHub refuses. */
-  async writeText(r, path, text, sha, message) {
-    const body = { message, content: encodeBase64(text), branch: r.branch };
+  writeText(r, path, text, sha, message) {
+    return this.writeContents(r, path, encodeBase64(text), message, sha);
+  }
+
+  /** An attachment adds a new file, with no overwrite SHA and no offline queue. */
+  writeBytes(r, path, bytes, message) {
+    return this.writeContents(r, path, encodeBytes(bytes), message);
+  }
+
+  async writeContents(r, path, content, message, sha) {
+    const body = { message, content, branch: r.branch };
     if (sha) body.sha = sha;
     const data = await this.request("PUT", `/repos/${r.owner}/${r.repo}/contents/${encodePath(path)}`, { body });
     return { sha: data.content.sha, commit: data.commit.sha, parent: data.commit.parents?.[0]?.sha ?? null };

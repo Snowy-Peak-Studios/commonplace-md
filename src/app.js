@@ -5,7 +5,7 @@ import { GitHub, newTokenUrl } from "./github.js";
 import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
-  LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
+  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
@@ -312,6 +312,7 @@ function renderNudge() {
 
 /** Reads the repo again from GitHub, asking first when the open note has unsaved changes. */
 async function reloadFromGitHub() {
+  if (app.file?.imageUpload) return toast("Wait for the image upload to finish.", "info");
   if (app.file?.dirty && !(await confirmDialog(isLocal(app.repo) ? "Reload the notes?" : "Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
   if (app.file) store.remove(draftKey(app.file));
   if (app.repo) {
@@ -621,7 +622,7 @@ function renderHeader() {
   }
   const save = $("#save-btn");
   save.hidden = !f || viewOnly(f.kind) || !writable;
-  save.disabled = !(f?.dirty || uploadable(f)) || app.saving;
+  save.disabled = !(f?.dirty || uploadable(f)) || app.saving || !!f?.imageUpload;
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : uploadable(f) ? ["upload", "Upload"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
@@ -763,9 +764,14 @@ async function route() {
  */
 async function mayLeave(depthBefore) {
   const f = app.file;
-  if (!f?.dirty) return true;
+  if (!f) return true;
   const { parts } = parseHash();
   if (parts[0] === f.repo.id && parts.slice(1).join("/") === f.path) return true;
+  if (f.imageUpload) {
+    toast("Wait for the image upload to finish.", "info");
+    return restoreNoteRoute(f, depthBefore);
+  }
+  if (!f.dirty) return true;
   if (askingLeave) return false;
   askingLeave = true;
   let choice;
@@ -794,6 +800,10 @@ async function mayLeave(depthBefore) {
   // Saved, discarded or kept as a draft: on to the new page. Stay, or a save that didn't go through
   // (refused, or someone else's change to sort out first): back to the file.
   if ((choice === "save" && !f.dirty) || choice === "discard" || choice === "draft") return true;
+  return restoreNoteRoute(f, depthBefore);
+}
+
+function restoreNoteRoute(f, depthBefore) {
   if (navDepth !== depthBefore) {
     skipRoute = true;
     if (navDepth > depthBefore) history.back();
@@ -900,6 +910,7 @@ function renderFile() {
     linkWarn: h("div", { class: "banner warn link-warn", hidden: true }),
   };
   f.dom.banners.append(f.dom.linkWarn);
+  if (f.kind === "md" && canWrite(f.repo)) setupImageTools(f);
   view.append(f.dom.banners, h("div", { class: "panes" }, f.dom.editorPane, f.dom.preview));
   showMain(view);
   f.dom.preview.addEventListener("click", onPreviewClick);
@@ -950,14 +961,90 @@ function setMode(mode) {
   applyMode(true);
 }
 
-function onTextChanged(text) {
+function onTextChanged(text, changes) {
   const f = app.file;
+  if (f?.imageUpload && changes) f.imageUpload.at = changes.mapPos(f.imageUpload.at, -1);
   if (!f || f.text === text) return;
   f.text = text;
   if (f.kind === "csv") f.csv = null;
   updateDirty();
   if (f.kind === "md" && isWide()) previewLater();
   warnLater();
+}
+
+/** The chooser, clipboard and editor drop all go through the same image action. */
+function setupImageTools(f) {
+  const input = h("input", { type: "file", accept: IMAGE_ACCEPT, hidden: true, "aria-label": "Choose an image",
+    onchange: () => {
+      const file = input.files[0];
+      input.value = "";
+      if (file) addImage(f, file);
+    } });
+  const pick = h("button", { type: "button", class: "btn small", onclick: () => input.click() }, icon("image"), "Add image");
+  const status = h("span", { class: "muted", role: "status" });
+  f.dom.imageTools = { pick, status };
+  const pane = f.dom.editorPane;
+  pane.append(h("div", { class: "image-tools" }, pick, input, status));
+  const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => file.type.startsWith("image/") || isImagePath(file.name))
+    || [...(transfer.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile());
+  const handle = (event, transfer, at) => {
+    const file = imageFile(transfer);
+    if (!file) return;
+    event.preventDefault();
+    event.stopPropagation();
+    addImage(f, file, at);
+  };
+  pane.addEventListener("paste", (event) => handle(event, event.clipboardData), true);
+  pane.addEventListener("dragover", (event) => {
+    if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === "file" && (!item.type || item.type.startsWith("image/")))) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }, true);
+  pane.addEventListener("drop", (event) => handle(event, event.dataTransfer,
+    f.editor?.posAtCoords({ x: event.clientX, y: event.clientY }) ?? undefined), true);
+}
+
+async function addImage(f, file, at = f.editor?.state.selection.main.head) {
+  if (app.file !== f || app.mode !== "edit" || !canWrite(f.repo) || at == null) return;
+  if (f.imageUpload || app.saving) return toast("Wait for the current save or upload to finish.", "info");
+  if (!isLocal(f.repo) && navigator.onLine === false) return toast("Connect to GitHub before adding an image.", "error");
+  const nav = f.repo.vault && findNavBlock(f.text);
+  if (nav && at >= nav.from && at <= nav.to) return toast("Move the cursor outside the navigation box to add an image.", "info");
+
+  const { pick, status } = f.dom.imageTools;
+  const tree = app.trees.get(f.repo.id);
+  f.imageUpload = { at };
+  pick.disabled = true;
+  status.textContent = "Uploading image…";
+  renderHeader();
+  try {
+    const image = imageAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const saved = await gh.writeBytes(f.repo, fullPath(f.repo, image.path), bytes, `Add ${image.path} from ${APP_NAME}`);
+    wroteCommit(f.repo, saved);
+    treeChanged(f.repo, image.path, saved.sha);
+    if (app.file !== f) return toast(`Image saved to ${image.path}.`, "ok");
+    const { at: cursor, insert } = imageInsertion(f.text, f.imageUpload.at, image.link);
+    const currentNav = f.repo.vault && findNavBlock(f.text);
+    if (currentNav && cursor >= currentNav.from && cursor <= currentNav.to) {
+      // Keep the protected box on its original lines when insertion falls at its edge.
+      const line = insert.endsWith("\n") ? insert : insert + "\n";
+      f.editor.dispatch({ changes: { from: currentNav.from, insert: line }, filter: false });
+    } else {
+      f.editor.dispatch({ changes: { from: cursor, insert }, selection: { anchor: cursor + insert.length }, scrollIntoView: true });
+    }
+    if (app.mode === "edit") f.editor.focus();
+    else renderPreview();
+    toast("Image added. Save the note to keep the link.", "ok");
+  } catch (e) {
+    toast(`Image not added: ${e.message}`, "error");
+  } finally {
+    f.imageUpload = null;
+    pick.disabled = false;
+    status.textContent = "";
+    renderHeader();
+  }
 }
 
 function updateDirty() {
@@ -2976,6 +3063,7 @@ function renderTable() {
 async function save() {
   const f = app.file;
   if (!(f?.dirty || uploadable(f)) || app.saving || viewOnly(f.kind)) return;
+  if (f.imageUpload) return toast("Wait for the image upload to finish.", "info");
   const before = f.text;
   const text = toLf(before);
   app.saving = true;
@@ -3285,6 +3373,7 @@ function inviteLink(r) {
   if (r.home && r.home !== "README.md") p.set("home", r.home);
   if (r.notes) p.set("notes", r.notes);
   if (r.template) p.set("template", r.template);
+  if (r.attachments) p.set("attachments", r.attachments);
   return `${location.origin}${location.pathname}#/join?${p}`;
 }
 
@@ -3301,7 +3390,7 @@ function joinRepo(params) {
     vault: params.get("vault") === "1",
     inbox: path("inbox"), inboxes: path("inboxes"),
     home: path("home") || "README.md",
-    notes: path("notes"), template: path("template"),
+    notes: path("notes"), template: path("template"), attachments: path("attachments"),
   };
 }
 
@@ -4140,6 +4229,7 @@ function showSettings(adding = false, tokenOwner = "") {
       field("Inboxes folder", "inboxes", r.inboxes, "A folder with one inbox per person, e.g. Notes/Inboxes. The Inbox button opens the note whose github property is your GitHub login."),
       field("New notes folder", "notes", r.notes, "e.g. Notes. New note then asks only for a title and puts the note here. Empty: you pick the folder and kind each time."),
       field("Note template", "template", r.template, "A note new notes start from, e.g. Templates/Note.md; {{title}} and {{date}} are filled in. Empty: a new note starts with its title."),
+      field("Attachments folder", "attachments", r.attachments, "Where added images go inside this vault, e.g. Attachments. Empty: next to the note."),
       h("label", { class: "check-line full" }, h("input", { type: "checkbox", name: "vault", checked: !!r.vault }),
         h("span", {}, "Vault rules: the generated navigation box (between %% nav: … %% and %% /nav %%) is folded and can't be edited, and links that lead to no page are warned about")),
       h("div", { class: "full card-actions" },
@@ -4175,13 +4265,13 @@ function showSettings(adding = false, tokenOwner = "") {
         ids.add(old.id);
         return {
           ...old, label: v("label") || old.label, inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
-          notes: cleanDir(v("notes")), template: cleanDir(v("template")), vault: card.querySelector("[name=vault]").checked,
+          notes: cleanDir(v("notes")), template: cleanDir(v("template")), attachments: cleanDir(v("attachments")), vault: card.querySelector("[name=vault]").checked,
         };
       }
       const r = {
         label: v("label"), owner: v("owner"), repo: v("repo"), branch: v("branch") || "main",
         folder: cleanDir(v("folder")), inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
-        notes: cleanDir(v("notes")), template: cleanDir(v("template")),
+        notes: cleanDir(v("notes")), template: cleanDir(v("template")), attachments: cleanDir(v("attachments")),
         vault: card.querySelector("[name=vault]").checked,
       };
       let id = card.dataset.id || r.repo.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "repo";

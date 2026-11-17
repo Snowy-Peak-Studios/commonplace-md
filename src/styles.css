@@ -513,6 +513,7 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
    The editor
    ================================================================ */
 .editor-pane { padding-top: 14px; }
+.image-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .cm-editor { font-size: 16px; }
 .cm-editor.cm-focused { outline: none; }
 .cm-scroller { font-family: var(--font) !important; line-height: 1.7 !important; }
