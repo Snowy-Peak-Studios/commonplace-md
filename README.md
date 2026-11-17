@@ -4,7 +4,7 @@
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
-**[☕ Support on Ko-fi](https://ko-fi.com/jansnieg)**
+**[Support us on Ko-Fi!](https://ko-fi.com/jansnieg)**
 
 *Don't rely on your agent's memory: make your own vault with all the answers.*
 
