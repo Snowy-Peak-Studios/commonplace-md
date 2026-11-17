@@ -362,13 +362,37 @@ const putsBeforePick = puts.length;
 await page.select('select[aria-label="Priority of Add a reading list"]', "High");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("priority is now High"), { timeout: 15000 }).catch(() => {});
 const pickPut = puts.length > putsBeforePick ? puts.at(-1) : null;
-const pickBefore = await ghGet(`/repos/${OWNER}/${REPO}/contents/${encPath(PRE + "Tasks/Add a reading list.md")}?ref=${BRANCH}`)
-  .then((d) => Buffer.from(d.content, "base64").toString("utf8")).catch(() => "");
+const pickBefore = claim?.url === contentsUrl("Tasks/Add a reading list.md") ? claim.text : (await realFile("Tasks/Add a reading list.md")).text;
 check(pickPut?.url === contentsUrl("Tasks/Add a reading list.md") && pickPut.text === pickBefore.replace(/^priority: .*$/m, "priority: High"),
   "a new priority saves the task with only that line changed");
 check(pickPut?.body.message?.startsWith("T-5: priority set to High"), "the commit says what changed: " + pickPut?.body.message);
 await page.waitForFunction(() => document.querySelector('select[aria-label="Priority of Add a reading list"]')?.value === "High", { timeout: 10000 }).catch(() => {});
 check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s) => s.value).catch(() => null) === "High", "the box shows the new priority");
+// A person can release their own claim before their agent starts.
+const taskAction = (title, label) => page.evaluate((title, label) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
+  .find((li) => li.querySelector(".suggest-name")?.textContent.includes(title))
+  ?.querySelectorAll("button").forEach((button) => { if (button.textContent === label) button.click(); }), title, label);
+const waitForFreeTask = (title) => page.waitForFunction((title) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
+  .some((li) => li.querySelector(".suggest-name")?.textContent.includes(title) &&
+    [...li.querySelectorAll("button")].some((b) => b.textContent.includes("Claim"))), { timeout: 15000 }, title);
+const claimedActions = await page.$$eval(".suggest > .suggest-list > li", (rows) => rows
+  .filter((row) => row.querySelector(".claimed"))
+  .map((row) => [...row.querySelectorAll("button")].map((b) => b.textContent)));
+check(claimedActions.length > 0 && claimedActions.every((actions) => actions.includes("Unclaim") &&
+  !actions.some((label) => ["Not now", "Push to the next sprint"].includes(label))),
+  "claimed tasks can be unclaimed, and only free tasks can be put off");
+const putsBeforeUnclaim = puts.length;
+await taskAction("Add a reading list", "Unclaim");
+await page.waitForSelector("dialog.modal[open] .btn.primary");
+check(await page.$eval("dialog.modal[open]", (dialog) => dialog.textContent.includes("Unclaim Add a reading list?")
+  && dialog.textContent.includes("To Do")), "Unclaim asks before clearing the assignment");
+await page.click("dialog.modal[open] .btn.primary");
+await waitForFreeTask("Add a reading list");
+const unclaimPut = puts.length > putsBeforeUnclaim ? puts.at(-1) : null;
+const expectedUnclaim = pickPut?.text?.replace(/^status: .*$/m, "status: To Do").replace(/^assignee: .*$/m, 'assignee: ""');
+check(puts.length === putsBeforeUnclaim + 1 && unclaimPut?.url === contentsUrl("Tasks/Add a reading list.md")
+  && unclaimPut.text === expectedUnclaim && unclaimPut.body.message.startsWith("T-5: unclaimed by Your name"),
+  "Unclaim commits only the status and assignee, and the task becomes free");
 // Not now: a task goes on the waiting list (status Waiting), out of the suggestions; Bring back takes it off.
 // With sprints the button is Push to the next sprint; this task is in the last sprint there is, so it asks, and offers the waiting list.
 const putsBeforeWait = puts.length;
@@ -400,19 +424,22 @@ await page.waitForFunction(() => !document.querySelector(".suggest-waiting")
   && [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")),
 { timeout: 15000 }).catch(() => {});
 const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
-// Saves here are faked, so the real note still says To Do: Bring back reads it fresh, finds nothing to change and
-// commits nothing. Any commit it does make must say To Do.
-check((!backPut || /^status: To Do$/m.test(backPut.text)) && !(await page.$(".suggest-waiting"))
+check(backPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: To Do$/m.test(backPut.text)
+  && /^assignee: ""$/m.test(backPut.text) && !(await page.$(".suggest-waiting"))
   && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
 // Push to the next sprint: a task in the current sprint moves into the next one, one commit of its sprint line.
 const sprintNext = inboxSprints.find((x) => x.when === "next");
 if (inboxSprints.find((x) => x.when === "now") && sprintNext) {
+  await taskAction("Try the app on a phone", "Unclaim");
+  await page.waitForSelector("dialog.modal[open] .btn.primary");
+  await page.click("dialog.modal .btn.primary");
+  await waitForFreeTask("Try the app on a phone");
+  const pushBefore = puts.at(-1).text;
   const putsBeforePush = puts.length;
   await page.evaluate(() => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Try the app on a phone"))
     ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Push to the next sprint") b.click(); }));
   await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("pushed to"), { timeout: 15000 }).catch(() => {});
   const pushPut = puts.length > putsBeforePush ? puts.at(-1) : null;
-  const pushBefore = (await realFile("Tasks/Try the app on a phone.md")).text;
   check(pushPut?.url === contentsUrl("Tasks/Try the app on a phone.md")
     && pushPut.text === pushBefore.replace(/^sprint: .*$/m, `sprint: "[[${sprintNext.name}]]"`),
   `Push to the next sprint saves the task in ${sprintNext.name}, with only that line changed`);

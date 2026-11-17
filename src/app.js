@@ -2068,7 +2068,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
           : `There's no sprint after ${latest.name} yet: put it on the waiting list instead`,
         onclick: async (e) => {
           const button = e.currentTarget;
-          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, `pushed to ${next.name}`);
+          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, { said: `pushed to ${next.name}` });
           if (await confirmDialog(`No sprint after ${latest.name} yet`,
             `Put ${shownName(n.path)} on the waiting list instead? It stops being suggested until you bring it back. `
             + `To push tasks to a new sprint, open ${latest.name} and press Start the next sprint.`, "Not now")) {
@@ -2092,7 +2092,10 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const claimed = mine.map((n) => row(n, [h("span", {
       class: `chip claimed${n.agent ? " working" : ""}`,
       title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n)]));
+    }, n.agent ? `${n.agent} is on it` : "Claimed"),
+    editable && !n.agent ? h("button", { class: "btn small ghost", type: "button",
+      title: "Return this task to To Do", onclick: (e) => unclaimSuggested(repo, n.path, who, e.currentTarget),
+    }, "Unclaim") : null]));
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
@@ -2144,6 +2147,16 @@ async function claimSuggested(repo, path, who, button, move = null) {
   if (!refreshInboxBox(repo)) button.disabled = false;
 }
 
+async function unclaimSuggested(repo, path, who, button) {
+  if (!await confirmDialog(`Unclaim ${shownName(path)}?`,
+    "This clears its assignee and returns it to To Do.", "Unclaim")) return;
+  return changeTask(repo, path, "status", "To Do", button, {
+    said: `unclaimed by ${who}`,
+    also: [["assignee", ""]],
+    allow: (props) => claimedTasks([{ path, props }], who).some((task) => !task.agent),
+  });
+}
+
 /** Draws the open page again (its top tasks box re-sorts), keeping the scroll. False when no page of `repo` with one is open. */
 function refreshInboxBox(repo) {
   if (!(app.file?.repo === repo && app.file.dom?.preview.isConnected && app.file.dom.preview.querySelector(".suggest"))) return false;
@@ -2154,23 +2167,22 @@ function refreshInboxBox(repo) {
 }
 
 /**
- * Sets one property of a task from a top tasks box: one commit that changes only that line. `said` (e.g.
+ * Updates a task from a top tasks box in one commit. `said` (e.g.
  * "pushed to Sprint 2") is what the commit and the message say instead of "<key> set to <value>".
  */
-async function changeTask(repo, path, key, value, picker, said = "") {
+async function changeTask(repo, path, key, value, picker, { said = "", also = [], allow = null } = {}) {
   picker.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const known = baseCache("baseProps", repo);
-    const next = setProps(text, [[key, value]]);
-    if (!next) {
+    const changed = allow && !allow(now);
+    const next = !changed && setProps(text, [[key, value], ...also]);
+    if (!next || next === toLf(text)) {
       known[sha] = now;
       treeChanged(repo, path, sha);
-      toast(`${shownName(path)} has no properties to change.`, "error");
-    } else if (next === toLf(text)) {
-      known[sha] = now;
-      treeChanged(repo, path, sha);
+      if (changed) toast(`${shownName(path)} changed since this box was drawn.`, "error");
+      else if (!next) toast(`${shownName(path)} has no properties to change.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${said || `${key} set to ${value}`} from ${APP_NAME}`);

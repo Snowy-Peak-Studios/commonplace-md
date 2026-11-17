@@ -74,5 +74,5 @@ fields: parent, state, priority, area
 - `owner`: whom **Claim** claims a task for.
 - `fields`: what each task shows besides its name and **Claim**, in that order: `parent` (a link to the task it's part of), `state`, `priority`, `area`, or any other property. Left out: `state, priority, area`.
 
-**Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Each task's priority and area can be changed right there, and **Not now** puts one off. The block works on any page: [Home](../Home.md) has one.
+**Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Use **Unclaim** to return your own claim to *To Do* before an agent starts on it. **Not now** puts a free task off. You can change a task's priority and area in the box. The block works on any page: [Home](../Home.md) has one.
 
