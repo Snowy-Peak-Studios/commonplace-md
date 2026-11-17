@@ -50,6 +50,14 @@ It reads every note once for the mentions (then only the changed ones), so the f
 
 While something waits on you (a question with no answer, a mention with no reply that isn't seen), the **Inbox** button shows a red dot. [Add a reading list](../Tasks/Add%20a%20reading%20list.md) has a question and the [Guide](../Guide.md) a mention, so your [inbox](../Notes/Inbox.md) lists both.
 
+## An item for another vault
+
+Your agent can route an item to a declared sibling using the **Sibling vaults and routing** section of [AGENTS.md](../AGENTS.md). Set up its name, purpose, storage type and exact location first; put private bindings in a private registry. The example starts with no sibling destinations.
+
+The agent uses that vault's task format and ID and records where the request came from. It saves a transfer reference, verifies the destination task, and only then clears the original item. If permission, saving or verification fails, the source stays. Retrying finds the saved task instead of creating another one. Unclear destinations and changes of privacy boundary need your decision.
+
+This is an agent workflow. The app's Inbox button still opens the current vault's inbox; these rules add no combined app inbox or Move action. A local-only vault does not become synced by being listed.
+
 ## Your own inbox
 
 Each person can have their own in `Notes/Inboxes/`, with their GitHub login in its `github` property. The **Inbox** button opens yours when you're signed in with that login ([Your name](../Notes/Inboxes/Your%20name.md) shows how).

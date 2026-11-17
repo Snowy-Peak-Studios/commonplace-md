@@ -32,10 +32,27 @@ If your person says the rules are already set up, just delete this section.
 1. `git pull --rebase --autostash`. People write from their phones and other devices all day. If the rebase stops on a conflict, sort it out first, keeping both sides' edits.
 2. Read the **current goals** at the top of `Task Board.md`. Weigh every task you pick and everything you propose against them, say which goal a task serves, and flag work that serves none.
 3. Read **your own person's inbox**, and no one else's: the note in `Notes/Inboxes/` whose `owner` is your `git config user.name` (`grep -rl "^owner: <name>$" Notes`); if there's none, the shared `Notes/Inbox.md`.
-   - **New tasks:** every ` ```new-tasks ` block in the vault whose `owner:` is your person, on any page (`grep -rln '^```new-tasks' --include=*.md .`), and the items written under **New tasks** in their inbox: turn each item into a task note (or add it to a task that already covers it), with `requested_by` your person. Then take the item out of its block. Blocks with someone else's `owner:`, or none, are not yours.
+   - **New tasks:** every ` ```new-tasks ` block in the vault whose `owner:` is your person, on any page (`grep -rln '^```new-tasks' --include=*.md .`), and the items written under **New tasks** in their inbox: turn each item into a task note (or add it to a task that already covers it), with `requested_by` your person. Then take the item out after its task is saved. For another vault, follow Sibling vaults and routing below before removing it. Blocks with someone else's `owner:`, or none, are not yours.
    - **Notes:** leave them as they are.
    - **Needs attention:** act on the answers to your own questions (or to questions on a task you've claimed), written on their tasks (see Questions), then clear them.
    - Commit and push the sorted inbox and the new tasks at once.
+
+## Sibling vaults and routing
+
+Before making a task here, check whether the item clearly belongs to a declared sibling. Only route your own person's items. The registry below is empty until your person sets it up; it does not discover other vaults or grant access.
+
+| Name | What belongs there | Storage and visibility | Exact locator |
+| --- | --- | --- | --- |
+
+A GitHub locator needs owner/repo, branch and folder. A local locator needs a permitted folder binding or browser-vault ID. Put private names and device paths in an approved private registry referenced here if this file is shared. Never include credentials. Other vaults are plain text, not wikilinks into this vault.
+
+1. Use only a declared destination authorized for the current account and person. Read its rules and template, resolve its person/reviewer fields and preserve the requester. Ask if the purpose, destination, identity or privacy boundary is unclear. Never infer permission from an available token or a global view. Keep the source while waiting.
+2. Before writing elsewhere, save a unique transfer ID and the original item, block owner and destination in an `inbox_routes` entry in the source note's front matter, outside new-tasks blocks. Commit and push this record for a GitHub source. Keep the item and leave Notes untouched. Reuse the record on retry; do not take over another session's active transfer. If you cannot tell whether its previous session has finished, keep the record and ask before resuming it. Ask when identical items cannot be distinguished.
+3. Search the destination for that `routing_id`, including after timeouts or refused pushes. Verify and reuse a match; otherwise create one task with its own template and next ID. Keep `routing_id` and plain-text `routed_from` provenance with the source vault, branch/folder or local binding and page. Copy the request, not unrelated context. Creating a task is not claiming it.
+4. Verify the saved destination: committed, pushed and read back on the intended GitHub branch, or reread from the authorized local source. An offline queued save or uncertain write is not confirmation. Browser-only storage needs a supported handoff; do not pretend a folder agent can read it.
+5. Only then reread and remove the exact source item and its active transfer record, saving by the source's rules. Leave changed or ambiguous items for review. If cleanup fails, the saved transfer ID lets a retry reuse the destination task. If any earlier step fails, keep the source and report what remains.
+
+Tasks that belong here can still be committed with their source cleanup in one save. Cross-vault saves are separate: a verified task can exist while source cleanup is pending. This agent workflow adds no app-wide inbox, automatic move or central storage service.
 
 ## Tasks
 

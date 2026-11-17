@@ -26,6 +26,8 @@ The new tasks are in ` ```new-tasks ` blocks, on any page. Find them all: `grep 
 
 For each of your items (each line in the block but `owner:`):
 
+**Check the declared sibling registry before making a local task.** If the item clearly belongs elsewhere, follow **Sibling vaults and routing** in `AGENTS.md`: verify authorization and destination rules, save the transfer ID at the source, create or find the destination task with that ID, and verify its saved copy before clearing the source. Keep provenance in plain text. A retry reuses the transfer record and destination task; a failed or queued remote write leaves the item intact. A missing/ambiguous destination or privacy boundary needs the person's decision. Then continue with the next item; do not also create a local task. If it belongs elsewhere but no allowed sibling is configured, leave the item and ask. Items that belong here follow the normal steps below.
+
 1. **Is there a task for it already?** Look for its words in the task file names first (`ls Tasks | grep -i <word>`), then in their text. If one covers it, add the item to that task: quote it in the task's notes with the date, and add or change an acceptance criterion if needed.
 2. **If not, make a task** from `Templates/Task.md`:
    - `id`: the highest one + 1 (`grep -h "^id:" Tasks/*.md | sort -V | tail -1`). IDs are never reused.
