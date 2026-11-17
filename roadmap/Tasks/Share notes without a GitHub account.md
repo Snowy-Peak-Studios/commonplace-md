@@ -1,5 +1,5 @@
 ---
-status: Working on now
+status: Exploring
 ---
 
 # Share notes without a GitHub account
