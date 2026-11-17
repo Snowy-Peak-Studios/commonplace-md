@@ -186,6 +186,10 @@ task: Add a reading list
 task: Get set up
 ```
 
+### Task sections and comments
+
+Use standalone `description`, `acceptance-criteria`, `comments` and `work-history` fences for the Markdown you write on a task. The history starts folded at the bottom. See [Work with tasks](Work%20with%20tasks.md#task-sections) for the four together or the [Guide](../Guide.md#comments) for a Comments block on a regular note.
+
 ### Sprint
 
 Leave the `sprint` block empty on its own sprint note. On another page, set `sprint:` to a sprint name or wikilink, `current`, or `next`. A named sprint works even after its dates pass.

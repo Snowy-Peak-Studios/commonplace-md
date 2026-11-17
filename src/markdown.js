@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -98,7 +98,7 @@ function taskRule(state) {
     if (!m) continue;
     first.content = first.content.slice(m[0].length);
     const box = new state.Token("html_inline", "", 0);
-    const line = inline.map ? inline.map[0] : -1;
+    const line = inline.map ? inline.map[0] + (state.env.lineOffset ?? 0) : -1;
     box.content = `<input type="checkbox" class="task" data-line="${line}"${m[1] === " " ? "" : " checked"}> `;
     inline.children.unshift(box);
     tokens[i - 2].attrJoin("class", "task-item");
@@ -175,7 +175,15 @@ export function createMarkdown() {
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
+    const lang = fenceLanguage(token.info);
+    if (token.level === 0 && !env.inNoteSection && Object.hasOwn(NOTE_SECTIONS, lang)) {
+      const title = NOTE_SECTIONS[lang];
+      const lineOffset = (env.lineOffset ?? 0) + (token.map?.[0] ?? -1) + 1;
+      const body = md.render(token.content, { ...env, lineOffset, inNoteSection: true });
+      const attrs = `class="note-section" data-section="${lang}" data-heading="${title}"`;
+      if (lang === "work-history") return `<details ${attrs}><summary>${title}</summary>\n${body}</details>\n`;
+      return `<section ${attrs}><h2>${title}</h2>\n${body}</section>\n`;
+    }
     if (lang === "top-tasks") {
       const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
@@ -188,10 +196,11 @@ export function createMarkdown() {
     // has its own line and text (`data-line`, `data-item`).
     if (lang === "new-tasks") {
       const { owner, items, lines } = newTasksBlock(token.content);
-      const close = token.map ? token.map[1] - 1 : -1;
+      const offset = env.lineOffset ?? 0;
+      const close = token.map ? offset + token.map[1] - 1 : -1;
       const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
         : "No owner: line, so no agent sorts these";
-      const at = (i) => (token.map ? ` data-line="${token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
+      const at = (i) => (token.map ? ` data-line="${offset + token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
       const list = items.length ? items.map((item, i) => `<li${at(i)}><span class="newtasks-text">${md.renderInline(item, env)}</span></li>`).join("")
         : '<li class="muted">Nothing yet.</li>';
       return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
@@ -324,5 +333,11 @@ export function attentionOptions(src) {
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */
 export function renderNote(md, text, env) {
   const { source, frontMatter } = prepareForPreview(text);
-  return { html: md.render(source, env), frontMatter };
+  const history = [];
+  const body = md.parse(source, env).filter((token) => {
+    if (token.level !== 0 || token.type !== "fence" || fenceLanguage(token.info) !== "work-history") return true;
+    history.push(token);
+    return false;
+  });
+  return { html: md.renderer.render([...body, ...history], md.options, env), frontMatter };
 }

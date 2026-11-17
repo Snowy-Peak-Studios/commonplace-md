@@ -557,6 +557,14 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
 .preview h3 { font-size: 1.18em; margin: 1.4em 0 0.4em; }
 .preview h4, .preview h5, .preview h6 { font-size: 1em; margin: 1.2em 0 0.3em; }
 .preview h1.inline-title { margin-top: 0.5em; }
+.preview details.note-section {
+  margin-top: 1.6em;
+  padding: 0.65em 0.9em;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.preview details.note-section > summary { cursor: pointer; font-weight: 650; }
+.preview details.note-section > :last-child:not(summary) { margin-bottom: 0; }
 .preview p { margin: 0.7em 0; }
 .preview strong { font-weight: 650; }
 .preview em { color: var(--text-2); }

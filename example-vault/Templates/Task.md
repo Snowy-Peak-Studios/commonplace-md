@@ -19,10 +19,16 @@ priority: Medium
 ```commits
 ```
 
+```description
 **As** someone who ..., **I want** ..., **so that** ...
+```
 
-## Acceptance criteria
-
+```acceptance-criteria
 - [ ] ...
+```
 
-## Notes
+```comments
+```
+
+```work-history
+```

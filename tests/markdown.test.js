@@ -53,6 +53,24 @@ test("task checkboxes point at their source line", () => {
   assert.match(html, /<input type="checkbox" class="task" data-line="6" checked> second/);
 });
 
+test("task sections render Markdown, keep original checkbox lines and move folded history to the end", () => {
+  const note = [
+    "---", "id: T-1", "---", "# Task",
+    "```work-history", "- [ ] Recorded change", "```",
+    "```description", "**Use** [[Home]].", "```",
+    "```ACCEPTANCE-CRITERIA", "- [ ] Verify a save", "```",
+    "~~~comments", "Ask @alex.", "~~~", "Plain note text.",
+  ].join("\n");
+  const html = render(note);
+  assert.match(html, /data-section="description" data-heading="Description"><h2>Description<\/h2>/);
+  assert.match(html, /<strong>Use<\/strong> <a class="wikilink"/);
+  assert.match(html, /data-section="acceptance-criteria"[^>]*><h2>Acceptance Criteria<\/h2>[\s\S]*data-line="11"> Verify a save/);
+  assert.match(html, /data-section="comments"[\s\S]*data-login="alex"/);
+  assert.match(html, /Plain note text\.<\/p>\n<details class="note-section" data-section="work-history" data-heading="Work History"><summary>Work History<\/summary>[\s\S]*data-line="5"> Recorded change/);
+  const code = render("~~~markdown\n```comments\n@alex\n```\n~~~");
+  assert.doesNotMatch(code, /class="(note-section|mention)"/);
+});
+
 test("headings carry their text for [[Page#Heading]] links", () => {
   assert.match(render("## 🆕 New tasks"), /<h2 data-heading="🆕 New tasks">/);
 });

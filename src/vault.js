@@ -61,11 +61,48 @@ export function prepareForPreview(text) {
   return { source: src, frontMatter: fm ? fm[1] : null };
 }
 
+export const NOTE_SECTIONS = Object.freeze({
+  description: "Description",
+  "acceptance-criteria": "Acceptance Criteria",
+  comments: "Comments",
+  "work-history": "Work History",
+});
+
+export const fenceLanguage = (info) => info.trim().split(/\s+/, 1)[0].toLowerCase();
+
+/** Markdown prose and section boundaries, with their original line numbers. Code fences keep their contents out. */
+function* proseLines(lines) {
+  let section = "", sectionFence = "", codeFence = "";
+  for (const [line, text] of lines.entries()) {
+    const match = /^([ \t]*)(`{3,}|~{3,})(.*)$/.exec(text);
+    const standalone = match && /^ {0,3}$/.test(match[1]);
+    const marker = match?.[2] ?? "";
+    const info = match?.[3].trim() ?? "";
+    const closes = (fence) => fence && marker[0] === fence[0] && marker.length >= fence.length && !info;
+    if (standalone && closes(sectionFence)) {
+      section = sectionFence = codeFence = "";
+      yield { line, text: "", section, boundary: true };
+    } else if (codeFence) {
+      if (closes(codeFence)) codeFence = "";
+    } else if (marker && (marker[0] === "~" || !info.includes("`"))) {
+      const name = fenceLanguage(info);
+      if (!section && standalone && Object.hasOwn(NOTE_SECTIONS, name)) {
+        section = name;
+        sectionFence = marker;
+        yield { line, text: "", section, boundary: true };
+      } else {
+        codeFence = marker;
+      }
+    } else {
+      yield { line, text, section };
+    }
+  }
+}
+
 /** Every `[[link]]` and `![[embed]]` outside code, as written. */
 export function findWikilinks(text) {
-  const src = prepareForPreview(text).source
-    .replace(/^(```|~~~)[\s\S]*?^\1/gm, "")
-    .replace(/`[^`\n]*`/g, "");
+  const lines = prepareForPreview(text).source.split("\n");
+  const src = [...proseLines(lines)].map((line) => line.text).join("\n").replace(/`[^`\n]*`/g, "");
   const out = [];
   for (const m of src.matchAll(/(!?)\[\[([^\]\n]+)\]\]/g)) out.push({ embed: m[1] === "!", raw: m[0], ...parseWikilink(m[2]) });
   return out;
@@ -194,6 +231,15 @@ export function withBlocks(text, names) {
   const at = head ? start + head.index + head[0].length : start;
   const rest = src.slice(at).replace(/^\n+/, "");
   return `${src.slice(0, at)}${head ? "\n\n" : ""}${blocks}\n${rest ? `\n${rest}` : ""}`;
+}
+
+/** Blank tasks get the four writing sections. A template with its own body keeps it. */
+export function withTaskSections(text) {
+  const src = toLf(text);
+  const body = src.slice(splitFrontMatter(src)?.length ?? 0).trim();
+  if (body && !/^#[ \t]+[^\n]+$/.test(body)) return src;
+  const sections = Object.keys(NOTE_SECTIONS).map((name) => `\`\`\`${name}\n\`\`\``).join("\n\n");
+  return [src.trimEnd(), sections].filter(Boolean).join("\n\n") + "\n";
 }
 
 /** A note template with `{{title}}` and `{{date}}` (YYYY-MM-DD) filled in; any other `{{...}}` stays as written. */
@@ -337,7 +383,8 @@ export function withSeenMentions(seen, add, found) {
 /**
  * Every mention in a note: [{ login, line, heading, text, answered }], `line` counting from 1 in the whole file,
  * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
- * fenced code and inline code don't count. One per login and line. `answered` when the very next line is a
+ * fenced code and inline code don't count. Named note sections hold prose, so mentions there count.
+ * One per login and line. `answered` when the very next line is a
  * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login.
  */
 export function findMentions(text) {
@@ -346,27 +393,22 @@ export function findMentions(text) {
   const skipped = fm ? src.slice(0, fm.length).split("\n").length - 1 : 0;
   const lines = (fm ? src.slice(fm.length) : src).split("\n");
   const out = [];
-  let fence = null, heading = "";
-  lines.forEach((line, i) => {
-    const f = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
-      return;
-    }
-    if (f) { fence = f[1]; return; }
-    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
-    if (h) heading = h[1];
-    const plain = line.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
+  let heading = "";
+  for (const { line, text: saidLine, section } of proseLines(lines)) {
+    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(saidLine);
+    if (h && !section) heading = h[1];
+    const plain = saidLine.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
     const seen = new Set();
     for (const m of plain.matchAll(MENTION)) {
       if (seen.has(m[2].toLowerCase())) continue;
       seen.add(m[2].toLowerCase());
-      const said = line.trim();
-      const reply = REPLY.exec(lines[i + 1] ?? "");
-      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
+      const said = saidLine.trim();
+      const reply = REPLY.exec(lines[line + 1] ?? "");
+      out.push({ login: m[2], line: skipped + line + 1, heading: section ? NOTE_SECTIONS[section] : heading,
+        text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
         answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });
     }
-  });
+  }
   return out;
 }
 
@@ -513,16 +555,15 @@ export function questionTasks(notes, owner = "") {
 export function taskAnswer(text) {
   const src = toLf(text);
   const fm = splitFrontMatter(src);
-  const lines = (fm ? src.slice(fm.length) : src).split("\n");
-  const at = lines.findIndex((l) => /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(l));
+  const original = (fm ? src.slice(fm.length) : src).split("\n");
+  const lines = [...proseLines(original)];
+  const at = lines.findIndex(({ text, section }) => (!section || section === "description")
+    && /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(text));
   if (at < 0) return "";
-  const first = lines[at].replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
-  const rest = [];
-  for (const l of lines.slice(at + 1)) {
-    if (/^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(l)) break;
-    rest.push(l);
-  }
-  return [first, ...rest].join("\n").trim();
+  const first = lines[at].text.replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
+  const end = lines.slice(at + 1).find(({ text, boundary }) => boundary
+    || /^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(text));
+  return [first, ...original.slice(lines[at].line + 1, end?.line)].join("\n").trim();
 }
 
 /** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */
@@ -576,15 +617,19 @@ export function taskState(text) {
   // An open question (a `question` property) waits for its answer first.
   const question = String((fm && /^question:[ \t]*(.*?)[ \t]*$/m.exec(fm.raw)?.[1]) ?? "").replace(/^(["'])(.*)\1$/, "$2").trim();
   if (question) return { state: "decision", reason: `Waiting for an answer: ${clip(question)}` };
-  const plain = body.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
-  const title = /^#\s+(.*)$/m.exec(body)?.[1] ?? "";
+  const prose = [...proseLines(body.split("\n"))].filter(({ section }) => section !== "comments" && section !== "work-history");
+  const story = prose.map(({ text }) => text).join("\n");
+  const plain = story.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
+  const title = /^#\s+(.*)$/m.exec(story)?.[1] ?? "";
   const tagged = !!fm && /^tags:.*\bplaceholder\b/im.test(fm.raw);
   const titled = /^(?:[A-Z]+-\d+\s+)?placeholder\b|(?:-\s*|\()placeholder\)?\s*$/i.test(title.trim());
   if (tagged || titled || /^\s*(?:[-*+]\s+)?(?:\*\*|_)?placeholder\b/im.test(plain)) {
     return { state: "placeholder", reason: "A placeholder: its title, tags or a line starting with Placeholder say so" };
   }
-  const criteria = body.split("\n").filter((l) => /^\s*[-*+]\s+\[[ xX]\]/.test(l));
-  if (/\*\*As\*\* someone who \.\.\./.test(body) || criteria.some((l) => /\]\s*\.\.\.\s*$/.test(l))) {
+  const hasCriteriaBlock = prose.some(({ section }) => section === "acceptance-criteria");
+  const criteria = prose.filter(({ text, section }) => (hasCriteriaBlock ? section === "acceptance-criteria" : !section)
+    && /^\s*[-*+]\s+\[[ xX]\]/.test(text)).map(({ text }) => text);
+  if (/\*\*As\*\* someone who \.\.\./.test(story) || criteria.some((l) => /\]\s*\.\.\.\s*$/.test(l))) {
     return { state: "placeholder", reason: "A placeholder: its story or criteria are still the template's \"...\"" };
   }
   if (!criteria.length) return { state: "placeholder", reason: "A placeholder: no acceptance criteria yet" };

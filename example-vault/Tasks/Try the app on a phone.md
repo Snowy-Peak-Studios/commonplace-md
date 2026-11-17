@@ -22,8 +22,20 @@ part_of: "[[Get set up]]"
 ```commits
 ```
 
+```description
 As someone away from my desk, I want my notes on my phone, so that I can add to the [[Inbox]] anywhere.
+```
 
+```acceptance-criteria
 - [x] Open the app in the phone's browser
 - [ ] Paste a token made for the phone
 - [ ] Add it to the home screen
+```
+
+```comments
+Does the app open the inbox from the home screen shortcut?
+```
+
+```work-history
+- Opened the app in the phone's browser.
+```

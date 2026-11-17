@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
+  hasBlock, withBlocks, withTaskSections, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -658,6 +658,17 @@ test("a new task gets its blocks under its title, unless it already has any", ()
   assert.equal(withBlocks("# A\r\nB\r\n", SPRINT_BLOCKS), "# A\n\n```sprint\n```\n\nB\n", "LF");
 });
 
+test("blank tasks get writing sections while a custom task template keeps its body", () => {
+  const base = "---\nid: T-1\n---\n\n# A task\n";
+  const draft = withTaskSections(base);
+  assert.ok(draft.startsWith(base + "\n"));
+  assert.deepEqual([...draft.matchAll(/^```([a-z-]+)$/gm)].map((m) => m[1]),
+    ["description", "acceptance-criteria", "comments", "work-history"]);
+  const custom = base + "\n## Purpose\n\nCustom text.\n";
+  assert.equal(withTaskSections(custom), custom);
+  assert.equal(withTaskSections(draft), draft);
+});
+
 test("a top tasks order: the four orders, a few other ways to say them, else none", () => {
   for (const o of ["priority-newest", "priority-oldest", "newest", "oldest"]) assert.equal(taskOrder(o), o);
   assert.equal(taskOrder("Priority"), "priority-newest");
@@ -742,6 +753,31 @@ test("mentions in a note: @login, not in code, an email or a path; with the head
   assert.deepEqual(findMentions("@start of the file").map((m) => m.login), ["start"]);
   assert.deepEqual(findMentions("~~~md\n@no\n~~~\n(@yes)").map((m) => m.login), ["yes"]);
   assert.equal(findMentions("x ".repeat(100) + "@long").at(0).text.length, 160);
+});
+
+test("section text contributes links and mentions while nested code stays code", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = [
+    "---", "owner: @outside", "---", "# Note", "````comments",
+    "@ann, check [[Home]] and `@inline`.", "- @bob, I replied.",
+    "```js", "@example [[Missing example]]", "```",
+    "@carol has more.", "````", "@after, too.",
+    "~~~markdown", "```comments", "@another-example", "```", "~~~",
+  ].join("\r\n");
+  assert.deepEqual(findWikilinks(note).map((l) => l.target), ["Home"]);
+  assert.deepEqual(findMentions(note).map((m) => [m.login, m.line, m.heading, m.answered]), [
+    ["ann", 6, "Comments", true], ["bob", 7, "Comments", false], ["carol", 11, "Comments", false], ["after", 13, "Note", false],
+  ]);
+});
+
+test("task decisions use the written criteria and leave comments and history out", async () => {
+  const { taskState, taskAnswer } = await import("../src/vault.js");
+  const note = "# A task\n\n**Answer:**\n\n```acceptance-criteria\n- [ ] Finished\n```\n\n```comments\nTBD in discussion.\n```\n\n```work-history\n- [ ] Decide on an old approach.\n```\n";
+  assert.equal(taskState(note).state, "ready");
+  assert.equal(taskState(note.replace("Finished", "Decide with the team")).state, "decision");
+  assert.equal(taskState(note.replace("- [ ] Finished\n", "")).state, "placeholder");
+  assert.equal(taskAnswer(note), "");
+  assert.equal(taskAnswer(note.replace("**Answer:**", "**Answer:** Use the first one.")), "Use the first one.");
 });
 
 test("a mention with a reply right under it is answered: the next line starts with someone else's @login", async () => {

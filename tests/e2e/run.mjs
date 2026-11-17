@@ -279,7 +279,7 @@ const attention = await page.evaluate(() => {
 });
 const qRow = attention.rows.findIndex((r) => r.kind === "Question" && r.name.includes("Add a reading list") && r.state === "Waiting for your answer"
   && r.text === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md"));
-const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions")
+const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Comments")
   && r.text.includes("@your-github-login"));
 check(!attention.code && attention.boxes === 1 && attention.underTop && attention.title === "Needs your attention"
   && attention.head.includes("for Your name") && attention.head.includes("of @your-github-login") && qRow >= 0 && mRow > qRow,
@@ -571,11 +571,11 @@ check(guide.folded === false, "a [!warning]- callout starts folded");
 // A mention is a link to that person's inbox; one in code isn't a mention.
 await page.waitForSelector(".preview a.mention", { timeout: 10000 }).catch(() => {});
 const guideMentions = await page.evaluate(() => ({
-  links: [...document.querySelectorAll(".preview a.mention")].map((a) => [a.textContent, decodeURIComponent(a.getAttribute("href"))]),
+  links: [...document.querySelectorAll('.preview [data-section="comments"] a.mention')].map((a) => [a.textContent, decodeURIComponent(a.getAttribute("href"))]),
   inCode: [...document.querySelectorAll(".preview code")].some((c) => c.querySelector(".mention")),
 }));
 check(guideMentions.links.length >= 1 && guideMentions.links.every(([text, href]) => text === "@your-github-login" && /\/Notes\/Inbox(es\/Your name)?\.md$/.test(href))
-  && !guideMentions.inCode, "@your-github-login in the Guide is a link to that person's inbox, and not in code: " + JSON.stringify(guideMentions));
+  && !guideMentions.inCode, "a mention in the Comments block on a regular page links to the person's inbox: " + JSON.stringify(guideMentions));
 await shot("2b-guide-desktop");
 // Lists with subpoints: each point that has some gets an arrow that folds them; only the view changes.
 const foldState = () => page.evaluate(() => {
@@ -605,8 +605,16 @@ check((await foldState()).shown === true, "a second tap shows them again");
 // 5. A task page: tick a checkbox, save (faked), check the commit body.
 const taskPath = "Tasks/Try the app on a phone.md";
 await page.goto(at(taskPath), { waitUntil: "networkidle0" });
-await page.waitForSelector(".preview input.task");
-await page.click(".preview input.task:not([checked])");
+const criteriaSelector = '.note-section[data-section="acceptance-criteria"] input.task';
+await page.waitForSelector(criteriaSelector);
+const sections = await page.$$eval(".note-body > .note-section", (blocks) => blocks.map((block) => [block.dataset.section, block.open ?? null]));
+check(JSON.stringify(sections) === JSON.stringify([
+  ["description", null], ["acceptance-criteria", null], ["comments", null], ["work-history", false],
+]), "the task has four sections and History is last and folded: " + JSON.stringify(sections));
+await page.click('.note-section[data-section="work-history"] > summary');
+check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History opens to show its entries");
+await page.click(criteriaSelector + ":not([checked])");
+check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History stays open while changing a criterion");
 await wait(200);
 check(await page.$eval("#save-btn", (b) => !b.disabled), "ticking a checkbox enables Save");
 await page.click("#save-btn");

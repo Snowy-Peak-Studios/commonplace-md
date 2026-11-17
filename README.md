@@ -375,10 +375,11 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 ````
 
 - The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
-- A new task gets the three task blocks under its title, unless its template already has any of them; a new sprint gets ` ```sprint `.
+- A new task gets the three task boxes under its title, unless its template already places them. A blank task also gets the four writing sections. A new sprint gets `sprint`.
+- Write the task's Markdown in `description`, `acceptance-criteria`, `comments` and `work-history` blocks. Criteria checkboxes save with the note. Work History starts folded at the bottom. A `comments` block works on any note and supports `@login` mentions. See [Work with tasks](example-vault/How%20To/Work%20with%20tasks.md#task-sections).
 - **Another task's box, on any page:** a `task:` line in a ` ```subtasks `, ` ```relations ` or ` ```commits ` block (the task's ID, name or `[[link]]`) shows that task's box there, naming it; away from the task's own page it only reads. The example vault's Task Board shows its epic's subtasks this way.
 - **A sprint's box, on any page:** a `sprint:` line in a ` ```sprint ` block shows that sprint's box there, naming it: `current` (the one going on today), `next`, or a sprint's name or `[[link]]`. When there's none it says so; **Start the next sprint** stays on the sprint's own page. The example vault's Home shows the current sprint this way.
-- In other Markdown editors, and on a page that isn't a task or a sprint (without a `task:` line), a block shows as a short code block.
+- In other Markdown editors, blocks show their source. To show a task or sprint box on another page in Commonplace.md, give it a `task:` or `sprint:` line.
 
 **Parent tasks and subtasks:** a task's parent is in its `part_of` property (or the property the setup names), as a link: `part_of: "[[Get set up]]"`.
 
@@ -462,7 +463,7 @@ example-vault/
 │       └── Your name.md         a personal inbox: copy it, rename it, put your GitHub login in github
 ├── Templates/
 │   ├── Note.md                  the note template, with {{title}} and {{date}}
-│   └── Task.md                  the task template: a user story, acceptance criteria and the task's properties
+│   └── Task.md                  the task template, with writing sections and properties
 ├── Data/
 │   ├── Reading list.csv         a CSV file, opened as a table
 │   ├── Pantry.tsv               a TSV file: tabs between the cells, commas inside them
@@ -491,6 +492,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
 - ` ```base ` blocks: a base view written in the page
 - a task's ` ```subtasks `, ` ```relations ` and ` ```commits ` blocks on any page, with `task:` and the task's ID, name or link
+- `description`, `acceptance-criteria`, `comments` and `work-history` for Markdown task sections. Comments also work on regular notes.
 - a ` ```sprint ` block on any page, with `sprint: current`, `next`, or a sprint's name or link
 - callouts (`> [!note]`, folded with `-` or open with `+`)
 - front matter, shown as properties

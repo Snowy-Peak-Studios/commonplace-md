@@ -41,6 +41,30 @@ A task shows three boxes where its note has their blocks:
 
 Move a block to move its box, or take it out and the box goes. A new task gets all three.
 
+## Task sections
+
+The [phone setup task](../Tasks/Try%20the%20app%20on%20a%20phone.md) uses four blocks. In **Edit**, write Markdown inside each pair of fences.
+
+~~~markdown
+```description
+Keep the inbox handy on my phone.
+```
+
+```acceptance-criteria
+- [ ] Add the app to the home screen
+```
+
+```comments
+Does the shortcut open my inbox?
+```
+
+```work-history
+- Tried it in the phone's browser.
+```
+~~~
+
+Tick a criterion in **Read**, then **Save**. Work History opens from the folded section at the bottom. Put a `comments` block on any note and use `@` followed by a teammate's GitHub login to mention them. The [Guide](../Guide.md#comments) has a Comments block on a regular note.
+
 ## See them all
 
 The [Task Board](../Task%20Board.md) shows the tasks as a table, with views by status, by parent and more. Your [inbox](Use%20your%20inbox.md) shows the top ones to start.

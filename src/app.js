@@ -11,7 +11,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskSections,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
 import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -981,7 +981,10 @@ function renderPreview() {
   const body = h("div", { class: "note-body" });
   body.innerHTML = sanitize(html);
   // A note without a title of its own shows its file name.
-  if (!body.querySelector("h1")) body.prepend(h("h1", { class: "inline-title" }, shownName(f.path)));
+  if (!body.querySelector("h1:not(.note-section h1)")) body.prepend(h("h1", { class: "inline-title" }, shownName(f.path)));
+  const history = '.note-body > details[data-section="work-history"]';
+  const previous = f.dom.preview.querySelectorAll(history);
+  body.querySelectorAll(':scope > details[data-section="work-history"]').forEach((section, i) => { section.open = previous[i]?.open ?? false; });
   decorate(body, f.repo, f.path);
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
@@ -1786,14 +1789,15 @@ function fillMentions(root, repo) {
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
 async function noteMentions(repo, tree, paths) {
-  // "mentions2": now each mention also says whether a reply is under it, so the older cache is dropped.
+  // Mentions in named sections now count, so older scans must be rebuilt.
   store.remove(`mentions:${repo.id}`);
-  const cache = baseCache("mentions2", repo);
+  store.remove(`mentions2:${repo.id}`);
+  const cache = baseCache("mentions3", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("mentions2", repo, (sha) => live.has(sha));
+    keepBaseCache("mentions3", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
 }
@@ -2428,14 +2432,24 @@ function embeddedPart(text, heading) {
   const nav = findNavBlock(src);
   if (nav) src = src.slice(0, nav.from) + src.slice(nav.to);
   if (!heading) return src;
-  const lines = src.split("\n");
   const want = norm(heading);
-  const start = lines.findIndex((l) => /^#{1,6}\s/.test(l) && norm(l.replace(/^#+\s*/, "")) === want);
-  if (start < 0) return null;
-  const level = /^#+/.exec(lines[start])[0].length;
-  let end = lines.findIndex((l, i) => i > start && /^#{1,6}\s/.test(l) && /^#+/.exec(l)[0].length <= level);
-  if (end < 0) end = lines.length;
-  return lines.slice(start + 1, end).join("\n");
+  const headings = [];
+  for (const token of md.parse(src, {})) {
+    if (token.level !== 0) continue;
+    if (token.type === "heading_open") {
+      const [line, after] = token.map;
+      headings.push({ name: token.attrGet("data-heading"), level: Number(token.tag[1]), line, after });
+    } else if (token.type === "fence") {
+      const kind = fenceLanguage(token.info);
+      if (Object.hasOwn(NOTE_SECTIONS, kind)) headings.push({ name: NOTE_SECTIONS[kind], level: 2, line: token.map[0], content: token.content });
+    }
+  }
+  const at = headings.findIndex(({ name }) => norm(name) === want);
+  if (at < 0) return null;
+  const { content, level, after } = headings[at];
+  if (content !== undefined) return content;
+  const end = headings.slice(at + 1).find((next) => next.level <= level)?.line;
+  return src.split("\n").slice(after, end).join("\n");
 }
 
 function fillEmbeds(root, repo, fromPath) {
@@ -2531,12 +2545,13 @@ async function baseNotes(repo, tree, paths) {
 
 /** Whether each task can be started now (`taskState`), from its whole text: cached by blob sha, like the bases' properties. */
 async function taskStates(repo, tree, paths) {
-  const cache = baseCache("taskState", repo);
+  store.remove(`taskState:${repo.id}`);
+  const cache = baseCache("taskState2", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskState(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("taskState", repo, (sha) => live.has(sha));
+    keepBaseCache("taskState2", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
 }
@@ -3044,8 +3059,8 @@ async function startingText(repo, tree, p) {
 }
 
 /**
- * A new note in a project's tasks folder gets the ```subtasks, ```relations and ```commits blocks (a new sprint
- * note, the ```sprint block), unless its template already places any; and the fields that are on (only once a setup is saved).
+ * A new task gets its box blocks, the writing sections if its body is blank, and the fields that are on
+ * once a setup is saved. A sprint gets the ```sprint block.
  * With Reviewer on, its reviewer is who asked for it (Requested by), else whoever makes it. With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
  * a sprint the template already sets stays, and Add subtask then gives it its parent's.
  */
@@ -3054,7 +3069,7 @@ async function asNewTask(repo, tree, p, text) {
   // A new sprint note shows its sprint box where the block is.
   if (!isSetupTask(setup, p.path)) return isSprintNote(setup, p.path) ? withBlocks(text, SPRINT_BLOCKS) : text;
   // Its subtasks, relations and commits show where these blocks are, unless its template placed its own.
-  text = withBlocks(text, TASK_BLOCKS);
+  text = withBlocks(withTaskSections(text), TASK_BLOCKS);
   if (!setup.configured) return text;
   const out = withReviewer(setup, withProps(text, newTaskProps(setup), { keep: true }), store.get("user")?.login);
   const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
