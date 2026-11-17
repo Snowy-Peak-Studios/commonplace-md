@@ -7,7 +7,7 @@ import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
-  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask,
@@ -1652,11 +1652,19 @@ async function setTaskField(f, field, input, control) {
 
 // ---- the top tasks to start: in a ```top-tasks block, on an inbox or any other page ----
 
+/** A deferred task can be shown as free before any change is written to the note. */
+const returnFromWaiting = (note, days, today) => waitingReady(note.props, days, today)
+  ? { ...note, props: { ...note.props, status: "To Do" }, backFromWaiting: true }
+  : note;
+
+const clearWaitingDate = (props) => props.waiting_since ? [["waiting_since", ""]] : [];
+
 /** One look-up per tree version and options, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who, count, sprintMode, order) {
+function loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}`;
+  const today = isoDate();
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}:${today}:${waitDays}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
@@ -1669,11 +1677,14 @@ function loadSuggestions(repo, areas, who, count, sprintMode, order) {
         const blocked = blockedTasks(notes, { setup, resolve });
         // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
         const only = sprintMode === "current-only";
+        const available = notes.map((note) => returnFromWaiting(note, waitDays, today));
         const fromSprint = !sprint ? null : only && !sprint.now ? []
-          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
+          : sprintSuggestions(available, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
+        const free = fromSprint ?? suggestTasks(available, { areas, count, blocked, order });
+        const returned = new Set(free.filter((note) => note.backFromWaiting).map((note) => note.path));
         const shown = {
-          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked, order }),
-          waiting: waitingTasks(notes, { areas, owner: who, order }), allAreas: taskAreas(notes),
+          mine: claimedTasks(notes, who), free,
+          waiting: waitingTasks(notes, { areas, owner: who, order }).filter((note) => !returned.has(note.path)), allAreas: taskAreas(notes),
           sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
           noSprintNow: !!fromSprint && only && !sprint.now, setup,
         };
@@ -1704,14 +1715,17 @@ async function suggestSprints(repo, tree) {
 
 /**
  * Each ```top-tasks block on the page becomes the box, with only the options written in it: `range`, `areas`,
- * `sprint` and `owner` (whom Claim claims for). Nothing comes from the page's properties or the device; a page
+ * `sprint` and `owner` (whom Claim claims for). The page can set `waiting_days` for deferrals. A page
  * without the block has no box, an inbox too. In a repo without tasks, the block's code stays.
  */
 function fillTopTasks(root, f) {
-  for (const el of root.querySelectorAll(".top-tasks-block")) {
+  const blocks = root.querySelectorAll(".top-tasks-block");
+  if (!blocks.length) return;
+  const waitDays = waitingDays(noteProps(f.text).waiting_days);
+  for (const el of blocks) {
     if (el.parentElement.closest(".embed-page")) continue;
     const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
-    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
+    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "", waitDays,
       count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault,
       order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off",
       fields: el.dataset.fieldsDefault ? [...TOP_TASKS_FIELDS] : (el.dataset.fields || "").split(",").filter(Boolean), fieldsSet: !el.dataset.fieldsDefault });
@@ -1982,7 +1996,7 @@ const ORDER_SAID = { "priority-newest": "By priority, newest first", "priority-o
  * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
  * says to add an owner. The head says every option in use, and when the range or the order is the default.
  */
-function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off",
+function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off",
   fields = TOP_TASKS_FIELDS, fieldsSet = true }) {
   const tree = app.trees.get(repo.id);
   if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
@@ -1997,8 +2011,9 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     list);
   const editable = canWrite(repo) && usable(repo);
   let allAreas = [];
+  const restore = (props) => waitingReady(props, waitDays) ? [["status", "To Do"], ...clearWaitingDate(props)] : [];
   /** A property as a chip, or as a chip-like picker that saves the task when it changes. */
-  const tag = (path, t, key, options, cls = "") => {
+  const tag = (path, t, key, options, cls = "", backFromWaiting = false) => {
     const value = String(t[key] ?? "").trim();
     if (!editable) return value ? h("span", { class: `chip ${cls}` }, value) : null;
     const list = value && !options.some((o) => o.toLowerCase() === value.toLowerCase()) ? [value, ...options] : options;
@@ -2006,7 +2021,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const pick = h("select", { class: `chip pick ${cls}`, "aria-label": `${label} of ${shownName(path)}`, title: `Change its ${label.toLowerCase()}` },
       value ? null : h("option", { value: "", selected: true, disabled: true }, label),
       list.map((o) => h("option", { value: o, selected: o.toLowerCase() === value.toLowerCase() }, o)));
-    pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick));
+    pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick, backFromWaiting ? { also: restore } : {}));
     return pick;
   };
   let states = new Map();
@@ -2034,22 +2049,29 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     return parts.length ? h("span", { class: "chip", title: `${name}: ${parts.join(", ")}` }, parts.join(", ")) : null;
   };
   /** What each task shows besides its name and Claim: the block's `fields`, in its order. */
-  const fieldChip = (path, t, name) => name === "state" ? stateChip(path)
+  const fieldChip = ({ path, props: t, backFromWaiting }, name) => name === "state" ? stateChip(path)
     : name === "parent" ? parentChip(path, t)
-    : name === "priority" ? tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : "")
-    : name === "area" ? tag(path, t, "area", allAreas)
+    : name === "priority" ? tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : "", backFromWaiting)
+    : name === "area" ? tag(path, t, "area", allAreas, "", backFromWaiting)
     : valueChip(t, name);
-  const row = ({ path, props: t }, extra) => h("li", {},
-    h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
-    h("span", { class: "suggest-tags" }, fields.map((name) => fieldChip(path, t, name))),
-    extra);
-  /** Sets a task's status from the box: "Not now" puts it on the waiting list, "Bring back" takes it off. */
-  const statusButton = (path, label, value, title) => editable
-    ? h("button", { class: "btn small ghost", type: "button", title,
-      onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
-    : null;
-  const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
-  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
+  const row = (note, extra) => {
+    const { path, props: t } = note;
+    return h("li", {},
+      h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
+      h("span", { class: "suggest-tags" }, fields.map((name) => fieldChip(note, name))),
+      extra);
+  };
+  const canDefer = (path, props) => suggestTasks([returnFromWaiting({ path, props }, waitDays)]).length > 0;
+  const defer = (path, button) => changeTask(repo, path, "status", WAITING, button, {
+    allow: (props) => canDefer(path, props),
+    also: () => [["waiting_since", isoDate()]],
+  });
+  const bringBack = (path, button) => changeTask(repo, path, "status", "To Do", button, {
+    allow: (props) => String(props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase(),
+    also: clearWaitingDate,
+  });
+  const WAIT_TITLE = `Put it on the waiting list for ${waitDays} ${waitDays === 1 ? "day" : "days"}`;
+  loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
     allAreas = found;
     states = told;
     setup = s;
@@ -2059,7 +2081,8 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
      */
     const notNow = (n) => {
       if (!editable) return null;
-      if (!sprint) return statusButton(n.path, "Not now", WAITING, WAIT_TITLE);
+      if (!sprint) return h("button", { class: "btn small ghost", type: "button", title: WAIT_TITLE,
+        onclick: (e) => defer(n.path, e.currentTarget) }, "Not now");
       const next = sprint.now && sprint.next && !n.nextSprint && linkName(String(n.props[sprint.prop] ?? "")) !== sprint.next.name
         ? sprint.next : null;
       const latest = sprint.next ?? sprint.now;
@@ -2068,11 +2091,13 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
           : `There's no sprint after ${latest.name} yet: put it on the waiting list instead`,
         onclick: async (e) => {
           const button = e.currentTarget;
-          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, { said: `pushed to ${next.name}` });
+          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, {
+            said: `pushed to ${next.name}`, allow: (props) => canDefer(n.path, props), also: restore,
+          });
           if (await confirmDialog(`No sprint after ${latest.name} yet`,
-            `Put ${shownName(n.path)} on the waiting list instead? It stops being suggested until you bring it back. `
+            `Put ${shownName(n.path)} on the waiting list instead? It comes back after the waiting period. `
             + `To push tasks to a new sprint, open ${latest.name} and press Start the next sprint.`, "Not now")) {
-            changeTask(repo, n.path, "status", WAITING, button);
+            defer(n.path, button);
           }
         } }, "Push to the next sprint");
     };
@@ -2099,14 +2124,17 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
-        statusButton(n.path, "Bring back", "To Do", "Take it off the waiting list: its status goes back to To Do"))))) : null;
+        editable ? h("button", { class: "btn small ghost", type: "button",
+          title: "Return this task to To Do", onclick: (e) => bringBack(n.path, e.currentTarget),
+        }, "Bring back") : null)))) : null;
     if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, none), waitingList);
     fill(list, claimed, free.map((n) => row(n, [
       nextChip(n),
+      n.backFromWaiting ? h("span", { class: "chip" }, "Back from waiting") : null,
       editable && who
         ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}${
           moveTo(n) ? `, and move it into ${moveTo(n).name}` : ""}`,
-          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n)) }, icon("check"), "Claim")
+          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n), waitDays) }, icon("check"), "Claim")
         : null,
       notNow(n)])),
     !free.length ? h("li", { class: "muted" }, none) : null, waitingList);
@@ -2118,7 +2146,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
  * Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first.
  * `move` ({ prop, name }) also puts it in that sprint, in the same commit.
  */
-async function claimSuggested(repo, path, who, button, move = null) {
+async function claimSuggested(repo, path, who, button, move = null, waitDays = 7) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
     `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to ${savedOn(repo)}.`, "Claim")) return;
   button.disabled = true;
@@ -2126,13 +2154,15 @@ async function claimSuggested(repo, path, who, button, move = null) {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const taken = String(now.assignee ?? "").trim();
-    const next = taken ? null : claimTask(text, who, move ? [[move.prop, `[[${move.name}]]`]] : []);
+    const eligible = suggestTasks([returnFromWaiting({ path, props: now }, waitDays)]).length > 0;
+    const extra = move ? [[move.prop, `[[${move.name}]]`]] : [];
+    const next = eligible ? claimTask(text, who, [...extra, ...clearWaitingDate(now)]) : null;
     // What was just read or written is known, so the list needn't read the task again.
     const known = baseCache("baseProps", repo);
     if (!next) {
       known[sha] = now;
       treeChanged(repo, path, sha);
-      toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} has no properties to change.`, "error");
+      toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} is no longer available to claim.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who}${move ? `, moved into ${move.name}` : ""} from ${APP_NAME}`);
@@ -2152,7 +2182,7 @@ async function unclaimSuggested(repo, path, who, button) {
     "This clears its assignee and returns it to To Do.", "Unclaim")) return;
   return changeTask(repo, path, "status", "To Do", button, {
     said: `unclaimed by ${who}`,
-    also: [["assignee", ""]],
+    also: () => [["assignee", ""]],
     allow: (props) => claimedTasks([{ path, props }], who).some((task) => !task.agent),
   });
 }
@@ -2170,14 +2200,14 @@ function refreshInboxBox(repo) {
  * Updates a task from a top tasks box in one commit. `said` (e.g.
  * "pushed to Sprint 2") is what the commit and the message say instead of "<key> set to <value>".
  */
-async function changeTask(repo, path, key, value, picker, { said = "", also = [], allow = null } = {}) {
+async function changeTask(repo, path, key, value, picker, { said = "", also = () => [], allow = null } = {}) {
   picker.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const known = baseCache("baseProps", repo);
     const changed = allow && !allow(now);
-    const next = !changed && setProps(text, [[key, value], ...also]);
+    const next = !changed && setProps(text, [[key, value], ...also(now)]);
     if (!next || next === toLf(text)) {
       known[sha] = now;
       treeChanged(repo, path, sha);

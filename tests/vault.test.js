@@ -206,6 +206,22 @@ test("setting a task's properties changes only those lines", async () => {
   assert.deepEqual(taskAreas([t("Tasks/a.md", "Notes"), t("Tasks/b.md", "notes"), t("Tasks/c.md", " Art "), t("Tasks/d.md", ""), t("Notes/x.md", "Other")]), ["Art", "Notes"]);
 });
 
+test("only dated, unassigned deferrals return after the inbox's waiting period", async () => {
+  const { waitingDays, waitingReady } = await import("../src/vault.js");
+  const task = { status: "Waiting", assignee: "", waiting_since: new Date("2026-11-10T00:00:00Z") };
+  assert.equal(waitingDays(undefined), 7);
+  assert.equal(waitingDays("3"), 3);
+  for (const value of [null, "", true, 0, -4, 1.5, "tomorrow"]) assert.equal(waitingDays(value), 7);
+  assert.equal(waitingReady(task, 7, "2026-11-16"), false);
+  assert.equal(waitingReady(task, 7, "2026-11-17"), true);
+  assert.equal(waitingReady({ ...task, waiting_since: "2026-11-10" }, 3, "2026-11-13"), true);
+  for (const waiting_since of [undefined, "", "soon", "2026-02-30", "2026-12-01"]) {
+    assert.equal(waitingReady({ ...task, waiting_since }, 7, "2026-11-17"), false);
+  }
+  assert.equal(waitingReady({ ...task, assignee: "Ann Example" }, 7, "2026-11-17"), false);
+  assert.equal(waitingReady({ ...task, status: "Blocked" }, 7, "2026-11-17"), false);
+});
+
 test("Not now: waiting tasks leave the suggestions and the claimed ones, and make the waiting list", async () => {
   const { suggestTasks, claimedTasks, waitingTasks } = await import("../src/vault.js");
   const t = (path, props) => ({ path, props });

@@ -471,6 +471,21 @@ export function claimedTasks(notes, owner) {
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
 
+/** The number of days an inbox waits before suggesting a deferred task again. */
+export function waitingDays(value) {
+  const days = typeof value === "string" ? Number(value) : value;
+  return Number.isSafeInteger(days) && days > 0 ? days : 7;
+}
+
+/** Only an unassigned task with a deferral date comes back by itself. */
+export function waitingReady(props, days = 7, today = isoDate()) {
+  if (!isWaiting({ props }) || !blank(props.assignee)) return false;
+  const since = isoDay(props.waiting_since);
+  const start = new Date(`${since}T00:00:00Z`);
+  return Number.isFinite(start.getTime()) && start.toISOString().slice(0, 10) === since
+    && Date.parse(`${today}T00:00:00Z`) - start.getTime() >= waitingDays(days) * 86400000;
+}
+
 /** A task's open question: its `question` property, trimmed; "" when it has none. */
 export const questionOf = (props) => (Array.isArray(props?.question) ? props.question.join(" ") : String(props?.question ?? "")).trim();
 

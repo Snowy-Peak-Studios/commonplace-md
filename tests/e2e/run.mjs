@@ -382,16 +382,16 @@ check(claimedActions.length > 0 && claimedActions.every((actions) => actions.inc
   !actions.some((label) => ["Not now", "Push to the next sprint"].includes(label))),
   "claimed tasks can be unclaimed, and only free tasks can be put off");
 const putsBeforeUnclaim = puts.length;
-await taskAction("Add a reading list", "Unclaim");
+await taskAction(firstTitle, "Unclaim");
 await page.waitForSelector("dialog.modal[open] .btn.primary");
-check(await page.$eval("dialog.modal[open]", (dialog) => dialog.textContent.includes("Unclaim Add a reading list?")
-  && dialog.textContent.includes("To Do")), "Unclaim asks before clearing the assignment");
+check(await page.$eval("dialog.modal[open]", (dialog, title) => dialog.textContent.includes(`Unclaim ${title}?`)
+  && dialog.textContent.includes("To Do"), firstTitle), "Unclaim asks before clearing the assignment");
 await page.click("dialog.modal[open] .btn.primary");
-await waitForFreeTask("Add a reading list");
+await waitForFreeTask(firstTitle);
 const unclaimPut = puts.length > putsBeforeUnclaim ? puts.at(-1) : null;
-const expectedUnclaim = pickPut?.text?.replace(/^status: .*$/m, "status: To Do").replace(/^assignee: .*$/m, 'assignee: ""');
-check(puts.length === putsBeforeUnclaim + 1 && unclaimPut?.url === contentsUrl("Tasks/Add a reading list.md")
-  && unclaimPut.text === expectedUnclaim && unclaimPut.body.message.startsWith("T-5: unclaimed by Your name"),
+const expectedUnclaim = (pickPut?.url === claim?.url ? pickPut?.text : claim?.text)?.replace(/^status: .*$/m, "status: To Do").replace(/^assignee: .*$/m, 'assignee: ""');
+check(puts.length === putsBeforeUnclaim + 1 && unclaimPut?.url === contentsUrl(`Tasks/${firstTitle}.md`)
+  && unclaimPut.text === expectedUnclaim && unclaimPut.body.message.startsWith(`${firstId}: unclaimed by Your name`),
   "Unclaim commits only the status and assignee, and the task becomes free");
 // Not now: a task goes on the waiting list (status Waiting), out of the suggestions; Bring back takes it off.
 // With sprints the button is Push to the next sprint; this task is in the last sprint there is, so it asks, and offers the waiting list.
@@ -410,7 +410,8 @@ if (sprintShown) {
 }
 await page.waitForFunction(() => document.querySelector(".suggest-waiting summary")?.textContent.includes("Waiting (1)"), { timeout: 15000 }).catch(() => {});
 const waitPut = puts.length > putsBeforeWait ? puts.at(-1) : null;
-check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? ""), "Not now saves the task with status Waiting");
+check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? "")
+  && waitPut.text.includes(`waiting_since: ${isoDate()}`), "Not now saves the status and waiting date");
 check(waitPut?.body.message?.startsWith("T-5: status set to Waiting"), "the commit says so: " + waitPut?.body.message);
 const afterWait = await boxRows();
 check(!afterWait.some((r) => r.name === "T-5 Add a reading list" && !r.waiting), "it leaves the suggestions: " + JSON.stringify(afterWait.map((r) => r.name)));
@@ -425,7 +426,7 @@ await page.waitForFunction(() => !document.querySelector(".suggest-waiting")
 { timeout: 15000 }).catch(() => {});
 const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
 check(backPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: To Do$/m.test(backPut.text)
-  && /^assignee: ""$/m.test(backPut.text) && !(await page.$(".suggest-waiting"))
+  && /^assignee: ""$/m.test(backPut.text) && /^waiting_since: ""$/m.test(backPut.text) && !(await page.$(".suggest-waiting"))
   && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
 // Push to the next sprint: a task in the current sprint moves into the next one, one commit of its sprint line.
 const sprintNext = inboxSprints.find((x) => x.when === "next");

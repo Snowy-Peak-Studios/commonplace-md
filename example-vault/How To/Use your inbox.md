@@ -76,3 +76,5 @@ fields: parent, state, priority, area
 
 **Claim** sets the task to *In Progress* and its assignee to the owner, in one commit. Use **Unclaim** to return your own claim to *To Do* before an agent starts on it. **Not now** puts a free task off. You can change a task's priority and area in the box. The block works on any page: [Home](../Home.md) has one.
 
+
+A free task put off with **Not now** comes back to the suggestions after seven days, marked **Back from waiting**. Set `waiting_days: 14` in the inbox's properties to wait 14 days. Use **Bring back** to return it earlier. Tasks without a waiting date stay on the waiting list until you bring them back.
