@@ -1281,3 +1281,31 @@ export function taskCommitLinks(value) {
   }
   return out.reverse();
 }
+
+
+/** Group cards using the same property names as the project's task fields. */
+export function boardColumns(notes, options, setup, { sprint = null, resolve } = {}) {
+  const statuses = options.columns.length ? options.columns : setup.fields.find((field) => field.key === "status").values;
+  const columns = statuses.map((status) => ({ status, cards: [] }));
+  const byStatus = new Map(columns.map((column) => [column.status.toLowerCase(), column]));
+  const keys = Object.fromEntries(["status", "priority", "area", "assignee", "type", "sprint"]
+    .map((key) => [key, fieldProp(setup, key)]));
+  const areas = options.areas.map(foldName);
+  const types = options.types.map(foldName);
+  const who = foldName(options.assignee);
+  const term = (value) => String(value ?? "").trim();
+  for (const { path, props } of notes) {
+    const status = term(props[keys.status]);
+    const column = byStatus.get(status.toLowerCase());
+    const type = foldName(props[keys.type]);
+    if (!column || type === "epic" || (types.length && !types.includes(type))) continue;
+    const rawArea = props[keys.area];
+    const area = (Array.isArray(rawArea) ? rawArea : term(rawArea).split(",")).map(linkName).filter(Boolean);
+    const assignee = term(props[keys.assignee]);
+    if (areas.length && !area.some((value) => areas.includes(foldName(value)))) continue;
+    if (who && foldName(assignee) !== who && foldName(splitAssignee(assignee).name) !== who) continue;
+    if (options.sprint && (!sprint || resolve?.(linkTarget(props[keys.sprint]), path) !== sprint.path)) continue;
+    column.cards.push({ path, status, id: term(props.id), priority: term(props[keys.priority]), assignee, area });
+  }
+  return columns;
+}

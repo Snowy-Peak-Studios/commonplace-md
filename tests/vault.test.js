@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -924,4 +924,23 @@ test("an item added to a new-tasks block goes just above its closing fence, or l
   assert.equal(addNewTask("```new-tasks\n- One", 1, "Two"), "```new-tasks\n- One\n- Two", "no closing fence: last");
   assert.equal(addNewTask(note, 5, "   "), note, "nothing to add");
   assert.equal(addNewTask(note, 99, "Two"), note, "no such line");
+});
+
+
+test("board uses configured properties and filters cards without including epics", () => {
+  const setup = taskSetup({ fields: { status: { prop: "stage", values: ["Ready", "Done"] } } });
+  const props = { stage: "ready", area: ["UI", "Core"], assignee: "Zoë (Codex)", sprint: "[[S1]]", type: "Bug" };
+  const notes = [
+    { path: "Tasks/Match.md", props: { ...props, id: "T-1", priority: "High" } },
+    { path: "Tasks/Epic.md", props: { ...props, type: "Epic" } },
+    { path: "Tasks/Other.md", props: { ...props, stage: "Done", sprint: "[[S2]]" } },
+  ];
+  const options = { columns: [], areas: [], assignee: "", sprint: "", types: [] };
+  assert.deepEqual(boardColumns(notes, options, setup).map(({ status, cards }) => [status, cards.length]),
+    [["Ready", 1], ["Done", 1]]);
+  const filters = { columns: ["Done", "Ready"], areas: ["ui"], assignee: "Zoe", sprint: "current", types: ["bug"] };
+  const columns = boardColumns(notes, filters, setup, { sprint: { path: "S1.md" }, resolve: (name) => name + ".md" });
+  assert.deepEqual(columns[0], { status: "Done", cards: [] });
+  assert.deepEqual(columns[1].cards, [{ path: "Tasks/Match.md", id: "T-1", status: "ready", priority: "High",
+    area: ["UI", "Core"], assignee: "Zoë (Codex)" }]);
 });

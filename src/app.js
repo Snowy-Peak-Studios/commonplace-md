@@ -11,9 +11,9 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns,
 } from "./vault.js";
-import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
@@ -1077,6 +1077,13 @@ function renderPreview() {
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo, f.path);
+  const previousBoards = [...f.dom.preview.querySelectorAll(".board-columns")].map((board) => board.scrollLeft);
+  fillBoards(body, f);
+  if (previousBoards.some(Boolean)) {
+    requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
+      board.scrollLeft = previousBoards[i] ?? 0;
+    }));
+  }
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
   // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
@@ -2768,6 +2775,81 @@ function fillBases(root, repo, fromPath = "") {
     if (p?.tagName === "P" && p.childNodes.length === 1) p.replaceWith(view);
     else el.replaceWith(view);
   }
+}
+
+/** A board shares the task and sprint property caches with the rest of the note. */
+function fillBoards(root, f) {
+  const blocks = root.querySelectorAll(".board-block");
+  const setup = taskSetupOf(f.repo);
+  const tree = app.trees.get(f.repo.id);
+  if (!blocks.length || !setup || !tree) return;
+  const tasks = taskNotes(f.repo, setup);
+  const resolve = (target, from) => tree.index.resolve(target, from);
+  for (const el of blocks) {
+    const options = boardOptions(el.querySelector("code").textContent);
+    const sprintList = options.sprint ? sprintNotes(f.repo, setup).notes : [];
+    if (!tasks.notes || !sprintList) {
+      fill(el, h("p", { class: "board-muted", role: "status" }, "Loading board…"));
+      continue;
+    }
+    const sprint = options.sprint ? pickSprint(sprints(sprintList, isoDate()), options.sprint, (target) => resolve(target, f.path)) : null;
+    el.replaceWith(taskBoard(f, boardColumns(tasks.notes, options, setup, { sprint, resolve }), setup, options));
+  }
+}
+
+function taskBoard(f, columns, setup, options) {
+  const writable = canWrite(f.repo);
+  const key = fieldProp(setup, "status");
+  let dragged = null;
+  const move = async (card, status, picker) => {
+    if (picker.disabled || status.toLowerCase() === card.status.toLowerCase()) return;
+    await changeTask(f.repo, card.path, key, status, picker,
+      { allow: (current) => String(current[key] ?? "").trim() === card.status });
+    if (picker.isConnected) redrawNote();
+  };
+  const scroller = h("div", { class: "board-columns", tabindex: "0", "aria-label": "Status columns" });
+  for (const { status, cards } of columns) {
+    const column = h("section", { class: "board-column", "aria-label": status },
+      h("h3", {}, status, h("span", { class: "board-muted" }, String(cards.length))));
+    if (writable) {
+      column.addEventListener("dragover", (event) => {
+        if (!dragged || dragged.card.status.toLowerCase() === status.toLowerCase()) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      });
+      column.addEventListener("drop", (event) => {
+        if (!dragged) return;
+        event.preventDefault();
+        const { card, picker } = dragged;
+        dragged = null;
+        move(card, status, picker);
+      });
+    }
+    for (const card of cards) {
+      const title = shownName(card.path);
+      const picker = writable ? h("select", { "aria-label": "Status of " + (card.id || title) },
+        columns.map((target) => h("option", { value: target.status, selected: target.status === status }, target.status))) : null;
+      picker?.addEventListener("change", () => move(card, picker.value, picker));
+      const tile = h("article", { class: "board-card" },
+        h("a", { href: hrefFor(f.repo, card.path) }, card.id && h("span", { class: "board-muted" }, card.id), title),
+        h("div", { class: "board-card-meta" }, [card.priority, card.assignee, ...card.area].filter(Boolean).join(" · ")),
+        picker);
+      if (writable) {
+        tile.draggable = true;
+        tile.addEventListener("dragstart", (event) => {
+          if (picker.disabled) { event.preventDefault(); return; }
+          dragged = { card, picker };
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", card.path);
+        });
+        tile.addEventListener("dragend", () => { dragged = null; });
+      }
+      column.append(tile);
+    }
+    scroller.append(column);
+  }
+  return h("section", { class: "task-board", "aria-label": "Task board" },
+    !options.columns.length && h("p", { class: "board-muted" }, "Columns use the statuses from Task fields."), scroller);
 }
 
 /** A base's views as tabs over one table. The last tab chosen is remembered per base. */

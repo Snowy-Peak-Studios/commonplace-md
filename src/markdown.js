@@ -195,6 +195,9 @@ export function createMarkdown() {
       const lines = inComments && token.map ? ` data-start="${token.map[0]}" data-close="${token.map[1] - 1}"` : "";
       return `<section ${attrs}${lines}><h2>${title}</h2>\n${body}</section>\n`;
     }
+    if (lang === "board" && !env.depth) {
+      return '<div class="board-block"><pre><code>' + esc(token.content) + '</code></pre></div>\n';
+    }
     if (lang === "top-tasks") {
       const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
@@ -351,4 +354,25 @@ export function renderNote(md, text, env) {
     return false;
   });
   return { html: md.renderer.render([...body, ...history], md.options, env), frontMatter };
+}
+
+
+/** A board's columns and optional filters, written one per line. */
+export function boardOptions(src) {
+  const fields = {};
+  for (const line of src.split(/\r?\n/)) {
+    const match = /^\s*(columns|areas|assignee|sprint|type)\s*:\s*(.*?)\s*$/i.exec(line);
+    if (match) fields[match[1].toLowerCase()] = match[2];
+  }
+  const list = (key) => {
+    const seen = new Set();
+    return (fields[key] ?? "").split(",").map((value) => value.trim()).filter((value) => {
+      const lower = value.toLowerCase();
+      if (!lower || seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+  };
+  return { columns: list("columns"), areas: list("areas"), assignee: fields.assignee ?? "",
+    sprint: fields.sprint ?? "", types: list("type") };
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlockOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlockOptions, boardOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -203,4 +203,13 @@ test("a new-tasks block is a box with its items rendered, its owner, and its clo
   const none = render("```new-tasks\n```\n");
   assert.match(none, /No owner: line, so no agent sorts these/);
   assert.match(none, /<li class="muted">Nothing yet\.<\/li>/);
+});
+
+
+test("board reads its options in order and renders the source as text", () => {
+  assert.deepEqual(boardOptions("columns: Done, To Do, done\nareas: UI, Docs\nassignee: Pat\nsprint: next\ntype: Bug"), {
+    columns: ["Done", "To Do"], areas: ["UI", "Docs"], assignee: "Pat", sprint: "next", types: ["Bug"],
+  });
+  assert.deepEqual(boardOptions(""), { columns: [], areas: [], assignee: "", sprint: "", types: [] });
+  assert.match(render("```board\nareas: <script>\n```"), /class="board-block"><pre><code>areas: &lt;script&gt;/);
 });

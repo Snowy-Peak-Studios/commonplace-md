@@ -1190,6 +1190,20 @@ const boardSubs = await page.evaluate(() => {
 });
 check(!boardSubs.code && boardSubs.of === "of T-6Get set up" && boardSubs.href.endsWith("/Tasks/Get set up.md") && boardSubs.count === "2 of 3 done"
   && boardSubs.rows === 3 && !boardSubs.add, "a ```subtasks block with task: shows that task's subtasks on another page, read only: " + JSON.stringify(boardSubs));
+
+const boardPicker = '.task-board select[aria-label="Status of T-3"]';
+check(await until(() => document.querySelectorAll(".task-board .board-column").length === 5, 15000),
+  "the board shows a column for each configured status");
+check(await page.$eval(".task-board", (el) => !el.textContent.includes("Get set up") && el.textContent.includes("Columns use the statuses from Task fields.")),
+  "the board names the source of its columns and omits the epic");
+const boardTask = await realFile("Tasks/Try the app on a phone.md");
+const boardPuts = puts.length;
+await page.select(boardPicker, "Done");
+check(await until(() => !!document.querySelector('.board-column[aria-label="Done"] select[aria-label="Status of T-3"]'), 15000),
+  "the status menu moves a board card to the chosen column");
+check(puts.length === boardPuts + 1 && puts.at(-1).text === boardTask.text.replace(/^status: In Progress$/m, "status: Done"),
+  "the move makes one commit that changes only the status");
+await page.reload({ waitUntil: "networkidle0" });
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelectorAll(".subtasks .st-list li").length === 3, 15000), "the epic lists its three subtasks");
 const subs = await page.evaluate(() => ({
@@ -1426,6 +1440,9 @@ check(await page.evaluate(() => ["#mode", "#save-btn", "#side-new"].every((s) =>
 check(await page.$$eval(".preview input.task", (bs) => bs.length > 0 && bs.every((b) => b.disabled)), "its checkboxes can't be ticked");
 check(!(await page.$(".image-tools")), "a read-only vault has no Add image control");
 await shot("10-read-only");
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector(".board-card a"), 15000)
+  && !(await page.$('.task-board select, .task-board [draggable="true"]')), "a read-only board shows cards without move controls");
 readOnlyRepo = false;
 
 // 10d. A new device without an invite: after the token it's sent to add a repo, and asks GitHub about none.

@@ -20,6 +20,13 @@ Which fields a task has is set up per project: **[Set up task fields](#/settings
 
 New tasks start from [[Templates/Task|the task template]]: give each one the next `id`, and fill in who asked for it in `requested_by`.
 
+## Status board
+
+Use the card's status menu or drag the card to move it to a different column.
+
+```board
+```
+
 ## Getting set up
 
 The epic [[Get set up]] and its subtasks, shown here by a ` ```subtasks ` block with a `task:` line (the task's ID, name or link). A task's ` ```subtasks `, ` ```relations ` and ` ```commits ` can show on any page this way; away from the task's own page they only read.
