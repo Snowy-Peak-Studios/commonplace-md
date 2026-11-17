@@ -71,6 +71,15 @@ test("task sections render Markdown, keep original checkbox lines and move folde
   assert.doesNotMatch(code, /class="(note-section|mention)"/);
 });
 
+test("posted comments carry source lines and a distinct list style while their content stays Markdown", () => {
+  const note = "```comments\nEarlier note.\n\n- **alice** · 2026-11-17 11:22 UTC\n\n    Thanks @bob.\n```\n";
+  const html = render(note);
+  assert.match(html, /data-section="comments" data-heading="Comments" data-start="0" data-close="6"/);
+  assert.match(html, /<li class="posted-comment">\s*<p><strong>alice<\/strong> · 2026-11-17 11:22 UTC<\/p>/);
+  assert.match(html, /Thanks <span class="mention" data-login="bob"/);
+  assert.match(html, /<p>Earlier note\.<\/p>/);
+});
+
 test("headings carry their text for [[Page#Heading]] links", () => {
   assert.match(render("## 🆕 New tasks"), /<h2 data-heading="🆕 New tasks">/);
 });

@@ -326,6 +326,45 @@ export function addNewTask(text, close, item) {
   return lines.join("\n");
 }
 
+const COMMENT_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const UNKNOWN_COMMENTER = "Unknown user";
+const COMMENT_HEADER = /^\*\*([\w-]+|Unknown user)\*\* · (\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC)$/;
+
+/** The plain Markdown author and time of a posted comment. */
+export function commentHeader(text) {
+  const match = COMMENT_HEADER.exec(text);
+  if (!match) return null;
+  const author = match[1];
+  return { author, login: COMMENT_LOGIN.test(author) ? author : "", time: match[2] };
+}
+
+/** The last recorded author gets an editable @mention, except when replying to yourself. */
+export function commentReply(src, login) {
+  const lines = [...proseLines(toLf(src).split("\n"))].map(({ text }) => text);
+  const header = lines.findLast((line) => /^ {0,3}- /.test(line) && commentHeader(line.trimStart().slice(2)));
+  const previous = header ? commentHeader(header.trimStart().slice(2)).login : "";
+  return previous && previous.toLowerCase() !== login.toLowerCase() ? `@${previous} ` : "";
+}
+
+/** Insert one attributed comment into the rendered Comments fence, leaving the rest of the note alone. */
+export function addComment(text, start, close, body, login, now = new Date()) {
+  const lines = toLf(text).split("\n");
+  const message = toLf(body).trim();
+  const opening = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lines[start] ?? "");
+  const closing = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines[close] ?? "");
+  if (!message || close <= start || !opening || fenceLanguage(opening[2]) !== "comments"
+    || !closing || closing[1][0] !== opening[1][0] || closing[1].length < opening[1].length) return text;
+  const author = COMMENT_LOGIN.test(login) ? login : UNKNOWN_COMMENTER;
+  const time = now.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const indent = lines[start].match(/^ */)[0];
+  // Four spaces keep user-entered backticks inside the comment, while Markdown reads it as a list item's body.
+  const content = message.split("\n").map((line) => line.trim() ? `${indent}    ${line}` : "");
+  const entry = [`${indent}- **${author}** · ${time}`, "", ...content];
+  if (close > start + 1 && lines[close - 1].trim()) entry.unshift("");
+  lines.splice(close, 0, ...entry);
+  return lines.join("\n");
+}
+
 // ================================================================
 // Mentions: `@login` in a note, found for that person's inbox
 // ================================================================

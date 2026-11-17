@@ -786,8 +786,21 @@ a.mention:hover { text-decoration: underline; }
 .cm-tooltip.cm-tooltip-autocomplete > ul > li { padding: 4px 10px !important; }
 .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--accent-soft); color: var(--text); }
 .cm-tooltip-autocomplete .cm-completionDetail { color: var(--muted); font-style: normal; margin-left: 8px; }
-.newtasks-add { display: flex; gap: 8px; margin-top: 10px; }
-.newtasks-add .input { flex: 1; min-width: 0; }
+.note-add { display: flex; gap: 8px; margin-top: 10px; }
+.note-add .input { flex: 1; min-width: 0; }
+.comment-add { align-items: flex-end; }
+.comment-add textarea { font: inherit; padding: 8px 10px; resize: vertical; }
+.preview .note-section ul:has(> li.posted-comment):not(:has(> li:not(.posted-comment))) { padding-inline-start: 0; }
+.preview .posted-comment {
+  list-style: none;
+  margin: 0.55em 0;
+  padding: 0.55em 0.75em;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.preview .posted-comment > p:first-child { font-size: 0.84em; color: var(--muted); }
+.preview .posted-comment > p:first-child strong { color: var(--text); }
+.preview .posted-comment > :last-child { margin-bottom: 0; }
 .preview .newtasks-list li[data-line] { flex-wrap: nowrap; }
 .newtasks-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .newtasks-tools { display: flex; flex: none; margin-left: auto; }

@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -130,6 +130,15 @@ export function createMarkdown() {
   md.core.ruler.push("mentions", mentionRule);
   md.renderer.rules.mention = (tokens, idx) => `<span class="mention" data-login="${esc(tokens[idx].meta.login)}">@${esc(tokens[idx].meta.login)}</span>`;
 
+  md.renderer.rules.list_item_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const inline = tokens[idx + 2];
+    if (env.inComments && token.level === 1 && inline?.type === "inline" && commentHeader(inline.content)) {
+      token.attrJoin("class", "posted-comment");
+    }
+    return self.renderToken(tokens, idx, options);
+  };
+
   const linkHtml = ({ target, heading, alias }, env) => {
     const path = target ? env.resolve(target) : env.fromPath;
     const text = alias || (target ? (heading ? `${target} › ${heading}` : target) : heading || "");
@@ -179,10 +188,12 @@ export function createMarkdown() {
     if (token.level === 0 && !env.inNoteSection && Object.hasOwn(NOTE_SECTIONS, lang)) {
       const title = NOTE_SECTIONS[lang];
       const lineOffset = (env.lineOffset ?? 0) + (token.map?.[0] ?? -1) + 1;
-      const body = md.render(token.content, { ...env, lineOffset, inNoteSection: true });
+      const inComments = lang === "comments";
+      const body = md.render(token.content, { ...env, lineOffset, inNoteSection: true, inComments });
       const attrs = `class="note-section" data-section="${lang}" data-heading="${title}"`;
       if (lang === "work-history") return `<details ${attrs}><summary>${title}</summary>\n${body}</details>\n`;
-      return `<section ${attrs}><h2>${title}</h2>\n${body}</section>\n`;
+      const lines = inComments && token.map ? ` data-start="${token.map[0]}" data-close="${token.map[1] - 1}"` : "";
+      return `<section ${attrs}${lines}><h2>${title}</h2>\n${body}</section>\n`;
     }
     if (lang === "top-tasks") {
       const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);

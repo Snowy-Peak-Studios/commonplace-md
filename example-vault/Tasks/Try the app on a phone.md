@@ -33,7 +33,9 @@ As someone away from my desk, I want my notes on my phone, so that I can add to 
 ```
 
 ```comments
-Does the app open the inbox from the home screen shortcut?
+- **your-github-login** · 2026-05-01 09:30 UTC
+
+    Does the app open the inbox from the home screen shortcut?
 ```
 
 ```work-history

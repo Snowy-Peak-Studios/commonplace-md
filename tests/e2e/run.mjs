@@ -611,6 +611,11 @@ const sections = await page.$$eval(".note-body > .note-section", (blocks) => blo
 check(JSON.stringify(sections) === JSON.stringify([
   ["description", null], ["acceptance-criteria", null], ["comments", null], ["work-history", false],
 ]), "the task has four sections and History is last and folded: " + JSON.stringify(sections));
+const commentField = '.comment-add textarea';
+await page.waitForSelector(commentField);
+check(await page.$eval(commentField, (field) => field.value === "@your-github-login ") &&
+  await page.$eval(".comment-add button", (button) => button.textContent.trim() === "Post"),
+  "the task's Comments form suggests the previous author and can post a reply");
 await page.click('.note-section[data-section="work-history"] > summary');
 check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History opens to show its entries");
 await page.click(criteriaSelector + ":not([checked])");

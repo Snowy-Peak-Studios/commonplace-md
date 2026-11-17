@@ -65,6 +65,8 @@ Does the shortcut open my inbox?
 
 Tick a criterion in **Read**, then **Save**. Work History opens from the folded section at the bottom. Put a `comments` block on any note and use `@` followed by a teammate's GitHub login to mention them. The [Guide](../Guide.md#comments) has a Comments block on a regular note.
 
+Write in the Comments box and press **Post** to save a comment with its author and time. The box starts with an editable mention of the previous commenter when their login is known and differs from yours. If the note already has unsaved edits, the comment joins the draft. Press **Save** to post it with your changes. Open **Edit** to revise a saved comment.
+
 ## See them all
 
 The [Task Board](../Task%20Board.md) shows the tasks as a table, with views by status, by parent and more. Your [inbox](Use%20your%20inbox.md) shows the top ones to start.

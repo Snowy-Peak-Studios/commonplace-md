@@ -188,7 +188,7 @@ task: Get set up
 
 ### Task sections and comments
 
-Use standalone `description`, `acceptance-criteria`, `comments` and `work-history` fences for the Markdown you write on a task. The history starts folded at the bottom. See [Work with tasks](Work%20with%20tasks.md#task-sections) for the four together or the [Guide](../Guide.md#comments) for a Comments block on a regular note.
+Use standalone `description`, `acceptance-criteria`, `comments` and `work-history` fences for the Markdown you write on a task. The history starts folded at the bottom. Post comments in Read mode on any note. The previous commenter's mention is filled in when their login is known and differs from yours. See [Work with tasks](Work%20with%20tasks.md#task-sections) for the four together or the [Guide](../Guide.md#comments) for a Comments block on a regular note.
 
 ### Sprint
 

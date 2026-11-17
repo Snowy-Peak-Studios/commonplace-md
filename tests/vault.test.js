@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskSections, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
+  hasBlock, withBlocks, withTaskSections, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -778,6 +778,33 @@ test("task decisions use the written criteria and leave comments and history out
   assert.equal(taskState(note.replace("- [ ] Finished\n", "")).state, "placeholder");
   assert.equal(taskAnswer(note), "");
   assert.equal(taskAnswer(note.replace("**Answer:**", "**Answer:** Use the first one.")), "Use the first one.");
+});
+
+test("posting appends a Markdown comment to the selected fence and suggests the previous login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = "# Plan\n\n```comments\nEarlier text.\n```\n\n~~~comments\n~~~\n";
+  const now = new Date("2026-11-17T11:22:30Z");
+  const posted = addComment(note, 2, 4, "@alice Please check.\n\nNext paragraph.", "Bob", now);
+  assert.equal(posted, note.replace("Earlier text.\n", "Earlier text.\n\n- **Bob** · 2026-11-17 11:22 UTC\n\n    @alice Please check.\n\n    Next paragraph.\n"));
+  const comment = blockContents(posted, "comments")[0];
+  assert.equal(commentReply(comment, "alice"), "@Bob ");
+  assert.equal(commentReply(comment, "bob"), "");
+  assert.equal(commentReply("Earlier text. @alice", "bob"), "");
+  assert.equal(commentReply("~~~md\n- **example** · 2026-11-17 11:22 UTC\n~~~", "bob"), "");
+  assert.deepEqual(findMentions(posted).map(({ login, heading }) => [login, heading]), [["alice", "Comments"]]);
+  assert.equal(addComment(note, 2, 7, "Wrong block", "bob", now), note);
+  assert.equal(addComment(note, 6, 7, "  ", "bob", now), note);
+});
+
+test("code in a multiline comment stays in the fence and a local post has no reply login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const source = "   ```comments\n   ```\n\nAfter.\n";
+  const posted = addComment(source, 0, 1, "```js\n@not-a-mention\n```\n\n@alice Hello", "", new Date("2026-11-17T11:22Z"));
+  assert.match(posted, /\*\*Unknown user\*\*.*UTC/);
+  assert.match(posted, /^ {7}```js$/m);
+  assert.deepEqual(findMentions(posted).map(({ login }) => login), ["alice"]);
+  assert.equal(commentReply(posted, "bob"), "");
+  assert.ok(posted.endsWith("   ```\n\nAfter.\n"));
 });
 
 test("a mention with a reply right under it is answered: the next line starts with someone else's @login", async () => {

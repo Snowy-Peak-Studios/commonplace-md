@@ -10,7 +10,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask,
+  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskSections,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
@@ -993,8 +993,9 @@ function renderPreview() {
   fillTopTasks(body, f);
   // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
   fillAttention(body, f);
-  // A ```new-tasks box gets its Add field, where the note can be changed.
+  // New tasks and Comments get their inline forms where the note can be changed.
   fillNewTasks(body, f);
+  fillComments(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = usable(f.repo) ? taskSetupOf(f.repo) : null;
   if (usable(f.repo) && !setup) {
@@ -1825,6 +1826,26 @@ function loadMentions(repo, login) {
   return mentionLoads.get(key);
 }
 
+/** Apply a change from an inline note control and keep the reader's place. */
+function applyPreviewEdit(f, next) {
+  if (app.file !== f || next === f.text) return false;
+  f.text = next;
+  if (f.editor) setEditorText(f.editor, f.text);
+  updateDirty();
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+  return true;
+}
+
+function noteAddForm(field, className, label, onAdd) {
+  return h("form", { class: `note-add ${className}`, onsubmit: (e) => {
+    e.preventDefault();
+    const text = field.value.trim();
+    if (text) onAdd(text);
+  } }, field, h("button", { class: "btn small", type: "submit" }, icon("plus"), label));
+}
+
 // ---- new tasks: a ```new-tasks block's box ----
 
 /**
@@ -1836,17 +1857,7 @@ function fillNewTasks(root, f) {
   if (!canWrite(f.repo)) return;
   const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
   const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n];
-  // Puts the changed note in place and draws it again where it was; false when nothing changed.
-  const apply = (next) => {
-    if (app.file !== f || next === f.text) return false;
-    f.text = next;
-    if (f.editor) setEditorText(f.editor, f.text);
-    updateDirty();
-    const scroll = $("#main").scrollTop;
-    renderPreview();
-    $("#main").scrollTop = scroll;
-    return true;
-  };
+  const apply = (next) => applyPreviewEdit(f, next);
   boxes.forEach((el, n) => {
     const close = Number(el.dataset.close);
     if (!(close >= 0)) return;
@@ -1875,12 +1886,42 @@ function fillNewTasks(root, f) {
       li.append(tools);
     }
     const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
-    el.append(h("form", { class: "newtasks-add", onsubmit: (e) => {
-      e.preventDefault();
-      const said = input.value.trim();
-      if (!said || !apply(addNewTask(f.text, close, said))) return;
-      boxAt(n)?.querySelector(".newtasks-add input")?.focus();
-    } }, input, h("button", { class: "btn small", type: "submit" }, icon("plus"), "Add")));
+    el.append(noteAddForm(input, "newtasks-add", "Add", (said) => {
+      if (apply(addNewTask(f.text, close, said))) boxAt(n)?.querySelector(".newtasks-add input")?.focus();
+    }));
+  });
+}
+
+// ---- comments: inline posting in a Markdown note ----
+
+function fillComments(root, f) {
+  if (!canWrite(f.repo)) return;
+  const source = f.text;
+  const lines = source.split("\n");
+  const login = isLocal(f.repo) ? "" : ownerTokens()[f.repo.owner.toLowerCase()]?.login || store.get("user")?.login || "";
+  const drafts = f.dom.preview.querySelectorAll(".comment-add textarea");
+  const boxes = root.querySelectorAll(':scope > section.note-section[data-section="comments"][data-start][data-close]');
+  boxes.forEach((box, index) => {
+    const start = Number(box.dataset.start), close = Number(box.dataset.close);
+    const suggested = commentReply(lines.slice(start + 1, close).join("\n"), login);
+    const input = h("textarea", { class: "input", rows: 2, placeholder: "Write a comment…", "aria-label": "Write a comment", "data-suggested": suggested });
+    const old = drafts[index];
+    input.value = old && old.value !== old.dataset.suggested ? old.value : suggested;
+    box.append(noteAddForm(input, "comment-add", "Post", (message) => {
+      if (app.file !== f || !canWrite(f.repo) || message === suggested.trim()) return;
+      if (app.saving) return toast("Wait for the note to finish saving.", "info");
+      if (f.text !== source) {
+        renderPreview();
+        return toast("The note changed. Review your comment and post it again.", "info");
+      }
+      const next = addComment(source, start, close, message, login);
+      if (next === source) return toast("Close the Comments block in Edit before posting.", "info");
+      const wasDirty = f.dirty;
+      input.value = suggested;
+      if (!applyPreviewEdit(f, next)) return;
+      if (wasDirty) toast("Comment added to your draft. Save the note to post it.", "info");
+      else save();
+    }));
   });
 }
 
@@ -2924,7 +2965,8 @@ function renderTable() {
 async function save() {
   const f = app.file;
   if (!(f?.dirty || uploadable(f)) || app.saving || viewOnly(f.kind)) return;
-  const text = toLf(f.text);
+  const before = f.text;
+  const text = toLf(before);
   app.saving = true;
   renderHeader();
   try {
@@ -2933,9 +2975,9 @@ async function save() {
     if (app.file !== f) return;
     f.sha = res.sha;
     f.saved = text;
-    f.text = text;
-    f.dirty = false;
-    store.remove(draftKey(f));
+    if (f.text === before) f.text = text;
+    updateDirty();
+    flushDraft();
     treeChanged(f.repo, f.path, res.sha);
     updateLinkWarning();
     if (res.waiting) toast("Saved on this device. It goes to GitHub when the connection is back.", "ok", 5000);
