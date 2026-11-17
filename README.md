@@ -577,7 +577,7 @@ An inbox is a note for things to sort later: new tasks, notes, questions.
   ```
 
 - Notes deeper in the folder are ignored, so `Notes/Inboxes/Local/` can hold inboxes kept off GitHub: add `Notes/Inboxes/Local/` to the notes repo's `.gitignore` and they stay on your computer, for a desktop editor only.
-- **Status board:** add a ` ```board ` block to any page. The columns follow the order in `columns` or use the project's Task fields statuses when the line is left out. Optional filters are `areas` and `type` (comma-separated), `assignee` (one name), and `sprint` (a name, link, `current` or `next`). Drag a card or use its status menu to move it. Readers see the same cards and columns.
+- **Status board:** add a ` ```board ` block to any page. The columns follow the order in `columns` or use the project's Task fields statuses when the line is left out. Optional filters are `areas` and `type` (comma-separated), `assignee` (one name), and `sprint` (a name, link, `current` or `next`). Drag a card or use its status menu to move it. **Edit card** opens Priority and Assignee. The board can also filter to **Assigned to me** when you are signed in. Readers see the same cards and columns.
 
   ```board
   columns: To Do, In Progress, Done

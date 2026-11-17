@@ -2383,6 +2383,7 @@ function refreshInboxBox(repo) {
  */
 async function changeTask(repo, path, key, value, picker, { said = "", also = () => [], allow = null } = {}) {
   picker.disabled = true;
+  let saved = false;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
@@ -2403,10 +2404,12 @@ async function changeTask(repo, path, key, value, picker, { said = "", also = ()
       toast(said ? `${shownName(path)}: ${said}` : key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
         : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
+    saved = !!next;
   } catch (e) {
     toast(`Not changed: ${e.message}`, "error");
   }
   if (!refreshInboxBox(repo)) picker.disabled = false;
+  return saved;
 }
 
 /** Icons, external links and images: what the sanitized HTML still needs. */
@@ -2814,7 +2817,7 @@ function fillBoards(root, f) {
   if (!blocks.length || !setup || !tree) return;
   const tasks = taskNotes(f.repo, setup);
   const resolve = (target, from) => tree.index.resolve(target, from);
-  for (const el of blocks) {
+  for (const [index, el] of [...blocks].entries()) {
     const options = boardOptions(el.querySelector("code").textContent);
     const sprintList = options.sprint ? sprintNotes(f.repo, setup).notes : [];
     if (!tasks.notes || !sprintList) {
@@ -2822,12 +2825,28 @@ function fillBoards(root, f) {
       continue;
     }
     const sprint = options.sprint ? pickSprint(sprints(sprintList, isoDate()), options.sprint, (target) => resolve(target, f.path)) : null;
-    el.replaceWith(taskBoard(f, boardColumns(tasks.notes, options, setup, { sprint, resolve }), setup, options));
+    const identity = f.myBoards?.get(index) ?? null;
+    const columns = boardColumns(tasks.notes, options, setup, { sprint, resolve, identity });
+    el.replaceWith(taskBoard(f, columns, setup, options, index, identity));
   }
 }
 
-function taskBoard(f, columns, setup, options) {
+function taskBoard(f, columns, setup, options, index, identity) {
   const writable = canWrite(f.repo);
+  const editableFields = setup.fields.filter((field) => field.on && ["priority", "assignee"].includes(field.key));
+  const login = store.get("user")?.login;
+  const mine = login ? h("input", { type: "checkbox", checked: !!identity }) : null;
+  mine?.addEventListener("change", async () => {
+    if (!f.myBoards) f.myBoards = new Map();
+    if (mine.checked) {
+      const people = await loadPeople(f.repo).catch(() => []);
+      if (!mine.isConnected || !mine.checked) return;
+      const name = people.find((person) => person.login.toLowerCase() === login.toLowerCase())?.name ?? login;
+      f.myBoards.set(index, { name, login });
+    } else f.myBoards.delete(index);
+    redrawNote();
+    f.dom.preview.querySelectorAll(".task-board")[index]?.querySelector(".board-mine input")?.focus({ preventScroll: true });
+  });
   const key = fieldProp(setup, "status");
   let dragged = null;
   const move = async (card, status, picker) => {
@@ -2862,7 +2881,9 @@ function taskBoard(f, columns, setup, options) {
       const tile = h("article", { class: "board-card" },
         h("a", { href: hrefFor(f.repo, card.path) }, card.id && h("span", { class: "board-muted" }, card.id), title),
         h("div", { class: "board-card-meta" }, [card.priority, card.assignee, ...card.area].filter(Boolean).join(" · ")),
-        picker);
+        writable && editableFields.length ? h("div", { class: "board-card-actions" }, picker,
+          h("button", { class: "icon-btn board-edit", type: "button", title: "Edit card",
+            "aria-label": "Edit card " + (card.id || title), onclick: () => editBoardCard(f, card, editableFields) }, icon("edit"))) : picker);
       if (writable) {
         tile.draggable = true;
         tile.addEventListener("dragstart", (event) => {
@@ -2878,7 +2899,42 @@ function taskBoard(f, columns, setup, options) {
     scroller.append(column);
   }
   return h("section", { class: "task-board", "aria-label": "Task board" },
-    !options.columns.length && h("p", { class: "board-muted" }, "Columns use the statuses from Task fields."), scroller);
+    !options.columns.length && h("p", { class: "board-muted" }, "Columns use the statuses from Task fields."),
+    mine && h("label", { class: "board-mine" }, mine, "Assigned to me"), scroller);
+}
+
+/** Keep both fields in one card action; each field saves independently. */
+function editBoardCard(f, card, fields) {
+  const controls = [];
+  let pending = null;
+  const rows = fields.map((field) => {
+    let current = card[field.key];
+    const list = field.key === "assignee" ? assigneeList(f.repo, "board-assignee-options") : null;
+    const control = list
+      ? h("input", { type: "text", class: "input", list: list.id, value: current, autocomplete: "off", spellcheck: "false" })
+      : h("select", { class: "input" }, [...new Set(["", ...field.values, current])]
+        .map((value) => h("option", { value, selected: value === current }, value || "—")));
+    control.id = "board-edit-" + field.key;
+    controls.push(control);
+    control.addEventListener("change", () => {
+      const value = fieldValue(field, control.value);
+      if (pending || value === current) return;
+      controls.forEach((input) => { input.disabled = true; });
+      pending = changeTask(f.repo, card.path, field.prop, value, control, {
+        said: list ? "assignee updated" : "",
+        allow: (props) => shownValue(props[field.prop]).trim() === current,
+      }).then((saved) => {
+        if (saved) current = value;
+        control.value = current;
+        controls.forEach((input) => { input.disabled = false; });
+        pending = null;
+        if (app.file === f) redrawNote();
+      });
+    });
+    return h("label", { class: "field" }, h("span", {}, field.label), control, list);
+  });
+  modal({ title: shownName(card.path), body: rows,
+    buttons: [{ label: "Done", kind: "primary", onclick: async () => { await pending; } }] });
 }
 
 /** A base's views as tabs over one table. The last tab chosen is remembered per base. */

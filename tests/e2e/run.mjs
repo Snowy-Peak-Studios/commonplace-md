@@ -34,6 +34,7 @@ const hashPath = (url) => decodeURIComponent(url.split("#")[1] || "");
 const log = (...a) => console.log(...a);
 const errors = [];
 const puts = [];
+let boardState = null;
 // One commit of several files (Start the next sprint) goes through the Git data API: its writes are answered here.
 const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
@@ -78,7 +79,9 @@ page.on("request", async (req) => {
     const body = JSON.parse(req.postData());
     puts.push({ url, body, text: Buffer.from(body.content, "base64").toString("utf8") });
     if (putMode === "conflict") return req.respond(json(409, { message: "is at abc but expected def" }));
-    return req.respond(json(200, { content: { sha: "fake" + puts.length }, commit: { sha: "c" + puts.length } }));
+    const sha = "fake" + puts.length;
+    if (boardState && url === contentsUrl(boardState.path)) Object.assign(boardState, { text: puts.at(-1).text, sha });
+    return req.respond(json(200, { content: { sha }, commit: { sha: "c" + puts.length } }));
   }
   if (req.method() === "POST" && url === `${REPO_API}/git/trees`) {
     treeWrites.push(JSON.parse(req.postData()));
@@ -124,6 +127,9 @@ page.on("request", async (req) => {
   }
   if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
     return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
+  }
+  if (boardState && req.method() === "GET" && url.split("?")[0] === contentsUrl(boardState.path)) {
+    return req.respond(json(200, { sha: boardState.sha, size: boardState.text.length, content: b64(boardState.text) }));
   }
   // A note "created" by the New note check: its PUT was answered here, so its GET is too.
   const created = puts.find((p) => !p.body.sha && p.url === url.split("?")[0]);
@@ -1430,12 +1436,47 @@ check(await until(() => document.querySelectorAll(".task-board .board-column").l
 check(await page.$eval(".task-board", (el) => !el.textContent.includes("Get set up") && el.textContent.includes("Columns use the statuses from Task fields.")),
   "the board names the source of its columns and omits the epic");
 const boardTask = await realFile("Tasks/Try the app on a phone.md");
+boardState = { path: taskPath, ...boardTask };
 const boardPuts = puts.length;
 await page.select(boardPicker, "Done");
 check(await until(() => !!document.querySelector('.board-column[aria-label="Done"] select[aria-label="Status of T-3"]'), 15000),
   "the status menu moves a board card to the chosen column");
 check(puts.length === boardPuts + 1 && puts.at(-1).text === boardTask.text.replace(/^status: In Progress$/m, "status: Done"),
   "the move makes one commit that changes only the status");
+
+
+const editBoard = '[aria-label="Edit card T-3"]';
+await page.click(editBoard);
+await page.waitForSelector("#board-edit-priority");
+const beforeBoardPriority = boardState.text;
+const boardPriorityPuts = puts.length;
+await page.select("#board-edit-priority", "High");
+check(await until(() => document.querySelector("#toast")?.textContent.includes("priority is now High"), 10000)
+  && puts.length === boardPriorityPuts + 1 && puts.at(-1).text === beforeBoardPriority.replace(/^priority: Medium$/m, "priority: High"),
+  "editing a card priority commits only the priority");
+check(await until(() => !!document.querySelector('#board-assignee-options option[value="@collaborator-test"]'), 15000),
+  "the card uses the project collaborator picker");
+const beforeBoardAssignee = boardState.text;
+const boardAssigneePuts = puts.length;
+await page.$eval("#board-edit-assignee", (input) => {
+  input.value = "@collaborator-test";
+  input.dispatchEvent(new Event("change"));
+});
+check(await until(() => document.querySelector("#toast")?.textContent.includes("assignee updated"), 10000)
+  && puts.length === boardAssigneePuts + 1 && puts.at(-1).text === beforeBoardAssignee.replace(/^assignee: Your name$/m, 'assignee: "@collaborator-test"'),
+  "editing a card assignee commits only the assignee");
+await page.waitForSelector("#board-edit-assignee:enabled");
+await page.click("dialog .modal-foot .primary");
+boardState = null;
+fakeLogin = "your-github-login";
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector(".board-mine input");
+await page.click(".board-mine input");
+check(await until(() => !document.querySelector('[aria-label="Edit card T-4"]')
+  && !!document.querySelector('[aria-label="Edit card T-3"]'), 15000), "Assigned to me includes the signed-in vault name and filters out other cards");
+await page.click(".board-mine input");
+check(await until(() => !!document.querySelector('[aria-label="Edit card T-4"]'), 10000), "clearing Assigned to me restores the other cards");
+fakeLogin = null;
 
 // An assignee directory visible to the current writer, then unavailable on another visit.
 await page.goto(at(taskPath), { waitUntil: "networkidle0" });
@@ -1470,7 +1511,7 @@ check(!(await page.$(".image-tools")), "a read-only vault has no Add image contr
 await shot("10-read-only");
 await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector(".board-card a"), 15000)
-  && !(await page.$('.task-board select, .task-board [draggable="true"]')), "a read-only board shows cards without move controls");
+  && !(await page.$('.task-board .board-edit, .task-board select, .task-board [draggable="true"]')), "a read-only board shows cards without move controls");
 readOnlyRepo = false;
 
 // 10d. A new device without an invite: after the token it's sent to add a repo, and asks GitHub about none.

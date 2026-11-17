@@ -1302,7 +1302,7 @@ export function taskCommitLinks(value) {
 
 
 /** Group cards using the same property names as the project's task fields. */
-export function boardColumns(notes, options, setup, { sprint = null, resolve } = {}) {
+export function boardColumns(notes, options, setup, { sprint = null, resolve, identity = null } = {}) {
   const statuses = options.columns.length ? options.columns : setup.fields.find((field) => field.key === "status").values;
   const columns = statuses.map((status) => ({ status, cards: [] }));
   const byStatus = new Map(columns.map((column) => [column.status.toLowerCase(), column]));
@@ -1322,6 +1322,7 @@ export function boardColumns(notes, options, setup, { sprint = null, resolve } =
     const assignee = term(props[keys.assignee]);
     if (areas.length && !area.some((value) => areas.includes(foldName(value)))) continue;
     if (who && !assigneeMatches(assignee, { name: who, login: who })) continue;
+    if (identity && !assigneeMatches(assignee, identity)) continue;
     if (options.sprint && (!sprint || resolve?.(linkTarget(props[keys.sprint]), path) !== sprint.path)) continue;
     column.cards.push({ path, status, id: term(props.id), priority: term(props[keys.priority]), assignee, area });
   }

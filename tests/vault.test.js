@@ -938,6 +938,10 @@ test("board uses configured properties and filters cards without including epics
   const options = { columns: [], areas: [], assignee: "", sprint: "", types: [] };
   assert.deepEqual(boardColumns(notes, options, setup).map(({ status, cards }) => [status, cards.length]),
     [["Ready", 1], ["Done", 1]]);
+  const handle = { path: "Tasks/Handle.md", props: { stage: "Ready", assignee: "@zoe" } };
+  const identity = { name: "Zoë", login: "zoe" };
+  assert.deepEqual(boardColumns([...notes, handle], options, setup, { identity })[0].cards.map((card) => card.path),
+    ["Tasks/Match.md", "Tasks/Handle.md"]);
   const filters = { columns: ["Done", "Ready"], areas: ["ui"], assignee: "Zoe", sprint: "current", types: ["bug"] };
   const columns = boardColumns(notes, filters, setup, { sprint: { path: "S1.md" }, resolve: (name) => name + ".md" });
   assert.deepEqual(columns[0], { status: "Done", cards: [] });

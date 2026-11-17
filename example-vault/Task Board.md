@@ -22,7 +22,7 @@ New tasks start from [[Templates/Task|the task template]]: give each one the nex
 
 ## Status board
 
-Use the card's status menu or drag the card to move it to a different column.
+Use the card's status menu or drag the card to move it to a different column. Open the pencil button to edit priority or assignee. **Assigned to me** focuses the board on your own tasks when you are signed in.
 
 ```board
 ```
