@@ -1118,6 +1118,7 @@ select.input { padding-right: 8px; }
 
 /* A task's subtasks: a bar of how many are done, and each with its status */
 .subtasks, .commits { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.preview [data-section="comments"] + .commits { margin-top: 1.5rem; }
 .subtasks.none { padding: 0; border: none; background: none; margin: -6px 0 12px; }
 .st-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .st-title { font-weight: 650; }

@@ -1194,6 +1194,9 @@ await page.type("dialog[open] input", "Set up a second device");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Add subtask").click());
 check(await until(() => location.hash.endsWith("/Tasks/Set%20up%20a%20second%20device.md"), 10000), "Add subtask opens the new task");
 const subPut = puts.slice(putsBeforeSub).find((p) => p.url === contentsUrl("Tasks/Set up a second device.md"));
+const newTaskBlocks = [...(subPut?.text ?? "").matchAll(/^```([a-z-]+)$/gm)].map((m) => m[1]);
+check(newTaskBlocks.join(",") === "subtasks,relations,description,acceptance-criteria,comments,commits,work-history",
+  "a new task puts Commits below Comments and Work History last");
 check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text)
   && /^---\nparent: "\[\[Task Board\]\]"\n/.test(subPut.text),
   "it's a new task under the epic, with the epic's area and place in the tree: " + JSON.stringify(subPut?.text.split("\n---")[0]));

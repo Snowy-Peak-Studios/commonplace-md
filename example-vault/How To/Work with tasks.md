@@ -39,7 +39,7 @@ A task shows three boxes where its note has their blocks:
 - **Relations**: tasks this one is blocked by, comes after or before, or is related to, both ways. **Add relation** links another.
 - **Commits**: the commits made for it, from its `commits` property.
 
-Move a block to move its box, or take it out and the box goes. A new task gets all three.
+Move a block to move its box, or take it out and the box goes. New tasks put Subtasks and Relations above the description, and Commits below Comments.
 
 ## Task sections
 

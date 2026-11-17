@@ -375,7 +375,7 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 ````
 
 - The blocks are ` ```subtasks `, ` ```relations `, ` ```commits ` and ` ```sprint `. Move a block to move its box; take it out and the box goes.
-- A new task gets the three task boxes under its title, unless its template already places them. A blank task also gets the four writing sections. A new sprint gets `sprint`.
+- A blank task starts with Subtasks, Relations, Description, Acceptance Criteria, Comments, Commits and Work History in that order. A custom template can place its own boxes. A new sprint gets `sprint`.
 - Write the task's Markdown in `description`, `acceptance-criteria`, `comments` and `work-history` blocks. Criteria checkboxes save with the note. Work History starts folded at the bottom. A `comments` block works on any note. Write and post from the box, with an editable `@login` for the previous commenter when their login is known and differs from yours. Type `@` to pick anyone with an inbox. See [Work with tasks](example-vault/How%20To/Work%20with%20tasks.md#task-sections).
 - **Another task's box, on any page:** a `task:` line in a ` ```subtasks `, ` ```relations ` or ` ```commits ` block (the task's ID, name or `[[link]]`) shows that task's box there, naming it; away from the task's own page it only reads. The example vault's Task Board shows its epic's subtasks this way.
 - **A sprint's box, on any page:** a `sprint:` line in a ` ```sprint ` block shows that sprint's box there, naming it: `current` (the one going on today), `next`, or a sprint's name or `[[link]]`. When there's none it says so; **Start the next sprint** stays on the sprint's own page. The example vault's Home shows the current sprint this way.

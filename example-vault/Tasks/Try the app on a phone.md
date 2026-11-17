@@ -19,9 +19,6 @@ part_of: "[[Get set up]]"
 ```relations
 ```
 
-```commits
-```
-
 ```description
 As someone away from my desk, I want my notes on my phone, so that I can add to the [[Inbox]] anywhere.
 ```
@@ -36,6 +33,9 @@ As someone away from my desk, I want my notes on my phone, so that I can add to 
 - **your-github-login** · 2026-05-01 09:30 UTC
 
     Does the app open the inbox from the home screen shortcut?
+```
+
+```commits
 ```
 
 ```work-history

@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskSections, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -658,15 +658,16 @@ test("a new task gets its blocks under its title, unless it already has any", ()
   assert.equal(withBlocks("# A\r\nB\r\n", SPRINT_BLOCKS), "# A\n\n```sprint\n```\n\nB\n", "LF");
 });
 
-test("blank tasks get writing sections while a custom task template keeps its body", () => {
+test("blank tasks put commits below comments and keep custom templates' layouts", () => {
   const base = "---\nid: T-1\n---\n\n# A task\n";
-  const draft = withTaskSections(base);
+  const draft = withTaskLayout(base);
   assert.ok(draft.startsWith(base + "\n"));
   assert.deepEqual([...draft.matchAll(/^```([a-z-]+)$/gm)].map((m) => m[1]),
-    ["description", "acceptance-criteria", "comments", "work-history"]);
+    ["subtasks", "relations", "description", "acceptance-criteria", "comments", "commits", "work-history"]);
   const custom = base + "\n## Purpose\n\nCustom text.\n";
-  assert.equal(withTaskSections(custom), custom);
-  assert.equal(withTaskSections(draft), draft);
+  assert.equal(withTaskLayout(custom), withBlocks(custom, TASK_BLOCKS));
+  assert.equal(withTaskLayout(custom + "\n```commits\n```\n"), custom + "\n```commits\n```\n");
+  assert.equal(withTaskLayout(draft), draft);
 });
 
 test("a top tasks order: the four orders, a few other ways to say them, else none", () => {

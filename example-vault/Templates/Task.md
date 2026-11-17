@@ -16,9 +16,6 @@ priority: Medium
 ```relations
 ```
 
-```commits
-```
-
 ```description
 **As** someone who ..., **I want** ..., **so that** ...
 ```
@@ -28,6 +25,9 @@ priority: Medium
 ```
 
 ```comments
+```
+
+```commits
 ```
 
 ```work-history

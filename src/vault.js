@@ -233,13 +233,14 @@ export function withBlocks(text, names) {
   return `${src.slice(0, at)}${head ? "\n\n" : ""}${blocks}\n${rest ? `\n${rest}` : ""}`;
 }
 
-/** Blank tasks get the four writing sections. A template with its own body keeps it. */
-export function withTaskSections(text) {
+/** Blank tasks get the default layout. A custom template keeps its body and any boxes it placed. */
+export function withTaskLayout(text) {
   const src = toLf(text);
   const body = src.slice(splitFrontMatter(src)?.length ?? 0).trim();
-  if (body && !/^#[ \t]+[^\n]+$/.test(body)) return src;
-  const sections = Object.keys(NOTE_SECTIONS).map((name) => `\`\`\`${name}\n\`\`\``).join("\n\n");
-  return [src.trimEnd(), sections].filter(Boolean).join("\n\n") + "\n";
+  if (body && !/^#[ \t]+[^\n]+$/.test(body)) return withBlocks(src, TASK_BLOCKS);
+  const order = ["subtasks", "relations", "description", "acceptance-criteria", "comments", "commits", "work-history"];
+  const blocks = order.map((name) => `\`\`\`${name}\n\`\`\``).join("\n\n");
+  return [src.trimEnd(), blocks].filter(Boolean).join("\n\n") + "\n";
 }
 
 /** A note template with `{{title}}` and `{{date}}` (YYYY-MM-DD) filled in; any other `{{...}}` stays as written. */
