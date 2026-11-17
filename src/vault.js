@@ -517,7 +517,7 @@ export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
 const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 /** Statuses that aren't free to start: started, put off, blocked or over. */
-const NOT_FREE = /^(done|in progress|waiting|blocked|cancell?ed|won'?t do)$/i;
+const NOT_FREE = /^(done|in progress|testing|waiting|blocked|cancell?ed|won'?t do)$/i;
 
 /** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
 export function listProp(v) {

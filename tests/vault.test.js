@@ -147,10 +147,10 @@ test("suggested tasks: free ones in a Tasks folder, highest priority, then newes
   assert.ok(!isTaskPath("Tasks/Deeper/A.md") && !isTaskPath("MyTasks/A.md") && !isTaskPath("Tasks/a.csv"));
 });
 
-test("blocked tasks are never suggested, in any case, with or without sprints", async () => {
+test("blocked and testing tasks are never suggested, with or without sprints", async () => {
   const { suggestTasks, sprintSuggestions } = await import("../src/vault.js");
   const t = (path, status) => ({ path, props: { status, assignee: "", priority: "High", sprint: "[[Sprint 1]]" } });
-  const notes = [t("Tasks/Blocked.md", "Blocked"), t("Tasks/Shouting.md", " BLOCKED "), t("Tasks/Free.md", "To Do")];
+  const notes = [t("Tasks/Blocked.md", "Blocked"), t("Tasks/Shouting.md", " BLOCKED "), t("Tasks/Testing.md", " Testing "), t("Tasks/Free.md", "To Do")];
   assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/Free.md"]);
   assert.deepEqual(sprintSuggestions(notes, { now: "Sprints/Sprint 1.md", resolve: (x) => `Sprints/${x}.md` }).map((n) => n.path), ["Tasks/Free.md"]);
 });
