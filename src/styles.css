@@ -789,7 +789,12 @@ a.mention:hover { text-decoration: underline; }
 .note-add { display: flex; gap: 8px; margin-top: 10px; }
 .note-add .input { flex: 1; min-width: 0; }
 .comment-add { align-items: flex-end; }
-.comment-add textarea { font: inherit; padding: 8px 10px; resize: vertical; }
+.comment-add .comment-input { height: auto; padding: 0; }
+.comment-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.comment-input .cm-scroller { font-family: inherit; max-height: 12em; }
+.comment-input .cm-content { min-height: 3.1em; padding: 6px 0; }
+.comment-input .cm-line { padding: 0 10px; }
+.comment-input .cm-placeholder { color: var(--muted); }
 .preview .note-section ul:has(> li.posted-comment):not(:has(> li:not(.posted-comment))) { padding-inline-start: 0; }
 .preview .posted-comment {
   list-style: none;

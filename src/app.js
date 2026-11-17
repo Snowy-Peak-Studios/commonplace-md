@@ -14,7 +14,7 @@ import {
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskSections,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
-import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
+import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
 import { store, upgradeRepo } from "./store.js";
@@ -806,6 +806,7 @@ async function mayLeave(depthBefore) {
 
 function closeFile() {
   app.file?.editor?.destroy();
+  app.file?.commentEditors?.forEach(({ view }) => view.destroy());
   app.file = null;
 }
 
@@ -995,7 +996,7 @@ function renderPreview() {
   fillAttention(body, f);
   // New tasks and Comments get their inline forms where the note can be changed.
   fillNewTasks(body, f);
-  fillComments(body, f);
+  const commentFocus = fillComments(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = usable(f.repo) ? taskSetupOf(f.repo) : null;
   if (usable(f.repo) && !setup) {
@@ -1016,6 +1017,7 @@ function renderPreview() {
     sprint: isSprint && (() => sprintBox(f, setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  commentFocus?.focus();
   fitWide(f);
 }
 
@@ -1838,10 +1840,10 @@ function applyPreviewEdit(f, next) {
   return true;
 }
 
-function noteAddForm(field, className, label, onAdd) {
+function noteAddForm(field, className, label, onAdd, read = () => field.value) {
   return h("form", { class: `note-add ${className}`, onsubmit: (e) => {
     e.preventDefault();
-    const text = field.value.trim();
+    const text = read().trim();
     if (text) onAdd(text);
   } }, field, h("button", { class: "btn small", type: "submit" }, icon("plus"), label));
 }
@@ -1895,19 +1897,27 @@ function fillNewTasks(root, f) {
 // ---- comments: inline posting in a Markdown note ----
 
 function fillComments(root, f) {
-  if (!canWrite(f.repo)) return;
+  const previous = f.commentEditors ?? [];
+  const boxes = canWrite(f.repo)
+    ? root.querySelectorAll(':scope > section.note-section[data-section="comments"][data-start][data-close]') : [];
+  previous.slice(boxes.length).forEach(({ view }) => view.destroy());
+  f.commentEditors = [];
+  if (!boxes.length) return null;
+
   const source = f.text;
   const lines = source.split("\n");
   const login = isLocal(f.repo) ? "" : ownerTokens()[f.repo.owner.toLowerCase()]?.login || store.get("user")?.login || "";
-  const drafts = f.dom.preview.querySelectorAll(".comment-add textarea");
-  const boxes = root.querySelectorAll(':scope > section.note-section[data-section="comments"][data-start][data-close]');
+  let focused = null;
   boxes.forEach((box, index) => {
     const start = Number(box.dataset.start), close = Number(box.dataset.close);
     const suggested = commentReply(lines.slice(start + 1, close).join("\n"), login);
-    const input = h("textarea", { class: "input", rows: 2, placeholder: "Write a comment…", "aria-label": "Write a comment", "data-suggested": suggested });
-    const old = drafts[index];
-    input.value = old && old.value !== old.dataset.suggested ? old.value : suggested;
-    box.append(noteAddForm(input, "comment-add", "Post", (message) => {
+    const old = previous[index];
+    const field = old?.field ?? h("div", { class: "input comment-input" });
+    const view = old?.view ?? createCommentEditor(field, suggested, () => loadPeople(f.repo));
+    if (old && view.state.doc.toString() === old.suggested) setEditorText(view, suggested);
+    if (view.hasFocus) focused = view;
+    f.commentEditors.push({ field, view, suggested });
+    box.append(noteAddForm(field, "comment-add", "Post", (message) => {
       if (app.file !== f || !canWrite(f.repo) || message === suggested.trim()) return;
       if (app.saving) return toast("Wait for the note to finish saving.", "info");
       if (f.text !== source) {
@@ -1917,12 +1927,13 @@ function fillComments(root, f) {
       const next = addComment(source, start, close, message, login);
       if (next === source) return toast("Close the Comments block in Edit before posting.", "info");
       const wasDirty = f.dirty;
-      input.value = suggested;
+      setEditorText(view, suggested);
       if (!applyPreviewEdit(f, next)) return;
       if (wasDirty) toast("Comment added to your draft. Save the note to post it.", "info");
       else save();
-    }));
+    }, () => view.state.doc.toString()));
   });
+  return focused;
 }
 
 // ---- needs your attention: questions and mentions ----

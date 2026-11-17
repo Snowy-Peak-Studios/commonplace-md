@@ -611,11 +611,26 @@ const sections = await page.$$eval(".note-body > .note-section", (blocks) => blo
 check(JSON.stringify(sections) === JSON.stringify([
   ["description", null], ["acceptance-criteria", null], ["comments", null], ["work-history", false],
 ]), "the task has four sections and History is last and folded: " + JSON.stringify(sections));
-const commentField = '.comment-add textarea';
+const commentEditor = ".comment-add .cm-editor";
+const commentField = ".comment-add .cm-content";
 await page.waitForSelector(commentField);
-check(await page.$eval(commentField, (field) => field.value === "@your-github-login ") &&
+const commentText = () => page.$eval(commentEditor, async (node) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  return EditorView.findFromDOM(node).state.doc.toString();
+});
+const replyDraft = await commentText();
+check(replyDraft === "@your-github-login " &&
   await page.$eval(".comment-add button", (button) => button.textContent.trim() === "Post"),
   "the task's Comments form suggests the previous author and can post a reply");
+await page.focus(commentField);
+await page.keyboard.press("End");
+await page.keyboard.type("Ask @");
+const commentOption = commentEditor + " .cm-tooltip-autocomplete li";
+await page.waitForSelector(commentOption, { timeout: 8000 });
+check(await page.$eval(commentOption, (option) => option.textContent.includes("@your-github-login")),
+  "typing @ in a comment offers people from the vault");
+await page.click(commentOption);
+check(await commentText() === replyDraft + "Ask @your-github-login", "choosing a person completes the mention in the comment");
 await page.click('.note-section[data-section="work-history"] > summary');
 check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History opens to show its entries");
 await page.click(criteriaSelector + ":not([checked])");
