@@ -261,6 +261,7 @@ Make a fine-grained token at [github.com/settings/personal-access-tokens/new](ht
 - **Resource owner:** you, or the organization that owns the notes repo.
 - **Repository access:** *Only select repositories*, and pick your notes repo(s).
 - **Repository permissions › Contents:** *Read and write* (or *Read-only* for a device that only reads).
+- **Assignee suggestions.** The picker includes people named in the vault's inboxes and repository collaborators GitHub lets you list. The [collaborators endpoint](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators) uses **Repository permissions › Metadata: Read** with fine-grained tokens. GitHub also requires write, maintain or admin access, and organization membership for organization-owned repositories. If the lookup is unavailable, enter an assignee or pick a known vault person. Selecting a GitHub account saves its @handle. Existing names still work. A typed email is stored as a label. The separate [organization members endpoint](https://docs.github.com/en/rest/orgs/members#list-organization-members) requires **Organization permissions › Members: Read** for a fine-grained token.
 
 For a repo owned by an organization, the organization may hold new tokens until an owner approves them (organization **Settings › Personal access tokens › Pending requests**). The token works once it's approved.
 

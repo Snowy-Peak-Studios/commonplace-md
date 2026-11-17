@@ -121,6 +121,17 @@ export class GitHub {
     return all;
   }
 
+  /** Repository collaborators visible to this owner's token, one page at a time. */
+  async collaborators(r) {
+    const all = [];
+    for (let page = 1; ; page++) {
+      const batch = await this.request("GET", "/repos/" + r.owner + "/" + r.repo
+        + "/collaborators?affiliation=all&per_page=100&page=" + page);
+      all.push(...batch);
+      if (batch.length < 100) return all;
+    }
+  }
+
   repo(r) {
     return this.request("GET", `/repos/${r.owner}/${r.repo}`);
   }

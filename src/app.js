@@ -11,7 +11,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -389,7 +389,7 @@ async function checkInboxDot(repo) {
     if (String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
       for (const b of await inboxAttention(repo, tree, inbox)) {
         if (b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
-          && (await loadQuestions(repo, b.owner)).some((t) => !t.answer)) waits = true;
+          && (await loadQuestions(repo, b.owner, b.login)).some((t) => !t.answer)) waits = true;
         if (!waits && b.show.includes("mentions") && b.login
           && sortMentions((await loadMentions(repo, b.login)).found, note.props[SEEN_MENTIONS]).open.length) waits = true;
         if (waits) break;
@@ -1650,7 +1650,10 @@ function taskForm(f, setup) {
       if (field.kind === "task") list = parentList(f, field, setup, notes, lists);
       else if (field.kind === "sprint") list = sprintList(f, field, setup, notes, lists);
       else if (field.kind === "link") list = listFor(field, notes.map(shownName));
-      else if (field.kind === "person") list = listFor(field, [login, cur]);
+      else if (field.key === "assignee") {
+        list = "tf-list-" + field.prop;
+        lists.push(assigneeList(f.repo, list));
+      } else if (field.kind === "person") list = listFor(field, [login, cur]);
       control = h("input", {
         class: "input", id, list,
         type: field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text",
@@ -1729,7 +1732,7 @@ async function setTaskField(f, field, input, control) {
   try {
     const id = String(noteProps(f.text).id ?? "").trim();
     const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), next, f.sha,
-      `${id ? id + ": " : ""}${field.prop} set to ${saidValue(value, "nothing")} from ${APP_NAME}`);
+      `${id ? id + ": " : ""}${field.key === "assignee" ? field.prop + " updated" : field.prop + " set to " + saidValue(value, "nothing")} from ${APP_NAME}`);
     wroteCommit(f.repo, res);
     baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
     treeChanged(f.repo, f.path, res.sha);
@@ -1782,9 +1785,11 @@ function loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays) {
           : sprintSuggestions(available, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
         const free = fromSprint ?? suggestTasks(available, { areas, count, blocked, order });
         const returned = new Set(free.filter((note) => note.backFromWaiting).map((note) => note.path));
+        const people = who ? await loadPeople(repo).catch(() => []) : [];
+        const whoLogin = people.find((person) => foldName(person.name) === foldName(who))?.login ?? "";
         const shown = {
-          mine: claimedTasks(notes, who), free,
-          waiting: waitingTasks(notes, { areas, owner: who, order }).filter((note) => !returned.has(note.path)), allAreas: taskAreas(notes),
+          mine: claimedTasks(notes, who, whoLogin), whoLogin, free,
+          waiting: waitingTasks(notes, { areas, owner: who, login: whoLogin, order }).filter((note) => !returned.has(note.path)), allAreas: taskAreas(notes),
           sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
           noSprintNow: !!fromSprint && only && !sprint.now, setup,
         };
@@ -1835,13 +1840,13 @@ function fillTopTasks(root, f) {
 
 /** One look-up per tree version and owner, so typing in the inbox doesn't redo it. */
 const questionLoads = new Map();
-function loadQuestions(repo, who) {
+function loadQuestions(repo, who, login) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${who}`;
+  const key = `${repo.id}:${tree.version}:${who}:${login}`;
   if (!questionLoads.has(key)) {
     for (const k of questionLoads.keys()) if (k.startsWith(`${repo.id}:`)) questionLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then(async (notes) => {
-      const tasks = questionTasks(notes, who);
+      const tasks = questionTasks(notes, who, login);
       // Only the tasks with a question are read whole, to see whether an answer is written on them yet.
       const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path)).catch(() => new Map());
       return tasks.map((t) => ({ ...t, answer: answers.get(t.path) ?? "" }));
@@ -1856,6 +1861,30 @@ function loadQuestions(repo, who) {
 
 /** The vault's people, from its inboxes' `github` and `owner`: one look-up per tree version. */
 const peopleLoads = new Map();
+const collaboratorLoads = new WeakMap();
+
+function loadCollaborators(repo) {
+  if (isLocal(repo) || !canWrite(repo) || !app.token) return Promise.resolve([]);
+  if (!collaboratorLoads.has(gh)) collaboratorLoads.set(gh, new Map());
+  const known = collaboratorLoads.get(gh);
+  const key = (repo.owner + "/" + repo.repo).toLowerCase();
+  if (!known.has(key)) known.set(key, gh.collaborators(repo).catch(() => []));
+  return known.get(key);
+}
+
+/** An assignee suggestion list that updates while the input remains usable. */
+function assigneeList(repo, id) {
+  const list = h("datalist", { id });
+  const login = store.get("user")?.login ?? "";
+  let people = [];
+  let collaborators = [];
+  const draw = () => fill(list, assigneeOptions(people, collaborators, login)
+    .map(({ value, label }) => h("option", { value, label: label || null })));
+  draw();
+  loadPeople(repo).then((known) => { people = known; draw(); }).catch(() => {});
+  loadCollaborators(repo).then((known) => { collaborators = known; draw(); });
+  return list;
+}
 function loadPeople(repo) {
   const tree = app.trees.get(repo.id);
   if (!tree) return Promise.resolve([]);
@@ -2094,7 +2123,7 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
       onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
     h("span", { class: "attention-text" }, m.text));
   Promise.all([
-    askQ && hasTasks ? loadQuestions(repo, owner) : [],
+    askQ && hasTasks ? loadQuestions(repo, owner, login) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
   ]).then(([tasks, { found, read }]) => {
     allFound = found;
@@ -2221,7 +2250,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, coun
     also: clearWaitingDate,
   });
   const WAIT_TITLE = `Put it on the waiting list for ${waitDays} ${waitDays === 1 ? "day" : "days"}`;
-  loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
+  loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays).then(({ mine, whoLogin, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
     allAreas = found;
     states = told;
     setup = s;
@@ -2267,7 +2296,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, coun
     const claimed = mine.map((n) => row(n, editable && !n.agent
       ? h("button", { class: "chip claimed unclaim", type: "button",
         "aria-label": `Claimed task. Unclaim ${shownName(n.path)}`,
-        onclick: (e) => unclaimSuggested(repo, n.path, who, e.currentTarget),
+        onclick: (e) => unclaimSuggested(repo, n.path, who, whoLogin, e.currentTarget),
       }, h("span", { class: "claim-state", "aria-hidden": "true" }, "Claimed"),
       h("span", { class: "claim-action", "aria-hidden": "true" }, "Unclaim"))
       : h("span", { class: `chip claimed${n.agent ? " working" : ""}`,
@@ -2329,13 +2358,13 @@ async function claimSuggested(repo, path, who, button, move = null, waitDays = 7
   if (!refreshInboxBox(repo)) button.disabled = false;
 }
 
-async function unclaimSuggested(repo, path, who, button) {
+async function unclaimSuggested(repo, path, who, login, button) {
   if (!await confirmDialog(`Unclaim ${shownName(path)}?`,
     "This clears its assignee and returns it to To Do.", "Unclaim")) return;
   return changeTask(repo, path, "status", "To Do", button, {
     said: `unclaimed by ${who}`,
     also: () => [["assignee", ""]],
-    allow: (props) => claimedTasks([{ path, props }], who).some((task) => !task.agent),
+    allow: (props) => claimedTasks([{ path, props }], who, login).some((task) => !task.agent),
   });
 }
 

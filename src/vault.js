@@ -577,17 +577,37 @@ export function splitAssignee(value) {
   return m && m[1] ? { name: m[1], agent: m[2].trim() } : { name: s, agent: null };
 }
 
+/** Compare a GitHub handle or an older assignee name, with or without its agent. */
+export function assigneeMatches(value, { name = "", login = "" }) {
+  const assignee = splitAssignee(value).name;
+  const github = assignee.startsWith("@") ? assignee.slice(1).toLowerCase() : "";
+  if (github) return github === String(login).trim().replace(/^@/, "").toLowerCase();
+  const named = foldName(assignee);
+  return !!named && named === foldName(name);
+}
+
+/** Suggestions keep the GitHub handle as the value and use a vault name as its label when available. */
+export function assigneeOptions(people, collaborators, login = "") {
+  const options = new Map();
+  for (const person of [...people, ...collaborators, { login }]) {
+    const handle = String(person.login ?? "").trim();
+    if (handle && !options.has(handle.toLowerCase())) {
+      options.set(handle.toLowerCase(), { value: "@" + handle, label: person.name ?? "" });
+    }
+  }
+  return [...options.values()].sort((a, b) => (a.label || a.value).localeCompare(b.label || b.value));
+}
+
 /**
  * The tasks claimed by `owner` and not finished, from [{ path, props }], each with `agent` (null when the
  * person claimed it for themself, which means it waits for their agent). Those waiting come first, then by
  * priority and newest, like the free ones.
  */
-export function claimedTasks(notes, owner) {
-  const me = foldName(owner);
-  if (!me) return [];
+export function claimedTasks(notes, owner, login = "") {
+  if (!foldName(owner) && !login) return [];
   return notes
     .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
-      && foldName(splitAssignee(n.props.assignee).name) === me)
+      && assigneeMatches(n.props.assignee, { name: owner, login }))
     .map((n) => ({ ...n, agent: splitAssignee(n.props.assignee).agent }))
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
 }
@@ -616,10 +636,9 @@ export const questionOf = (props) => (Array.isArray(props?.question) ? props.que
  * (`assignee`, with or without the agent), names matched like `claimedTasks`; everyone's when `owner` is
  * empty. Finished tasks don't count. Newest first.
  */
-export function questionTasks(notes, owner = "") {
-  const me = foldName(owner);
-  const people = (v) => (Array.isArray(v) ? v : [v]).map((x) => foldName(splitAssignee(x).name));
-  const theirs = (n) => !me || [n.props.requested_by, n.props.reviewer, n.props.assignee].some((v) => people(v).includes(me));
+export function questionTasks(notes, owner = "", login = "") {
+  const theirs = (n) => (!foldName(owner) && !login) || [n.props.requested_by, n.props.reviewer, n.props.assignee]
+    .some((v) => (Array.isArray(v) ? v : [v]).some((value) => assigneeMatches(value, { name: owner, login })));
   return notes
     .filter((n) => isTaskPath(n.path) && questionOf(n.props) && !FINISHED.test(String(n.props.status ?? "").trim()) && theirs(n))
     .map((n) => ({ ...n, question: questionOf(n.props) }))
@@ -665,13 +684,12 @@ export const PRIORITIES = ["High", "Medium", "Low"];
 /** An epic isn't worked on itself (its parts are), so it's never suggested or put on the waiting list. */
 const isEpic = (n) => String(n.props.type ?? "").trim().toLowerCase() === "epic";
 
-export function waitingTasks(notes, { areas = [], owner = "", order = "priority-newest" } = {}) {
+export function waitingTasks(notes, { areas = [], owner = "", login = "", order = "priority-newest" } = {}) {
   const want = listProp(areas);
-  const me = foldName(owner);
   return notes
     .filter((n) => isTaskPath(n.path) && isWaiting(n) && !isEpic(n) && (!want.length
       || want.includes(String(n.props.area ?? "").trim().toLowerCase())
-      || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
+      || assigneeMatches(n.props.assignee, { name: owner, login })))
     .sort(byOrder(order));
 }
 
@@ -1292,7 +1310,7 @@ export function boardColumns(notes, options, setup, { sprint = null, resolve } =
     .map((key) => [key, fieldProp(setup, key)]));
   const areas = options.areas.map(foldName);
   const types = options.types.map(foldName);
-  const who = foldName(options.assignee);
+  const who = options.assignee;
   const term = (value) => String(value ?? "").trim();
   for (const { path, props } of notes) {
     const status = term(props[keys.status]);
@@ -1303,7 +1321,7 @@ export function boardColumns(notes, options, setup, { sprint = null, resolve } =
     const area = (Array.isArray(rawArea) ? rawArea : term(rawArea).split(",")).map(linkName).filter(Boolean);
     const assignee = term(props[keys.assignee]);
     if (areas.length && !area.some((value) => areas.includes(foldName(value)))) continue;
-    if (who && foldName(assignee) !== who && foldName(splitAssignee(assignee).name) !== who) continue;
+    if (who && !assigneeMatches(assignee, { name: who, login: who })) continue;
     if (options.sprint && (!sprint || resolve?.(linkTarget(props[keys.sprint]), path) !== sprint.path)) continue;
     column.cards.push({ path, status, id: term(props.id), priority: term(props[keys.priority]), assignee, area });
   }

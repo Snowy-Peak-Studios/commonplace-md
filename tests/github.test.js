@@ -52,3 +52,18 @@ test("the new-token link fills in GitHub's form for one owner", () => {
   assert.equal(ro.has("target_name"), false, "no owner: GitHub picks the person's own account");
   assert.equal(ro.get("name").length, 40, "GitHub takes at most 40 characters");
 });
+
+
+test("repository collaborators are fetched in pages from the repository owner", async () => {
+  const gh = new GitHub("test");
+  const paths = [];
+  gh.request = async (method, path) => {
+    assert.equal(method, "GET");
+    paths.push(path);
+    return paths.length === 1 ? Array.from({ length: 100 }, (_, i) => ({ login: "person-" + i })) : [{ login: "last" }];
+  };
+  const collaborators = await gh.collaborators({ owner: "owner", repo: "repo" });
+  assert.equal(collaborators.length, 101);
+  assert.equal(collaborators.at(-1).login, "last");
+  assert.deepEqual(paths, [1, 2].map((page) => "/repos/owner/repo/collaborators?affiliation=all&per_page=100&page=" + page));
+});

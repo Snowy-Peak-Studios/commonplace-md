@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -943,4 +943,16 @@ test("board uses configured properties and filters cards without including epics
   assert.deepEqual(columns[0], { status: "Done", cards: [] });
   assert.deepEqual(columns[1].cards, [{ path: "Tasks/Match.md", id: "T-1", status: "ready", priority: "High",
     area: ["UI", "Core"], assignee: "Zoë (Codex)" }]);
+});
+
+
+test("assignee suggestions merge vault users and GitHub collaborators without duplicates", () => {
+  assert.deepEqual(assigneeOptions([{ name: "Zoë", login: "zoe" }], [{ login: "Zoe" }, { login: "pat" }], "pat"), [
+    { label: "", value: "@pat" }, { label: "Zoë", value: "@zoe" },
+  ]);
+  assert.deepEqual(assigneeOptions([{ name: "Zoë", login: "zoe" }], []), [{ label: "Zoë", value: "@zoe" }]);
+  assert.ok(assigneeMatches("Zoe (Codex)", { name: "Zoë", login: "zoe" }));
+  assert.ok(assigneeMatches("@ZOE", { name: "Different name", login: "zoe" }));
+  assert.equal(assigneeMatches("zoe@example.com", { name: "Zoë", login: "zoe" }), false);
+  assert.match(setProps("---\nassignee: Old name\n---\n", [["assignee", "@zoe"]]), /assignee: "@zoe"/);
 });

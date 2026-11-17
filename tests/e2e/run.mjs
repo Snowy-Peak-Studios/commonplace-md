@@ -38,6 +38,7 @@ const puts = [];
 const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
 let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
+let denyCollaborators = false;
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
 let fakeLogin = null; // answer "who is signed in?" with this login, to be the example inboxes' person
 
@@ -101,6 +102,10 @@ page.on("request", async (req) => {
       headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });
   }
   if (fakeLogin && req.method() === "GET" && url === `${API}/user`) return req.respond(json(200, { login: fakeLogin, avatar_url: "" }));
+  if (req.method() === "GET" && url.startsWith(REPO_API + "/collaborators?")) {
+    return denyCollaborators ? req.respond(json(403, { message: "Collaborators are unavailable" }))
+      : req.respond(json(200, [{ login: "collaborator-test" }, { login: "your-github-login" }]));
+  }
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
@@ -1431,6 +1436,26 @@ check(await until(() => !!document.querySelector('.board-column[aria-label="Done
   "the status menu moves a board card to the chosen column");
 check(puts.length === boardPuts + 1 && puts.at(-1).text === boardTask.text.replace(/^status: In Progress$/m, "status: Done"),
   "the move makes one commit that changes only the status");
+
+// An assignee directory visible to the current writer, then unavailable on another visit.
+await page.goto(at(taskPath), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector('#tf-list-assignee option[value="@collaborator-test"]'), 15000),
+  "the assignee picker suggests repository collaborators");
+check(await page.$$eval('#tf-list-assignee option[value="@your-github-login"]',
+  (options) => options.length === 1 && options[0].label === "Your name"), "the vault name labels its GitHub account once");
+denyCollaborators = true;
+await page.reload({ waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector('#tf-list-assignee option[value="@your-github-login"]'), 15000)
+  && !(await page.$('#tf-list-assignee option[value="@collaborator-test"]')), "denied lookup leaves vault people available");
+const beforeEmailAssignee = puts.length;
+await page.$eval("#tf-assignee", (input) => {
+  input.value = "pat@example.com";
+  input.dispatchEvent(new Event("change"));
+});
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Assignee: pat@example.com"), 10000)
+  && puts.length === beforeEmailAssignee + 1 && /assignee: "pat@example.com"/.test(puts.at(-1).text),
+  "a typed email stays an assignee label when the lookup is denied");
+denyCollaborators = false;
 
 // 10c. Read only: GitHub says this person can read the repo but not change it.
 readOnlyRepo = true;
