@@ -7,16 +7,13 @@ The same list is a task board in [`roadmap/`](roadmap/Roadmap.md): one note per 
 ## 🔨 Working on now
 
 - **Agile tasks**: types, subtasks, sprints, estimates and your own fields, set up per project.
-- **Modules**: turn the parts of the app you need on and off, down to a bare wiki.
-
-## ⏭️ Next
-
 - **Images in notes**: paste, drop or pick an image, and it's saved in your repo and linked into the note.
+- **Modules**: turn the parts of the app you need on and off, down to a bare wiki.
+- **Share notes without a GitHub account**: let someone read a page or a whole vault without signing in.
 
 ## 🔭 Exploring
 
 - **A more agile task board**: updating the task board to be more agile-based.
-- **Share notes without a GitHub account**: let someone read a page or a whole vault without signing in.
 
 ## ✅ Recently done
 
