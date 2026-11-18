@@ -140,6 +140,8 @@ login: your-github-login
 
 A `new-tasks` block holds one idea per line. Set `owner` to the person whose agent should turn the items into task notes.
 
+Use the multiline box to write or paste several ideas, one per line (bullets are optional), then press **Add**. **Enter** adds a line. **Edit list** puts all items in the same box so you can revise or delete several at once; each item also has Edit and Remove. Choose **Keep changes**, then **Save** the note. The block keeps its `owner:` line, and agents still read one idea per Markdown list item.
+
 ~~~markdown
 ```new-tasks
 owner: Your name

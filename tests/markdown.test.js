@@ -198,7 +198,7 @@ test("a file name ending in .md stays text, while web addresses still become lin
 
 test("a new-tasks block is a box with its items rendered, its owner, and its closing fence's line", () => {
   const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
-  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
+  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-start="2" data-close="6">/);
   assert.match(html, /<small class="muted">For Ana Lee · 2 items · Your agent turns them into tasks<\/small>/);
   assert.match(html, /<ul class="newtasks-list"><li data-line="4" data-item="Read \[\[Home\]\]"><span class="newtasks-text">Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/span><\/li>/);
   assert.match(html, /<li data-line="5" data-item="\*\*Bold\*\* one"><span class="newtasks-text"><strong>Bold<\/strong> one<\/span><\/li><\/ul><\/section>/);

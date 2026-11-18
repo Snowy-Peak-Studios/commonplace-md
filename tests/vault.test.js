@@ -1001,3 +1001,18 @@ test("a task waiting for review is not a personal work claim", async () => {
   assert.deepEqual(claimedTasks([task], "Ana Lee"), []);
   assert.equal(claimedTasks([{ ...task, props: { ...task.props, status: "In Progress" } }], "Ana Lee").length, 1);
 });
+
+test("multiline captures edit one closed block, preserving owner, neighbours and literal option text", async () => {
+  const { newTaskItems, replaceNewTasks } = await import("../src/vault.js");
+  const note = "Before\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n";
+  const expected = "owner: Ann\n- One\n* [ ] Two";
+  const items = newTaskItems("- Changed\r\n\r\n2. Added\n- owner: A thought\n```");
+  assert.deepEqual(items, ["Changed", "Added", "owner: A thought", "```"]);
+  const result = replaceNewTasks(note, 1, 5, expected, items);
+  assert.equal(result, "Before\n```new-tasks\nowner: Ann\n- Changed\n- Added\n- owner: A thought\n- ```\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n");
+  assert.equal(replaceNewTasks(note, 1, 5, expected, []), "Before\n```new-tasks\nowner: Ann\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n", "deleting every item keeps the block and its owner");
+  assert.equal(replaceNewTasks(note.replaceAll("\n", "\r\n"), 1, 5, expected, ["New"]), note.replace("- One\n* [ ] Two", "- New"));
+  assert.equal(replaceNewTasks(note, 1, 5, "stale content", ["New"]), null, "stale captures cannot overwrite changes");
+  assert.equal(replaceNewTasks(note, 1, 4, expected, ["New"]), null, "an unclosed block cannot consume following content");
+  assert.equal(replaceNewTasks(note, 1, 10, expected, ["New"]), null, "cannot replace another block");
+});

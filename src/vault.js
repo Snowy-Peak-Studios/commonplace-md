@@ -366,6 +366,24 @@ export function addNewTask(text, close, item) {
   return lines.join("\n");
 }
 
+/** Each non-empty line of a capture draft becomes one Markdown item. Owner-looking text stays an item. */
+export function newTaskItems(text) {
+  return toLf(String(text ?? "")).split("\n").map((line) => line.replace(ITEM_MARK, "").trim()).filter(Boolean);
+}
+
+/** Replace one unchanged, closed capture block; preserve its owner lines and everything outside it. */
+export function replaceNewTasks(text, start, close, expected, items) {
+  const lines = toLf(text).split("\n");
+  const open = /^ {0,3}(\x60{3,}|~{3,})new-tasks\s*$/i.exec(lines[start] ?? "");
+  const end = /^ {0,3}(\x60{3,}|~{3,})\s*$/.exec(lines[close] ?? "");
+  if (!open || !end || close <= start || end[1][0] !== open[1][0] || end[1].length < open[1].length
+    || lines.slice(start + 1, close).join("\n") !== expected) return null;
+  const owners = lines.slice(start + 1, close).filter((line) => /^\s*owner\s*:/i.test(line));
+  const body = [...owners, ...items.flatMap(newTaskItems).map((item) => "- " + item)];
+  lines.splice(start + 1, close - start - 1, ...body);
+  return lines.join("\n");
+}
+
 const COMMENT_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const UNKNOWN_COMMENTER = "Unknown user";
 const COMMENT_HEADER = /^\*\*([\w-]+|Unknown user)\*\* · (\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC)$/;

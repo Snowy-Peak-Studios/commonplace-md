@@ -1350,7 +1350,7 @@ check(currentShown.tab === "Current sprint" && currentShown.count === currentVie
 
 // 10a. The inbox's ```new-tasks block: a box with its items; Add puts one in the block, and Save would commit it.
 await page.goto(at("Notes/Inbox.md"), { waitUntil: "networkidle0" });
-await page.waitForSelector(".note-body section.newtasks .newtasks-add input", { timeout: 15000 }).catch(() => {});
+await page.waitForSelector(".note-body section.newtasks .newtasks-add textarea", { timeout: 15000 }).catch(() => {});
 const newTasks = await page.evaluate(() => {
   const box = document.querySelector(".note-body section.newtasks");
   return {
@@ -1362,13 +1362,13 @@ const newTasks = await page.evaluate(() => {
 });
 check(!newTasks.code && newTasks.head.startsWith("For Your name · 2 items") && newTasks.items.includes("Try the app on a second device")
   && newTasks.link === "Data/Reading list.csv", "the inbox's ```new-tasks block is a box with its items, links working: " + JSON.stringify(newTasks));
-await page.type(".note-body section.newtasks .newtasks-add input", "An idea from the browser check");
-await page.keyboard.press("Enter");
+await page.type(".note-body section.newtasks .newtasks-add textarea", "An idea from the browser check");
+await page.click(".newtasks-add button[type=submit]");
 await page.waitForFunction(() => [...document.querySelectorAll(".note-body section.newtasks .newtasks-list li")].some((li) => li.textContent === "An idea from the browser check"), { timeout: 5000 }).catch(() => {});
 const added = await page.evaluate(() => ({
   items: document.querySelectorAll(".note-body section.newtasks .newtasks-list li").length,
   save: !document.querySelector("#save-btn")?.disabled,
-  focus: document.activeElement?.matches(".newtasks-add input") ?? false,
+  focus: document.activeElement?.matches(".newtasks-add textarea") ?? false,
 }));
 check(added.items === 3 && added.save && added.focus, "Add puts the item in the block, the note can be saved, and the field keeps the focus: " + JSON.stringify(added));
 await page.evaluate(() => document.querySelector(".note-body section.newtasks")?.scrollIntoView({ block: "center" }));

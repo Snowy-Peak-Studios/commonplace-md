@@ -217,7 +217,7 @@ export function createMarkdown() {
       const at = (i) => (token.map ? ` data-line="${offset + token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
       const list = items.length ? items.map((item, i) => `<li${at(i)}><span class="newtasks-text">${md.renderInline(item, env)}</span></li>`).join("")
         : '<li class="muted">Nothing yet.</li>';
-      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
+      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-start="${token.map ? offset + token.map[0] : -1}" data-close="${close}">`
         + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
         + `<ul class="newtasks-list">${list}</ul></section>\n`;
     }

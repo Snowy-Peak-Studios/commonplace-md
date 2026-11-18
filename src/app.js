@@ -10,7 +10,7 @@ import {
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
+  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
@@ -2036,49 +2036,74 @@ function noteAddForm(field, className, label, onAdd, read = () => field.value) {
 
 // ---- new tasks: a ```new-tasks block's box ----
 
-/**
- * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field, and each
- * item an Edit and a Remove button. A change goes into the block like a ticked checkbox changes its line (the
- * note changes, Save commits it). After Add the field keeps the focus, for the next one.
- */
+/** A multiline composer adds several ideas or edits one item/the whole list without changing its owner. */
 function fillNewTasks(root, f) {
   if (!canWrite(f.repo)) return;
   const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
-  const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n];
-  const apply = (next) => applyPreviewEdit(f, next);
+  const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"))[n];
+  f.newTaskDrafts ||= new Map();
   boxes.forEach((el, n) => {
-    const close = Number(el.dataset.close);
-    if (!(close >= 0)) return;
-    for (const li of el.querySelectorAll(".newtasks-list li[data-line]")) {
-      const line = Number(li.dataset.line);
-      const was = li.dataset.item;
-      const text = li.querySelector(".newtasks-text");
-      const edit = () => {
-        const input = h("input", { class: "input", value: was, "aria-label": "Change this task", autocomplete: "off", enterkeyhint: "done",
-          onkeydown: (e) => { if (e.key === "Escape") { e.preventDefault(); form.replaceWith(text, tools); } } });
-        const form = h("form", { class: "newtasks-edit", onsubmit: (e) => {
-          e.preventDefault();
-          if (!apply(editNewTask(f.text, line, was, input.value))) form.replaceWith(text, tools);
-        } }, input,
-        h("button", { class: "btn small", type: "submit", title: "Keep the change (empty takes it out)" }, icon("check"), "Done"),
-        h("button", { class: "btn small ghost", type: "button", onclick: () => form.replaceWith(text, tools) }, "Cancel"));
-        tools.remove();
-        text.replaceWith(form);
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
-      };
-      const tools = h("span", { class: "newtasks-tools" },
-        h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: edit }, icon("edit")),
-        h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out",
-          onclick: () => apply(editNewTask(f.text, line, was, "")) }, icon("x")));
-      li.append(tools);
+    const start = Number(el.dataset.start), close = Number(el.dataset.close);
+    if (!(start >= 0 && close > start)) return;
+    const source = f.text.split("\n").slice(start + 1, close).join("\n");
+    const draft = f.newTaskDrafts.get(n) ?? { text: "", mode: "add", source };
+    f.newTaskDrafts.set(n, draft);
+    if (draft.mode === "add") draft.source = source;
+    const focus = () => boxAt(n)?.querySelector(".newtasks-add textarea")?.focus();
+    const begin = (mode, index = -1) => {
+      if (draft.text.trim()) return toast("Add or clear your current draft before editing another item.", "info");
+      Object.assign(draft, { mode, source, index, text: mode === "list"
+        ? newTasksBlock(source).items.map((item) => "- " + item).join("\n") : newTasksBlock(source).items[index] });
+      renderPreview();
+      focus();
+    };
+    for (const [index, li] of [...el.querySelectorAll(".newtasks-list li[data-line]")].entries()) {
+      const line = Number(li.dataset.line), was = li.dataset.item;
+      li.append(h("span", { class: "newtasks-tools" },
+        h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: () => begin("item", index) }, icon("edit")),
+        h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out", onclick: () => {
+          if (app.saving) return toast("Wait for the note to finish saving.", "info");
+          applyPreviewEdit(f, editNewTask(f.text, line, was, ""));
+        } }, icon("x"))));
     }
-    const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
-    el.append(noteAddForm(input, "newtasks-add", "Add", (said) => {
-      if (apply(addNewTask(f.text, close, said))) boxAt(n)?.querySelector(".newtasks-add input")?.focus();
-    }));
+    const input = h("textarea", { class: "input", rows: 4, placeholder: "Write ideas here, one per line. Bullets are optional.",
+      "aria-label": draft.mode === "add" ? "New tasks" : draft.mode === "list" ? "Edit new tasks" : "Change this task",
+      oninput: () => { draft.text = input.value; },
+    }, draft.text);
+    const reset = () => {
+      f.newTaskDrafts.delete(n);
+      renderPreview();
+      focus();
+    };
+    const form = h("form", { class: "note-add newtasks-add", onsubmit: (e) => {
+      e.preventDefault();
+      if (app.file !== f || !canWrite(f.repo)) return;
+      if (app.saving) return toast("Wait for the note to finish saving.", "info");
+      const entered = newTaskItems(input.value);
+      if (draft.mode === "add" && !entered.length) return;
+      const current = f.text.split("\n").slice(start + 1, close).join("\n");
+      if (current !== draft.source) return toast("The list changed. Your text is kept; reopen the list before applying it.", "error");
+      const items = newTasksBlock(current).items;
+      if (draft.mode === "add") items.push(...entered);
+      else if (draft.mode === "list") items.splice(0, items.length, ...entered);
+      else items.splice(draft.index, 1, ...entered);
+      const next = replaceNewTasks(f.text, start, close, current, items);
+      if (next == null) {
+        return toast("Close the New tasks block in Edit before changing its list.", "error");
+      }
+      f.newTaskDrafts.delete(n);
+      if (!applyPreviewEdit(f, next)) renderPreview();
+      focus();
+    } }, input, h("p", { class: "newtasks-hint" }, "One idea per line. Add or keep changes, then Save the note."),
+    h("div", { class: "newtasks-actions" },
+      h("button", { class: "btn small", type: "submit" }, icon(draft.mode === "add" ? "plus" : "check"), draft.mode === "add" ? "Add" : "Keep changes"),
+      draft.mode === "add" ? h("button", { class: "btn small ghost", type: "button", onclick: () => begin("list") }, "Edit list") : null,
+      h("button", { class: "btn small ghost", type: "button", onclick: reset }, draft.mode === "add" ? "Clear" : "Cancel")));
+    if (draft.mode === "list") el.querySelector(".newtasks-list").hidden = true;
+    el.append(form);
   });
 }
+
 
 // ---- comments: inline posting in a Markdown note ----
 

@@ -68,7 +68,7 @@ No owner identity is inferred from the page's `owner` property. A missing or unr
 
 ## new-tasks
 
-Captures ideas on any page. In a writable note, **Add** appends an item; existing items can be edited or removed. Your agent turns them into task notes according to your vault's rules. The block itself does not create or assign task notes.
+Captures ideas on any page. Use the multiline box to write or paste several ideas, one per line (bullets are optional), then press **Add**. **Enter** adds a line. **Edit list** puts all items in the same box so you can revise or delete several at once; each item also has Edit and Remove. Choose **Keep changes**, then **Save** the note. The block keeps its `owner:` line, and agents still read one idea per Markdown list item. Your agent turns them into task notes according to your vault's rules. The block itself does not create or assign task notes.
 
 ```new-tasks
 owner: Your name

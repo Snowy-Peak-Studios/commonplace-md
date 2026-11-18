@@ -17,6 +17,8 @@ The inbox is where you drop things first and sort them later. The **Inbox** butt
 
 ## New tasks, on any page
 
+Use the multiline box to write or paste several ideas, one per line (bullets are optional), then press **Add**. **Enter** adds a line. **Edit list** puts all items in the same box so you can revise or delete several at once; each item also has Edit and Remove. Choose **Keep changes**, then **Save** the note. The block keeps its `owner:` line, and agents still read one idea per Markdown list item.
+
 A ` ```new-tasks ` block holds ideas that should become tasks, one per line. Its first line says whose they are:
 
 ```text
