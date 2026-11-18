@@ -125,7 +125,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 ## What it does
 
-- Your notes are plain Markdown files in your own GitHub repo, and every save is a commit.
+- Your notes are plain Markdown files in your own GitHub repo or locally on your PC.
 - Read and edit them on a computer or a phone, and install it as an app.
 - **Export as PDF:** open a note, then **More (⋯) › Export as PDF**. Choose **Save as PDF** in the browser's print dialog (on phones, use the available Print/share option). It prints a light copy with folded sections open and app controls hidden; cancelling keeps your note and drafts as they were.
 - Wikilinks, embeds, callouts, diagrams, checklists, and tables of your notes from `.base` files.
