@@ -1,5 +1,7 @@
 # Markdown and blocks
 
+For every block's settings, defaults and copyable examples, see the [block reference](blocks.md).
+
 [Open the complete guide with examples](../example-vault/How%20To/Markdown%20and%20blocks.md).
 
 - [Markdown basics](../example-vault/How%20To/Markdown%20and%20blocks.md#markdown-basics) covers headings, lists, links, tables, callouts, code and properties.
