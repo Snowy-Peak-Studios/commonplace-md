@@ -19,6 +19,7 @@ import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
 import { store, upgradeRepo, upgradeInboxOverview } from "./store.js";
 import { icon, fillIcons } from "./icons.js";
+import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-time.js";
 
 // ================================================================
 // Helpers
@@ -1089,6 +1090,7 @@ function renderPreview() {
   fillBases(body, f.repo, f.path);
   const previousBoards = [...f.dom.preview.querySelectorAll(".board-columns")].map((board) => board.scrollLeft);
   fillBoards(body, f);
+  fillAiTime(body, f);
   if (previousBoards.some(Boolean)) {
     requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
       board.scrollLeft = previousBoards[i] ?? 0;
@@ -1121,9 +1123,53 @@ function renderPreview() {
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && (() => sprintBox(f, setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
-  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
+  fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
   commentFocus?.focus();
   fitWide(f);
+}
+
+// AI history stays in this vault and shares the existing task-property cache.
+function aiEstimateField(f, setup) {
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const samples = aiTimeSamples(entry.notes, setup);
+  // Vaults without AI records or an explicitly configured work_time field need no AI UI.
+  if (!samples.length && !setup.fields.some((field) => field.prop === "work_time")) return null;
+  const estimate = aiTimeEstimate(samples, noteProps(f.text), setup, f.path);
+  if (!estimate) return null;
+  return h("div", { class: "ai-time-estimate", "aria-label": "AI time estimate" },
+    h("strong", {}, "AI time estimate: "), estimate.reason || `${aiTimeLabel(estimate.mean)} average`,
+    estimate.count ? h("small", { class: "muted" }, ` · ${estimate.count} completed task${estimate.count === 1 ? "" : "s"} · observed ${aiTimeLabel(estimate.min)}–${aiTimeLabel(estimate.max)}${estimate.count === 1 ? " · provisional: one sample" : ""}`) : null,
+    h("small", { class: "muted ai-time-note" }, "Recorded AI work only, never human time. A guide, not a promised finish time."));
+}
+
+function fillAiTime(root, f) {
+  const blocks = root.querySelectorAll(".ai-time-block");
+  const setup = taskSetupOf(f.repo);
+  if (!blocks.length || !setup) return;
+  const entry = taskNotes(f.repo, setup);
+  for (const el of blocks) {
+    // Embedded pages retain their fence, as other app blocks do.
+    if (el.parentElement.closest(".embed-page")) continue;
+    if (!entry.notes) { fill(el, h("p", { class: "muted", role: "status" }, "Loading AI work history…")); continue; }
+    let options;
+    try { options = yamlLoad(el.querySelector("code").textContent) || {}; }
+    catch { fill(el, h("p", { class: "muted" }, "Check this ai-work-time block: use group: area-type, area or type.")); continue; }
+    const group = options.group || "area-type";
+    if (!["area-type", "area", "type"].includes(group)) { fill(el, h("p", { class: "muted" }, "Use group: area-type, area or type.")); continue; }
+    const groups = aiTimeGroups(aiTimeSamples(entry.notes, setup), group);
+    const largest = groups[0]?.mean || 1;
+    el.replaceWith(h("section", { class: "ai-time-chart", "aria-label": "AI work history" },
+      h("h3", {}, "AI work history"),
+      h("p", { class: "muted" }, "Average recorded AI minutes by " + (group === "area-type" ? "area and type" : group) + ". Completed tasks only; never a measure of a person."),
+      groups.length ? h("ul", { class: "ai-time-groups" }, groups.map((g) => h("li", {},
+        h("strong", {}, g.label), h("span", {}, `${aiTimeLabel(g.mean)} average · ${g.count} task${g.count === 1 ? "" : "s"}`),
+        h("div", { class: "ai-time-track", "aria-hidden": "true" }, h("span", { style: `width: ${g.mean / largest * 100}%` })),
+        h("small", { class: "muted" }, `Observed ${aiTimeLabel(g.min)}–${aiTimeLabel(g.max)}${g.count === 1 ? " · one sample" : ""}`))))
+        : h("p", { class: "muted" }, "No completed AI tasks with valid work_time minutes and these grouping fields yet."),
+      h("small", { class: "muted" }, "work_time is AI-only whole minutes. Missing or invalid values, cancelled tasks and epics are excluded. History does not predict a guaranteed finish time.")));
+  }
 }
 
 /** How wide a table or base view may grow on a big screen. */

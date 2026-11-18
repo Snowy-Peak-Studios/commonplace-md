@@ -227,3 +227,11 @@ test("overview fences remain escaped inert placeholders before explicit host app
   assert.match(render("```inbox-overview\ncontext: <script>\n```"), /class="inbox-overview-block"><pre><code>context: &lt;script&gt;/);
   assert.doesNotMatch(render("````markdown\n```inbox-overview\nsources: []\n```\n````"), /class="inbox-overview-block"/);
 });
+
+test("AI history charts require an explicit fence and preserve escaped source options", () => {
+  assert.doesNotMatch(render("AI work history"), /ai-time-block/);
+  assert.match(render("```ai-work-time\ngroup: area-type\n```"), /class="ai-time-block"/);
+  const html = render("```ai-work-time\ngroup: <script>\n```");
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+});

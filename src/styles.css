@@ -1409,3 +1409,12 @@ select.input { padding-right: 8px; }
 
 .overview-binding-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .overview-binding-result { overflow-wrap: anywhere; }
+
+/* Derived AI history is read-only, beside task fields and in an explicit chart block. */
+.ai-time-estimate { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--border); overflow-wrap: anywhere; }
+.ai-time-note { display: block; margin-top: 5px; }
+.ai-time-chart { margin: 20px 0; overflow-wrap: anywhere; }
+.preview .ai-time-groups { list-style: none; padding: 0; display: grid; gap: 16px; }
+.ai-time-groups li { display: grid; gap: 4px; }
+.ai-time-track { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; }
+.ai-time-track span { display: block; height: 100%; background: var(--accent); min-width: 2px; }

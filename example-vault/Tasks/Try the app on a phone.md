@@ -5,6 +5,7 @@ status: In Progress
 assignee: Your name
 requested_by: Your name
 area: Setup
+type: Task
 priority: Medium
 sprint: "[[Sprint 1]]"
 estimate: 3

@@ -368,6 +368,8 @@ A task is a note in the tasks folder (`Tasks/` unless you change it), and its fi
 
 **On a task's page**, the fields that are on show as pickers and boxes above its other properties (a list for choices, a date picker, a number, a page name for parent task, sprint and links). A change is saved at once: one line in one commit. If the note has unsaved edits, the field changes with them and **Save** keeps both. A new note in the tasks folder starts with every field that's on, once a setup is saved.
 
+**AI work history:** reserve `work_time` for AI-only whole minutes. An `ai-work-time` fenced block with `group: area-type` draws average minutes by area and type (`area` or `type` also work), sample counts and observed ranges. Only completed tasks in the current vault count; cancelled tasks, epics and invalid values are excluded. On unfinished tasks a read-only **AI time estimate** beside the fields uses the same area and type, labels one sample provisional and leaves the manual estimate unchanged. No AI call, no measurement of people. See [Set up tasks](example-vault/Set%20up%20tasks.md#ai-work-history).
+
 **A link to the setup:** any note can link to `#/settings?fields`, which opens Task fields for the repo you're in, e.g. `[Set up task fields](#/settings?fields)`. The example vault's [Set up tasks](example-vault/Set%20up%20tasks.md) page does, and its Task Board links to it.
 
 **Boxes are blocks in the note:** a task's Subtasks, Relations and Commits boxes, and a sprint's Sprint box, show where the note has a block for them, so nothing shows that the note doesn't ask for:
@@ -751,6 +753,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `src/local.js` | Local vaults: the same calls for a folder on the disk or the browser's storage, and a zip of a vault |
 | `src/mirror.js` | Each GitHub vault's copy on the device: kept in step with GitHub, opened from it with no connection |
 | `src/vault.js` | Vault rules: link resolution, front matter, the navigation box, note templates, inboxes, the `.commonplace.json` file and the task setup in it, a task's commits |
+| `src/ai-time.js` | Local arithmetic over recorded AI work minutes: grouped chart statistics and exact area/type task estimates |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
 | `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view, colours for code and other text files |

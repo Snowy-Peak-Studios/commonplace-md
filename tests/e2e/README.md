@@ -56,3 +56,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Inbox identity setup check
 
 `node inbox-overview-bindings.mjs <screenshot directory>` uses fictional local and remote vaults with every GitHub request intercepted. It verifies accent-equivalent names, exact mismatch diagnostics, explicit Check inbox/Use owner, absent owners, no initial source reads, per-owner credentials, access/module/folder failures, cancellation, source-write isolation and privately saved corrections. Desktop/phone light/dark screenshots include the fixed action footer.
+
+## AI work history
+
+`node ai-time.mjs <screenshots-folder>` uses fictional local and intercepted read-only GitHub vaults, with no real token. It checks custom task fields/folders/statuses, completed-only records, invalid/cancelled/epic exclusion, vault isolation, matching area/type estimates, unchanged manual estimates, one/no-sample states, explicit chart blocks, grouping choices, no writes and desktop/phone light/dark layouts.
