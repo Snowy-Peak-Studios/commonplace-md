@@ -84,7 +84,7 @@ These captures use the included feature-guide vault, kept in the browser without
 - 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
 - 🤖 **Your agents' rules and reports** live in the project, as notes you own.
 - ✅ **A task board** for you and your agent, or a whole team.
-- 🛠️ **Yours to change**: the rules, skills, task fields and code. Turning parts of the app on and off: soon ([roadmap](ROADMAP.md)).
+- 🛠️ **Yours to change**: the rules, skills, task fields and code. Choose the views a note shows through its blocks and properties ([syntax and examples](docs/markdown-and-blocks.md)).
 - 🆓 **Free, and only yours**: no account of ours, no payments. You need only GitHub and a token you make.
 
 ### How I use it

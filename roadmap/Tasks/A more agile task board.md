@@ -1,5 +1,5 @@
 ---
-status: Exploring
+status: Recently done
 ---
 
 # A more agile task board
