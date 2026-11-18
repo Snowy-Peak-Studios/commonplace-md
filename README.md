@@ -18,6 +18,67 @@ It's made for people and AI agents together: you set up your project's rules in 
 
 Every page is a plain Markdown file in a GitHub repo you own, and every save is a commit, so nothing is ever lost. There's no server and no account of ours: **Commonplace.md** is a web page that talks straight to GitHub with a token you make.
 
+## A look inside
+
+The public example vault, opened in Commonplace.md. Screenshots follow your device's light or dark theme; open an image for a closer look.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/notes-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/notes-light.png">
+  <img src="docs/images/screenshots/notes-light.png" alt="Commonplace.md on a computer: a folder tree, linked notes, a callout and a table on the example Home page" width="100%">
+</picture>
+
+*A home for your notes: folders on the left, readable Markdown and links on the right.*
+
+<details>
+<summary>See the task board, task details and phone layouts</summary>
+
+### One table for the whole project
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/task-board-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/task-board-light.png">
+  <img src="docs/images/screenshots/task-board-light.png" alt="The example task table grouped by status, with priority, area, assignee and requested-by columns" width="100%">
+</picture>
+
+*Tasks are notes. The table groups and filters their saved fields.*
+
+### Enough context to finish a task
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/task-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/task-light.png">
+  <img src="docs/images/screenshots/task-light.png" alt="A real example task with editable status and priority, an AI-only time estimate, acceptance criteria and a saved comment" width="100%">
+</picture>
+
+*Keep the description, checklist and discussion together.*
+
+### Away from your desk
+
+#### Your inbox
+
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/inbox-phone-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/inbox-phone-light.png">
+  <img src="docs/images/screenshots/inbox-phone-light.png" alt="Phone view of the example inbox showing a review, a question, an assignment and a mention" width="390">
+</picture></p>
+
+*Reviews, questions and mentions in one place.*
+
+#### A sprint
+
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshots/sprint-phone-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/sprint-phone-light.png">
+  <img src="docs/images/screenshots/sprint-phone-light.png" alt="Phone view of an example sprint showing its goal, progress, tasks and estimates" width="390">
+</picture></p>
+
+*The sprint's goal and tasks, grouped by status.*
+
+These captures use the included feature-guide vault, kept in the browser without a token. The local-only banner is part of that mode; a connected GitHub vault uses the same note and task views.
+
+</details>
+
 ## How to use it
 
 - 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
@@ -288,11 +349,15 @@ That's it: pick the repo at the top of the file list and start writing.
 
 Commonplace.md can be installed like any other app: it gets its own window and icon, and opens straight to your notes.
 
+<img src="docs/images/install-chrome.png" alt="Chrome address bar with the real Install button highlighted in gold at its right end" width="960">
+
+*Chrome on a computer. The button and menu names can differ in other browsers.*
+
 - **On a computer** (Chrome, Edge, Brave and other Chromium browsers): click the **install icon** at the right end of the address bar (a screen with a small arrow), or open the browser's menu and pick **Install Commonplace.md** (in some browsers under *Cast, save and share* or *Apps*). It then sits in the Start menu or the Dock, and can be pinned to the taskbar.
 - **On Android** (Chrome): the menu (⋮) › **Install app** or **Add to home screen**.
 - **On iPhone and iPad** (Safari): the **Share** button › **Add to Home Screen**.
 
-The installed app is the same page, and it updates by itself when the app does. On a computer and on Android it shares the browser's storage, so your token and repos are already there. On iPhone and iPad it has storage of its own: connect the token and add your repos once more inside it. It still needs a connection, and your notes stay on GitHub. To remove it, uninstall it like any other app.
+The installed app is the same page, and it updates by itself when the app does. On a computer and on Android it shares the browser's storage, so your token and repos are already there. On iPhone and iPad it has storage of its own: connect the token and add your repos once more inside it. It supports the same local vaults and offline copies as the browser; a connected vault uploads pending saves when it is online. To remove it, uninstall it like any other app.
 
 ## One per project, or one for the whole organization
 
@@ -776,4 +841,4 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 
 MIT: see [LICENSE](LICENSE). The third-party code in `vendor/` keeps its own licenses, listed in [vendor/LICENSES.md](vendor/LICENSES.md).
 
-The logo (`icons/`) and the banner (`docs/images/`) are not under the MIT license: they belong to Snowy Peak Studios, all rights reserved.
+The logo (`icons/`) and the banner (`docs/images/banner.png`) are not under the MIT license: they belong to Snowy Peak Studios, all rights reserved. The screenshots in `docs/images/screenshots/` and the annotated browser capture `docs/images/install-chrome.png` show the app and its public example content; they are documentation images under the repository's MIT license.
