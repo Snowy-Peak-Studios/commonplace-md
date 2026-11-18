@@ -60,3 +60,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## AI work history
 
 `node ai-time.mjs <screenshots-folder>` uses fictional local and intercepted read-only GitHub vaults, with no real token. It checks custom task fields/folders/statuses, completed-only records, invalid/cancelled/epic exclusion, vault isolation, matching area/type estimates, unchanged manual estimates, one/no-sample states, explicit chart blocks, grouping choices, no writes and desktop/phone light/dark layouts.
+
+## PDF export check
+
+`node export-pdf.mjs <output-folder>` uses local fixtures without a token or remote requests. It intercepts the print dialog, exports real A4 PDFs in desktop/phone light/dark modes, and checks expanded folds, callouts, embedded content, lazy images, Mermaid diagrams, a multi-page table, task field values and history, control removal, cleanup and unsaved drafts. Render the PDFs for visual review. The final native print/share sheet on mobile still depends on the browser and operating system.

@@ -13,6 +13,7 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="src/styles.css">
+  <link rel="stylesheet" href="src/print.css" media="print">
   <script type="module" src="src/app.js"></script>
 </head>
 <body>
@@ -58,6 +59,7 @@
           <summary class="icon-btn" data-icon="more" aria-label="More"></summary>
           <div class="menu">
             <button id="new-btn" data-icon="newNote">New note</button>
+            <button id="export-pdf-btn" data-icon="download" hidden>Export as PDF</button>
             <button id="settings-btn" data-icon="settings">Settings</button>
           </div>
         </details>

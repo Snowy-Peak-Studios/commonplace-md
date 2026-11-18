@@ -19,6 +19,7 @@ import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
 import { store, upgradeRepo, upgradeInboxOverview } from "./store.js";
 import { icon, fillIcons } from "./icons.js";
+import { createPrintView, clearPrintView, printNote } from "./print.js";
 import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-time.js";
 
 // ================================================================
@@ -607,6 +608,7 @@ function renderHeader() {
   const title = $("#title");
   const writable = canWrite();
   $("#new-btn").hidden = !writable;
+  $("#export-pdf-btn").hidden = f?.kind !== "md";
   $("#side-new").hidden = !writable;
   if (f) {
     const dir = dirName(f.path);
@@ -826,6 +828,7 @@ function restoreNoteRoute(f, depthBefore) {
 }
 
 function closeFile() {
+  clearPrintView();
   app.file?.editor?.destroy();
   app.file?.commentEditors?.forEach(({ view }) => view.destroy());
   app.file = null;
@@ -2819,8 +2822,7 @@ function loadMermaid() {
 const diagramSvgs = new Map(); // theme + source -> SVG, so the preview doesn't redraw while typing
 let mermaidTheme = "", diagramCount = 0;
 
-function diagramSvg(src) {
-  const theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
+function diagramSvg(src, theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default") {
   const key = `${theme}\n${src}`;
   if (!diagramSvgs.has(key)) {
     diagramSvgs.set(key, loadMermaid().then(async (mermaid) => {
@@ -2840,6 +2842,7 @@ function fillDiagrams(root) {
   for (const el of root.querySelectorAll(".mermaid-diagram")) {
     const src = el.querySelector("code")?.textContent;
     if (!src) continue;
+    el.dataset.diagramSource = src;
     diagramSvg(src).then((svg) => {
       el.innerHTML = svg;
       el.classList.add("drawn");
@@ -4938,6 +4941,24 @@ function start() {
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
+  $("#export-pdf-btn").addEventListener("click", async () => {
+    closeMenu();
+    const f = app.file;
+    if (f?.kind !== "md" || !f.dom?.preview) return;
+    const button = $("#export-pdf-btn");
+    button.disabled = true;
+    try {
+      // Flush the current editor into the preview; no save or remote write is needed.
+      renderPreview();
+      await printNote({ preview: f.dom.preview, title: shownName(f.path), isCurrent: () => app.file === f, drawDiagram: src => diagramSvg(src, "default") });
+    } catch (error) { toast(error.message, "error"); }
+    finally { button.disabled = false; }
+  });
+  addEventListener("beforeprint", () => {
+    const f = app.file;
+    if (!document.getElementById("print-note") && f?.kind === "md" && f.dom?.preview) createPrintView(f.dom.preview, shownName(f.path));
+  });
+  addEventListener("afterprint", clearPrintView);
   $("#side-new").addEventListener("click", () => { closeSideOnPhone(); newNote(); });
   $("#reload-btn").addEventListener("click", reloadFromGitHub);
   $("#nudge-reload").addEventListener("click", reloadFromGitHub);

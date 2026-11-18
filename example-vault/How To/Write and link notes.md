@@ -32,3 +32,7 @@ The file goes into **Attachments folder** in vault Settings, or next to the note
 ## What else a note can hold
 
 Callouts, checkboxes, folding lists, diagrams, tables and more: [the guide](../Guide.md) shows them all.
+
+## Save a page as PDF
+
+Open the note, then **More (⋯) › Export as PDF**. Choose **Save as PDF** in your browser's print dialog, or use its Print/share option on a phone. The exported copy uses light colours, opens folded sections, keeps tables and diagrams, and omits the app controls. It includes the current preview, including unsaved edits; exporting does not save the note. Cancel the dialog to return to your unchanged reading view.

@@ -127,6 +127,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 
 - Your notes are plain Markdown files in your own GitHub repo, and every save is a commit.
 - Read and edit them on a computer or a phone, and install it as an app.
+- **Export as PDF:** open a note, then **More (⋯) › Export as PDF**. Choose **Save as PDF** in the browser's print dialog (on phones, use the available Print/share option). It prints a light copy with folded sections open and app controls hidden; cancelling keeps your note and drafts as they were.
 - Wikilinks, embeds, callouts, diagrams, checklists, and tables of your notes from `.base` files.
 - Inboxes, invite links and read-only mode for working as a team, and rules for AI agents if you like.
 - Free: no server, no account of ours, nothing to install.
@@ -813,6 +814,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 |---|---|
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
+| `src/print.js`, `src/print.css` | A light print/PDF copy of the rendered note, with expanded folds and no app controls |
 | `src/inbox-overview.js`, `src/inbox-overview-view.js` | Optional selected-source overview: strict bindings, source-scoped rows, lazy view and private setup |
 | `src/github.js` | The GitHub REST and GraphQL calls |
 | `src/local.js` | Local vaults: the same calls for a folder on the disk or the browser's storage, and a zip of a vault |

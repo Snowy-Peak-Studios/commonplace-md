@@ -1,0 +1,39 @@
+/* Only the prepared rendered note appears on paper, independent of screen theme or width. */
+@page { margin: 16mm; }
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: white; --bg-side: white; --bg-soft: #f5f5f5; --bg-raise: white;
+    --text: #161616; --text-2: #333; --muted: #555; --line: #ccc; --line-strong: #aaa;
+    --accent: #333; --accent-soft: #eee; --accent-text: white; --link: #222;
+    --code: #333; --code-bg: #f5f5f5; --warn: #533b00; --warn-soft: #faf5e8;
+    --shadow: none; --shadow-lg: none;
+  }
+  html, body { display: block !important; height: auto !important; overflow: visible !important; background: white !important; color: #161616 !important; }
+  body:has(#print-note) > :not(#print-note) { display: none !important; }
+  #print-note { display: block !important; padding: 0; margin: 0; width: auto; max-width: none; font-size: 10.5pt; line-height: 1.5; }
+  #print-note * { box-shadow: none !important; text-shadow: none !important; }
+  #print-note button, #print-note form, #print-note .fold, #print-note .board-actions { display: none !important; }
+  #print-note .task-form { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt 12pt; padding: 8pt; }
+  #print-note .print-field { font-weight: 600; overflow-wrap: anywhere; }
+  #print-note .print-checkbox { margin-right: 5pt; font-family: "Segoe UI Symbol", sans-serif; }
+  #print-note .props { margin: 0 0 10pt; }
+  #print-note details > summary { list-style: none; }
+  #print-note li.has-fold { list-style: inherit; }
+  #print-note pre, #print-note code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #print-note .base-scroll, #print-note .wide-table, #print-note .mermaid-diagram, #print-note .board-columns { width: auto !important; max-width: 100% !important; min-width: 0 !important; overflow: visible !important; }
+  #print-note table { display: table; width: 100%; table-layout: auto; font-size: 9pt; }
+  #print-note td, #print-note th { white-space: normal !important; overflow-wrap: anywhere; }
+  #print-note thead { display: table-header-group; }
+  #print-note tr, #print-note img, #print-note .callout { break-inside: avoid; }
+  #print-note img, #print-note svg { max-width: 100% !important; min-width: 0 !important; height: auto; }
+  #print-note h1, #print-note h2, #print-note h3, #print-note summary { break-after: avoid; }
+  #print-note a { color: #222; text-decoration: underline; }
+  #print-note .callout, #print-note .embed-page { border-color: #aaa; background: #fafafa; }
+  #print-note .mermaid-diagram .node rect, #print-note .mermaid-diagram .node polygon, #print-note .mermaid-diagram .cluster rect { fill: #f5f5f5 !important; stroke: #444 !important; }
+  #print-note .mermaid-diagram text, #print-note .mermaid-diagram .label, #print-note .mermaid-diagram .nodeLabel { fill: #222 !important; color: #222 !important; }
+  #print-note .mermaid-diagram .flowchart-link { stroke: #333 !important; }
+  #print-note .mermaid-diagram marker path { fill: #333 !important; stroke: #333 !important; }
+  #print-note .board-columns { display: block; }
+  #print-note .board-column { margin-bottom: 10pt; break-inside: avoid; }
+}
