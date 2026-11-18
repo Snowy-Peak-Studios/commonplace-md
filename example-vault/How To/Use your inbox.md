@@ -56,7 +56,7 @@ Your agent can route an item to a declared sibling using the **Sibling vaults an
 
 The agent uses that vault's task format and ID and records where the request came from. It saves a transfer reference, verifies the destination task, and only then clears the original item. If permission, saving or verification fails, the source stays. Retrying finds the saved task instead of creating another one. Unclear destinations and changes of privacy boundary need your decision.
 
-This is an agent workflow. The app's Inbox button still opens the current vault's inbox; these rules add no combined app inbox or Move action. A local-only vault does not become synced by being listed.
+This is an agent workflow. The app's Inbox button still opens the current vault's inbox; the separate optional overview below combines selected sources without adding a Move action. A local-only vault does not become synced by being listed.
 
 ## Your own inbox
 
@@ -94,3 +94,19 @@ fields: parent, state, priority, area
 
 
 A free task put off with **Not now** comes back to the suggestions after seven days, marked **Back from waiting**. Set `waiting_days: 14` in the inbox's properties to wait 14 days. Use **Bring back** to return it earlier. Tasks without a waiting date stay on the waiting list until you bring them back.
+
+## One overview of selected inboxes
+
+In **Settings → This device**, choose **Set up inbox overview**. It starts off. Choose a private browser-local dashboard, name the context and select only the vaults to include. For each, enter your name in that vault and the exact path of your inbox. Add a mention login when you want mentions. **Save and open overview** enables the device's **All inboxes** shortcut.
+
+The dashboard is a private note kept in this browser profile. Back up its vault with **Download a copy**: clearing browser data loses it. It does not sync between devices. An exported dashboard still needs exact existing source bindings and local folder permission on the new device. Keep these private bindings out of shared notes, invite links and agent routing registries. Only the selected private browser-local note can run the block; shared GitHub notes and embeds cannot.
+
+The overview shows **For review** first, followed by questions, assignments, mentions and owned new-task captures. Every row names its source, branch/folder or local-only location and links there. Open the original task or inbox to review, reply, mark Seen or Claim. The overview has no capture, move or source-edit action; reading it never uploads pending saves or updates files at its sources. The ordinary Inbox button still opens the current vault's inbox.
+
+Opening the dashboard reads its explicitly selected sources; **Refresh selected vaults** reads them again. There is no background overview polling. Expand **Selected sources** for each source's status and checked time. Offline/stale results are labelled; access rejection hides that source's rows while other results remain. A locked folder must be allowed from its source. A source with `modules.inboxes: false` in its `.commonplace.json` is excluded before its notes are read. Switching the overview off clears its combined view and stops late results.
+
+Combined rows and note text stay in memory. The app can reuse each source's existing device copy, and keeps only normalized task/module settings and identity metadata for offline checks. It scans up to three sources at a time. Mentions and captures can require every Markdown note on the first scan; the row limit limits display, not requests or bytes. With no selected sources it reads none. Local sources need no GitHub token; remote sources use their existing owner's credential, without trying a different token after rejection.
+
+Setup writes an `inbox-overview` YAML block. These defaults are visible when omitted: context **My inbox**, all five kinds, manual refresh, 50 rows, review status Testing, no sources. `limit` accepts 1–200. `show` accepts `reviews`, `questions`, `assignments`, `mentions`, `new-tasks`; `review-statuses` is a list or comma-separated values. Missing bindings or invalid options show Setup needed rather than guessing.
+
+For a GitHub source, setup records `kind: github` plus exact `owner`, `repo`, `branch`, `folder`, `inbox`, `person` and optional `login`. For an existing local vault, it records `kind: browser` or `folder`, its device `vault` ID, `inbox`, `person` and optional `login`. Matching names or task IDs in different sources stay distinct. Do not put tokens, URLs or credentials in the block.

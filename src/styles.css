@@ -839,6 +839,18 @@ select.chip.pick:hover:not(:disabled) { border-color: var(--line-strong); }
 select.chip.pick:disabled { opacity: 0.6; cursor: progress; }
 .chip.prio-high { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .suggest-list .btn .icon { width: 15px; height: 15px; }
+.inbox-overview-block { min-width: 0; }
+.overview-sources { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.overview-sources li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.overview-sources small, .overview-detail { flex: 1 0 100%; overflow-wrap: anywhere; }
+.overview-kind { margin-top: 14px; }
+.overview-kind h3 { margin: 0; font-size: 14px; }
+.overview-summary { overflow-wrap: anywhere; }
+.overview-origin { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.overview-source-choice { padding: 10px 0; border-top: 1px solid var(--line); }
+.overview-source-fields { padding: 6px 0 0 24px; }
+.overview-source-fields[hidden] { display: none; }
+.overview-kind-choices { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .attention-list .attention-seen-btn { margin-left: auto; }
 .attention .attention-all { margin-left: auto; }
 .preview .attention-list li.attention-seen > details { flex: 1 0 100%; }
@@ -1387,3 +1399,7 @@ select.input { padding-right: 8px; }
 .pick-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .pick-line .picked { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
 .pick-line .picked .icon { width: 16px; height: 16px; color: var(--accent); }
+
+.preview .overview-sources { list-style: none; padding: 0; }
+.overview-row-source { flex-basis: 100%; overflow-wrap: anywhere; }
+.inbox-overview .suggest-head { flex-wrap: wrap; }

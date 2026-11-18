@@ -104,6 +104,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Relations:** a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
 - **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](#task-fields)).
 - **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
+- **Optional inbox overview:** off by default in Settings → This device. Select vaults and per-vault identities in a private browser-local dashboard; **All inboxes** shows source-labelled reviews, questions, assignments, mentions and captures. Open an item to act in its source. Manual refresh, per-source access/offline states, no source writes or global capture. The dashboard needs its own backup and setup on each device. [Set it up](example-vault/How%20To/Use%20your%20inbox.md#one-overview-of-selected-inboxes).
 - **Inboxes:** an Inbox button opens your own inbox. Needs attention can show **For review** first with `show: reviews`: tasks in Testing for the named reviewer, falling back to the assignee when no reviewer is declared. Use `review-statuses:` for custom review states. Reviews stay until the task leaves that state, and are not dismissed with Seen. **Tasks for today** keeps the existing `top-tasks` block and its Claim action. A dot says something waits on you.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)). A declared sibling registry can route an item to another authorized vault: the agent verifies the saved destination task before clearing the source ([how](example-vault/How%20To/Use%20your%20inbox.md#an-item-for-another-vault)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
@@ -745,6 +746,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 |---|---|
 | `index.html`, `src/styles.css` | The page and its look (light and dark) |
 | `src/app.js` | Routing, the file tree, the views, saving, drafts, new notes, settings, invite links |
+| `src/inbox-overview.js`, `src/inbox-overview-view.js` | Optional selected-source overview: strict bindings, source-scoped rows, lazy view and private setup |
 | `src/github.js` | The GitHub REST and GraphQL calls |
 | `src/local.js` | Local vaults: the same calls for a folder on the disk or the browser's storage, and a zip of a vault |
 | `src/mirror.js` | Each GitHub vault's copy on the device: kept in step with GitHub, opened from it with no connection |

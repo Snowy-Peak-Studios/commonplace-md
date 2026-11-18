@@ -17,7 +17,7 @@ import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentio
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
-import { store, upgradeRepo } from "./store.js";
+import { store, upgradeRepo, upgradeInboxOverview } from "./store.js";
 import { icon, fillIcons } from "./icons.js";
 
 // ================================================================
@@ -253,12 +253,13 @@ const linkEnv = (repo, fromPath, depth = 0) => {
 // Goes up whenever a tree's files change, so work done for an older tree (base views) is done again.
 let treeVersion = 0;
 
-async function loadTree(repo, force = false) {
-  if (!force && app.trees.has(repo.id)) return app.trees.get(repo.id);
+async function loadTree(repo, force = false, { readOnly = false, current = () => true } = {}) {
+  if (!readOnly && !force && app.trees.has(repo.id)) return app.trees.get(repo.id);
   // The branch's latest commit first, so the tree is that commit's and newer ones can be told apart later.
   let head = null;
   try { head = await gh.headSha(repo); } catch { /* the tree still loads by the branch's name */ }
-  const data = await gh.tree(repo, head?.sha || repo.branch);
+  if (!current()) throw new Error("The source selection changed.");
+  const data = await gh.tree(repo, head?.sha || repo.branch, { readOnly, current });
   const prefix = repo.folder ? repo.folder.replace(/\/+$/, "") + "/" : "";
   const files = new Map();
   for (const e of data.tree) {
@@ -274,8 +275,7 @@ async function loadTree(repo, force = false) {
     offline: !!data.offline, syncedAt: data.syncedAt ?? null,
     changed: new Set([...(data.changed || [])].filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length))),
   };
-  app.trees.set(repo.id, tree);
-  findOwnInbox(repo, tree);
+  if (!readOnly) { app.trees.set(repo.id, tree); findOwnInbox(repo, tree); }
   return tree;
 }
 
@@ -443,6 +443,9 @@ function renderShortcuts() {
   const tree = repo && app.trees.get(repo.id);
   if (!tree) return fill(host);
   const fixed = [];
+  const overview = overviewPrefs();
+  const dashboard = app.repos.find((r) => r.id === overview.repo && r.local === "browser");
+  if (overview.enabled && dashboard) fixed.push(fileRow(dashboard, overview.path, "inbox", "All inboxes"));
   const inbox = inboxOf(repo);
   if (inbox && tree.files.has(inbox)) fixed.push(fileRow(repo, inbox, "inbox", "Inbox", null, tree.attention ? INBOX_DOT_SAID : ""));
   if (repo.home && tree.files.has(repo.home) && repo.home !== inbox) fixed.push(fileRow(repo, repo.home, "home"));
@@ -1095,6 +1098,7 @@ function renderPreview() {
   fillTopTasks(body, f);
   // Inbox items show only where a ```needs-attention block is, like the top tasks.
   fillAttention(body, f);
+  fillInboxOverview(body, f);
   // New tasks and Comments get their inline forms where the note can be changed.
   fillNewTasks(body, f);
   const commentFocus = fillComments(body, f);
@@ -2068,6 +2072,205 @@ function fillComments(root, f) {
   });
   return focused;
 }
+
+// ---- optional private inbox overview: no source reads until explicitly enabled ----
+const overviewPrefs = () => upgradeInboxOverview(store.get("inboxOverview"));
+let overviewModule = null;
+function loadOverviewModule() {
+  return overviewModule ||= import("./inbox-overview-view.js").catch((e) => { overviewModule = null; throw e; });
+}
+
+function overviewSettings() {
+  const prefs = overviewPrefs();
+  const toggle = h("input", { type: "checkbox", checked: prefs.enabled, "aria-label": "Enable inbox overview" });
+  toggle.addEventListener("change", async () => {
+    if (toggle.checked && !prefs.repo) {
+      toggle.checked = false;
+      try { await openOverviewSetup(); } catch (e) { toast(e.message, "error"); }
+      return;
+    }
+    if (!store.set("inboxOverview", { ...overviewPrefs(), enabled: toggle.checked })) {
+      toggle.checked = !toggle.checked; toast("Can't keep this setting in this browser.", "error"); return;
+    }
+    if (!toggle.checked) store.remove("inboxOverviewSourceSettings");
+    renderShortcuts();
+  });
+  return h("div", { class: "field overview-setting" }, h("label", { class: "checkline" }, toggle, "Inbox overview"),
+    h("small", { class: "hint" }, "Off by default. A private read-only view of vaults you select. Open or refresh it to read those sources; act on each item in its original vault."),
+    h("div", { class: "btn-row" }, h("button", { class: "btn small", type: "button", onclick: () => openOverviewSetup().catch((e) => toast(e.message, "error")) }, "Set up inbox overview"),
+      prefs.enabled && prefs.repo ? h("a", { class: "btn small", href: hrefFor({ id: prefs.repo }, prefs.path) }, "Open overview") : null));
+}
+
+async function openOverviewSetup() {
+  const mod = await loadOverviewModule();
+  return mod.showOverviewSetup({ h, fill, modal, preferences: overviewPrefs, repos: () => app.repos, login: loginFor,
+    existing: async (prefs) => {
+      const repo = app.repos.find((r) => r.id === prefs.repo && r.local === "browser");
+      if (!repo) throw new Error("Choose a private dashboard kept in this browser.");
+      const data = await gh.readText(repo, prefs.path);
+      const blocks = mod.overviewContents(data.text);
+      return { ...data, block: blocks.length === 1 ? blocks[0] : "" };
+    },
+    save: async ({ target, path, options }) => {
+      let repo = target ? app.repos.find((r) => r.id === target) : null;
+      if (target && (!repo || repo.local !== "browser")) throw new Error("Use a private vault kept in this browser.");
+      const fresh = !repo;
+      if (fresh) repo = { id: `inbox-${crypto.randomUUID()}`, label: options.context, local: "browser", owner: "", repo: "", branch: "", folder: "", home: path, inbox: "", inboxes: "", notes: "", template: "", vault: false };
+      let existing = { text: "# Inbox overview\n", sha: null };
+      if (!fresh) {
+        try { existing = await gh.readText(repo, path); } catch (e) { if (e.status !== 404) throw e; }
+      }
+      const text = mod.writeOverviewNote(existing.text, options);
+      if (fresh) {
+        if (!(await local.create(repo, { seed: [{ path, bytes: new TextEncoder().encode(text) }] }))) throw new Error("This dashboard already has files. Choose another one.");
+        const next = [...app.repos, repo];
+        if (!store.set("repos", next)) { await local.remove(repo); throw new Error("Can't keep the dashboard settings in this browser."); }
+        app.repos = next;
+      } else await gh.writeText(repo, path, text, existing.sha, "Update private inbox overview");
+      if (!store.set("inboxOverview", { version: 1, enabled: true, repo: repo.id, path })) throw new Error("The private note was saved, but the overview switch could not be kept. Check browser storage.");
+      app.trees.delete(repo.id);
+      store.remove("inboxOverviewSourceSettings");
+      renderRepoPicker(); renderShortcuts();
+      location.hash = hrefFor(repo, path);
+      if (app.file?.repo.id === repo.id && app.file.path === path) {
+        const tree = await loadTree(repo, true);
+        await openFile(repo, tree, path, null, ++app.nav);
+      }
+      toast("Private overview saved. Its source notes stay in their vaults.", "ok");
+    },
+  });
+}
+
+function fillInboxOverview(root, f) {
+  const blocks = [...root.querySelectorAll(".inbox-overview-block")];
+  if (!blocks.length) return;
+  const prefs = overviewPrefs();
+  for (const el of blocks) {
+    const message = f.repo.local !== "browser" || el.parentElement.closest(".embed-page")
+      ? "An inbox overview can run only in its private browser-local dashboard, never in a shared note or embed."
+      : !prefs.enabled ? "Inbox overview is off. Enable it in Settings › This device."
+        : prefs.repo !== f.repo.id || prefs.path !== f.path ? "This is not the private dashboard selected in Settings."
+          : blocks.length !== 1 ? "Use one overview block per dashboard; choose separate notes for separate contexts."
+            : f.dirty ? "Save the dashboard before reading its selected sources." : "";
+    if (message) { fill(el, h("p", { class: "note" }, message)); continue; }
+    const options = el.querySelector("code")?.textContent || "";
+    // Repainting the note (layout, task settings) keeps this scan; only opening or Refresh reads again.
+    if (f.overview?.options === options && f.overview.el.isConnected) { el.replaceWith(f.overview.el); continue; }
+    f.overview = { options, el };
+    const current = () => app.file === f && !f.dirty && el.isConnected && overviewPrefs().enabled
+      && overviewPrefs().repo === f.repo.id && overviewPrefs().path === f.path;
+    loadOverviewModule().then((mod) => {
+      if (!current()) return;
+      mod.mountOverview(el, options, { h, fill, icon, current, repos: () => app.repos, href: hrefFor,
+        read: readOverviewSource,
+        prune: (keys) => {
+          const kept = store.get("inboxOverviewSourceSettings", {});
+          if (!kept || typeof kept !== "object" || Array.isArray(kept)) { store.remove("inboxOverviewSourceSettings"); return; }
+          for (const key of Object.keys(kept)) if (!keys.includes(key)) delete kept[key];
+          store.set("inboxOverviewSourceSettings", kept);
+        },
+        forget: (key) => { const kept = store.get("inboxOverviewSourceSettings", {}); if (kept && typeof kept === "object") { delete kept[key]; store.set("inboxOverviewSourceSettings", kept); } },
+      });
+    }).catch(() => { if (current()) fill(el, h("p", { class: "note error" }, "Couldn't load the inbox overview. Reload and try again.")); });
+  }
+}
+
+/** Only this adapter reads sources. The renderer receives data and source links, never write access. */
+async function readOverviewSource(repo, source, options, files, current) {
+  const fail = (kind, message, status) => Object.assign(new Error(message), { kind, status });
+  const check = () => { if (!current()) throw fail("cancelled", "The overview selection changed."); };
+  check();
+  if (repo.id === overviewPrefs().repo) throw fail("setup", "Keep the dashboard separate from its selected source vaults.");
+  const localSource = isLocal(repo), login = loginFor(repo);
+  if (!localSource && !gh.tokenFor(repo.owner)) throw fail("access", "Connect this vault in Settings first.");
+  if (!localSource && source.login && source.login.toLowerCase() !== login.toLowerCase()) throw fail("setup", "The selected mention login does not match this vault's connected account.");
+  const key = JSON.stringify(localSource ? [repo.local, repo.id] : ["github", repo.owner.toLowerCase(), repo.repo.toLowerCase(), repo.branch, repo.folder || ""]);
+  const credential = localSource ? repo.id : gh.tokenFor(repo.owner);
+  if (files.credential !== credential) { files.clear(); files.credential = credential; files.accessEpoch = (files.accessEpoch || 0) + 1; }
+  let offline = false;
+  if (!localSource) {
+    try { await gh.repo(repo); } catch (e) {
+      if (e.status !== 0) throw fail("access", "Open this source to check its token and access.", e.status);
+      // The copy may be on disk but not loaded in this session yet. Its tree validates availability below.
+      offline = true;
+    }
+  }
+  check();
+  const settings = store.get("inboxOverviewSourceSettings", {});
+  let marker = null;
+  try {
+    const read = await readMarker(repo);
+    check();
+    marker = read.text ? JSON.parse(read.text) : {};
+    const latest = store.get("inboxOverviewSourceSettings", {});
+    const kept = latest && typeof latest === "object" && !Array.isArray(latest) ? latest : {};
+    kept[key] = { login, disabled: marker.modules?.inboxes === false, tasks: marker.tasks ?? null, checkedAt: Date.now() };
+    store.set("inboxOverviewSourceSettings", kept);
+  } catch (e) {
+    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    const prior = settings?.[key];
+    if ((offline || e.status === 0) && prior && prior.login === login) { marker = { modules: { inboxes: !prior.disabled }, tasks: prior.tasks }; offline = true; }
+    else throw fail(e.status === 401 || e.status === 403 ? "access" : "setup", "The source's settings could not be checked. Open it online, then refresh.", e.status);
+  }
+  check();
+  if (marker.modules?.inboxes === false) throw fail("disabled", "This source has its inbox module turned off.");
+  const setup = taskSetup(marker.tasks ?? null);
+  let tree;
+  try { tree = await loadTree(repo, true, { readOnly: true, current }); } catch (e) {
+    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    throw e;
+  }
+  check();
+  if (!tree.files.has(source.inbox)) throw fail("setup", "The configured inbox page is missing. Check the source binding.");
+  const whole = options.show.includes("mentions") || options.show.includes("new-tasks");
+  const paths = [...tree.files.keys()].filter((p) => /\.md$/i.test(p) && (whole || p === source.inbox || isSetupTask(setup, p)));
+  const missing = paths.filter((p) => files.get(p)?.sha !== tree.files.get(p));
+  const readHere = localSource || mirror.searchesHere(repo);
+  let failed = false;
+  if (readHere) {
+    let next = 0;
+    const worker = async () => { while (current() && !failed && next < missing.length) {
+      const path = missing[next++];
+      try { const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text }); }
+      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder."); throw e; }
+    } };
+    await Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
+  } else {
+    for (const batch of chunks(missing, BLOBS_PER_QUERY)) {
+      check();
+      const good = batch.filter((p) => IS_SHA.test(tree.files.get(p)));
+      if (good.length) {
+        const fields = good.map((p, i) => `b${i}: object(oid: "${tree.files.get(p)}") { ... on Blob { text } }`).join("\n");
+        try {
+          const data = await gh.graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {\n${fields}\n} }`, { owner: repo.owner, name: repo.repo });
+          check();
+          good.forEach((p, i) => { const text = data.repository?.[`b${i}`]?.text; if (text != null) files.set(p, { sha: tree.files.get(p), text }); });
+        } catch (e) { if (e.status === 401 || e.status === 403 || e.status === 0) throw e; /* use this source's REST reader for unsupported GraphQL */ }
+      }
+      for (const path of batch.filter((p) => files.get(p)?.sha !== tree.files.get(p))) {
+        check(); const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text });
+      }
+    }
+  }
+  check();
+  for (const path of [...files.keys()]) if (!paths.includes(path)) files.delete(path);
+  const notes = paths.map((path) => ({ path, ...files.get(path), props: noteProps(files.get(path).text) }));
+  const inboxProps = notes.find((n) => n.path === source.inbox)?.props || {};
+  if (inboxProps.owner && foldName(inboxProps.owner) !== foldName(source.person)) throw fail("setup", "This inbox's owner differs from the selected person. Check the binding.");
+  return { notes, setup, inboxProps, state: tree.truncated ? "partial" : offline || tree.offline ? "offline" : "current",
+    checkedAt: offline || tree.offline ? mirror.info(repo).syncedAt || Date.now() : Date.now(),
+    message: tree.truncated ? "The vault file list is incomplete; these counts are partial." : options.show.includes("mentions") && !source.login ? "No mention login is configured; other selected kinds are shown." : "" };
+}
+
+window.addEventListener("storage", (event) => {
+  if (["commonplace:token", "commonplace:tokens", "commonplace:user"].includes(event.key)) { app.token = store.get("token", ""); gh = client(app.token, tokenMap()); }
+  if (["commonplace:inboxOverview", "commonplace:token", "commonplace:tokens", "commonplace:user"].includes(event.key)) {
+    if (!overviewPrefs().enabled) store.remove("inboxOverviewSourceSettings");
+    if (app.file) app.file.overview = null;
+    if (app.file?.kind === "md") renderPreview();
+    renderShortcuts();
+  }
+});
 
 // ---- needs your attention: questions and mentions ----
 
@@ -4372,7 +4575,7 @@ function showSettings(adding = false, tokenOwner = "") {
   const others = ownerTokens();
   const ownerInput = h("input", { class: "input", list: "repo-owners", autocomplete: "off", spellcheck: "false", autocapitalize: "off",
     placeholder: "The owner: your-name or your-organization", value: tokenOwner, "aria-label": "Owner" });
-  const repoOwners = [...new Set(app.repos.map((r) => r.owner))].filter((o) => !others[o.toLowerCase()]);
+  const repoOwners = [...new Set(app.repos.filter((r) => !isLocal(r)).map((r) => r.owner))].filter((o) => o && !others[o.toLowerCase()]);
   const makeLink = h("a", { class: "btn", target: "_blank", rel: "noopener" }, icon("key"), "Make it on GitHub");
   const syncLink = () => {
     const o = ownerInput.value.trim();
@@ -4388,7 +4591,7 @@ function showSettings(adding = false, tokenOwner = "") {
     const o = ownerInput.value.trim();
     if (!o) return ownerInput.focus();
     if (!ownerTokenInput.value.trim()) return ownerTokenInput.focus();
-    const check = app.repos.find((r) => r.owner.toLowerCase() === o.toLowerCase()) || null;
+    const check = app.repos.find((r) => !isLocal(r) && r.owner.toLowerCase() === o.toLowerCase()) || null;
     if (await saveOwnerToken(o, ownerTokenInput.value.trim(), ownerOut, check)) { toast(`Token for ${o} saved on this device`, "ok"); showSettings(); }
   };
   ownerTokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveOther(); });
@@ -4580,6 +4783,7 @@ function showSettings(adding = false, tokenOwner = "") {
   }
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    overviewSettings(),
     waitingBox,
     copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
       h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),

@@ -96,9 +96,9 @@ Commonplace.md shows these values above the note. The parent puts this page unde
 
 ## Inbox blocks
 
-### Top tasks
+### Tasks for today
 
-A `top-tasks` block lists tasks you can start. Set `range` for how many, `areas` to filter by area, `order` to sort, `sprint` to select a sprint window, `owner` to choose who receives the task when it is claimed, and `fields` for the details to show. [Use your inbox](Use%20your%20inbox.md#the-top-tasks-to-start) lists the values for each line.
+A `top-tasks` block lists tasks you can start. Set `range` for how many, `areas` to filter by area, `order` to sort, `sprint` to select a sprint window, `owner` to choose who receives the task when it is claimed, and `fields` for the details to show. [Use your inbox](Use%20your%20inbox.md#tasks-for-today) lists the values for each line.
 
 ~~~markdown
 ```top-tasks
@@ -150,6 +150,30 @@ owner: Your name
 ```new-tasks
 owner: Your name
 - Add a book to the reading list
+```
+
+### Optional inbox overview
+
+This block runs only in the private browser-local dashboard selected in **Settings → This device**. This shared example stays inert and reads no source. Use [Set up inbox overview](Use%20your%20inbox.md#one-overview-of-selected-inboxes) to select exact vaults and identities privately.
+
+~~~markdown
+```inbox-overview
+context: My inbox
+show: [reviews, questions, assignments, mentions, new-tasks]
+review-statuses: [Testing]
+refresh: manual
+limit: 50
+sources: []
+```
+~~~
+
+```inbox-overview
+context: My inbox
+show: [reviews, questions, assignments, mentions, new-tasks]
+review-statuses: [Testing]
+refresh: manual
+limit: 50
+sources: []
 ```
 
 ## Task and sprint blocks

@@ -222,3 +222,8 @@ test("reviews are optional, first in all, and retain custom multiword review sta
   assert.deepEqual(attentionOptions("review-statuses: ").reviewStatuses, ["Testing"]);
   assert.match(render("```needs-attention\nshow: reviews\nreview-statuses: Needs review\nowner: Ana Lee\n```"), /data-review-statuses="\[&quot;Needs review&quot;\]"/);
 });
+
+test("overview fences remain escaped inert placeholders before explicit host approval", () => {
+  assert.match(render("```inbox-overview\ncontext: <script>\n```"), /class="inbox-overview-block"><pre><code>context: &lt;script&gt;/);
+  assert.doesNotMatch(render("````markdown\n```inbox-overview\nsources: []\n```\n````"), /class="inbox-overview-block"/);
+});

@@ -230,6 +230,7 @@ export function createMarkdown() {
     }
     // A ```base block: a base view written in the page (what a .base file holds); the app draws its table there.
     // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
+    if (lang === "inbox-overview") return `<div class="inbox-overview-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     // A `task:` line shows another task's box, on any page.

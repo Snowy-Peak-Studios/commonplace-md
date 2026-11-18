@@ -44,3 +44,7 @@ Settings, all optional:
 | `CHROME` | Chrome's usual path on Windows | Chrome's path |
 
 To check your own fork, push it and run with `OWNER=<you>`.
+
+## Isolated inbox overview check
+
+`node inbox-overview.mjs <screenshot directory>` uses fictional accounts and local fixtures. It intercepts every GitHub call and refuses all remote writes; it needs no token. `BASE` and `CHROME` have the same defaults as the main check. It covers exact branch/folder and local bindings, per-owner credentials, reviews and repeated captures, disabled/locked/missing/revoked sources, stale results, switching off during a read, private-host restrictions, setup save, keyboard source navigation, no-token local use, and desktop/phone light/dark layouts.

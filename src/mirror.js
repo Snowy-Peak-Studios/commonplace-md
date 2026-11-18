@@ -165,7 +165,7 @@ export class Mirror {
   }
 
   /** GitHub's tree with the copy's changes in it; with no connection, the copy's own tree (`offline: true`). */
-  async tree(github, r, ref) {
+  async tree(github, r, ref, { readOnly = false, current = () => true } = {}) {
     const files = await this.files(r);
     if (!files) return github.tree(r, ref);
     const st = this.state(r);
@@ -201,10 +201,11 @@ export class Mirror {
     st.remoteKnown = true;
     st.remoteBySha = new Map([...remote].map(([path, e]) => [e.sha, path]));
     st.changed = p.changed;
-    for (const [path, sha] of p.adopt) st.bases.set(path, sha);
+    if (!readOnly) for (const [path, sha] of p.adopt) st.bases.set(path, sha);
     const tree = data.tree.map((e) => (p.shas.has(e.path) ? { ...e, sha: p.shas.get(e.path) } : e));
     for (const path of p.changed) if (!remote.has(path)) tree.push({ path, type: "blob", sha: p.shas.get(path) });
-    st.syncing = this.sync(github, r, files, p, remote).catch(() => {}).then(() => this.flush(r)).catch(() => {});
+    // A combined overview must never start downloads, removals or queued uploads at its sources.
+    if (!readOnly && current()) st.syncing = this.sync(github, r, files, p, remote).catch(() => {}).then(() => this.flush(r)).catch(() => {});
     return { ...data, tree, changed: p.changed, syncedAt: st.syncedAt };
   }
 
@@ -293,7 +294,7 @@ export class Mirror {
     }
     try {
       const res = await github.readText(r, path);
-      this.keep(r, files, path, res.sha, enc(res.text)).catch(() => {});
+      if (!opts.readOnly) this.keep(r, files, path, res.sha, enc(res.text)).catch(() => {});
       return res;
     } catch (e) {
       if (!unreachable(e) || opts.fresh || !st.local.has(path)) throw e;

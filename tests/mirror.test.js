@@ -314,3 +314,22 @@ test("a clone's files are used as they are: nothing downloaded that's the same",
   // Search inside notes looks in the copy once it's up to date.
   assert.deepEqual((await m.searchCode(gh, repo, "PULLED")).items, [{ path: "Wiki/B.md" }]);
 });
+
+test("read-only overview reads never sync, remove, keep or flush a source copy", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n", "Wiki/Old.md": "old\n" });
+  gh.online = false;
+  await m.writeText(gh, repo, "Wiki/Home.md", "waiting edit\n", gh.files.get("Wiki/Home.md").sha, "Edit");
+  gh.online = true;
+  gh.files.delete("Wiki/Old.md");
+  await gh.set("Wiki/New.md", "new\n");
+  m.sync = () => { throw Error("overview started sync"); };
+  m.flush = () => { throw Error("overview started an upload"); };
+  m.keep = () => { throw Error("overview wrote a copy"); };
+  const t = await m.tree(gh, repo, "main", { readOnly: true });
+  assert(t.tree.some(e => e.path === "Wiki/New.md"));
+  assert.equal((await m.readText(gh, repo, "Wiki/Home.md", { readOnly: true })).text, "waiting edit\n");
+  assert.equal((await m.readText(gh, repo, "Wiki/New.md", { readOnly: true })).text, "new\n");
+  assert(mem.files.has("Wiki/Old.md"), "read-only scan never removes source files");
+  assert(!mem.files.has("Wiki/New.md"), "read-only scan never downloads into the source");
+  assert.equal(gh.files.get("Wiki/Home.md").text, "home\n", "pending source edit is not uploaded");
+});
