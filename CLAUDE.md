@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for contributors and AI agents working on Commonplace.md: a static browser app that reads and edits Markdown and CSV notes kept in GitHub repos. `README.md` says what it does, how to set it up and how the code is laid out.
+Guidance for contributors and AI agents working on Commonplace.md: a static browser app that reads and edits Markdown and CSV notes kept in GitHub repos. `README.md` introduces the app and links to detailed guides in `docs/`. See `docs/getting-started.md` for setup, `docs/blocks.md` for block options, and `docs/contributing.md` for local development and code layout.
 
 ## Rules
 
