@@ -8,7 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, sortAssignments, withSeenAssignments,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -326,7 +326,7 @@ test("a repo with no task setup keeps the fields it always had", () => {
   assert.equal(s.configured, false);
   assert.equal(s.folder, "Tasks");
   assert.deepEqual(s.fields.filter((f) => f.on).map((f) => f.key), ["status", "priority", "assignee", "area", "requested_by"]);
-  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Blocked", "Waiting", "Done"]);
+  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Testing", "Blocked", "Waiting", "Done"]);
 });
 
 test("a task setup starts from a new project's fields and changes what it names", () => {
@@ -980,4 +980,24 @@ test("an open task matches the inbox identity and a reassignment surfaces after 
   assert.equal(sortAssignments(assignmentTasks([elsewhere], setup, pat), seen).open.length, 1);
   const after = assignmentTasks([task("@Zoe", { assignment_id: "third" })], setup, zoe);
   assert.equal(sortAssignments(after, seen).open.length, 1);
+});
+
+test("reviews honour custom fields/statuses, explicit reviewer, assignee fallback and identity", () => {
+  const setup = taskSetup({ fields: { status: { prop: "state", values: ["Open", "Verify", "Done"] }, reviewer: { prop: "check_by" }, assignee: { prop: "assigned" }, type: { prop: "kind" } } });
+  const n = (id, props) => ({ path: `Tasks/${id}.md`, props: { id, state: "Verify", ...props } });
+  const notes = [n("N-1", { check_by: "Ana Lee", assigned: "Other" }), n("N-2", { check_by: "Other", assigned: "Ana Lee" }),
+    n("N-3", { check_by: "", assigned: "Ana Lee (Agent)" }), n("N-4", { check_by: ["Other", "@ana"] }),
+    n("N-5", { check_by: "Ana Lee", state: "Done" }), n("N-6", { check_by: "Ana Lee", kind: "Epic" }),
+    n("N-7", { check_by: "ana@example.test" }), n("N-8", { check_by: "Ana Lee", state: "Open" })];
+  assert.deepEqual(reviewTasks(notes, setup, { name: "Ana Lee", login: "ana" }, ["Verify"]).map((t) => t.id), ["N-4", "N-3", "N-1"]);
+  assert.deepEqual(reviewTasks(notes, setup, { name: "Ana Lee" }), [], "default Testing does not treat every open state as review");
+  assert.deepEqual(reviewTasks(notes, setup, {} , ["Verify"]), [], "no implicit identity");
+  assert.equal(reviewTasks([n("N-9", { assigned: "ANA LEE" })], setup, { name: "Ana Lee" }, ["verify"])[0].status, "Verify");
+});
+
+test("a task waiting for review is not a personal work claim", async () => {
+  const { claimedTasks } = await import("../src/vault.js");
+  const task = { path: "Tasks/Review.md", props: { assignee: "Ana Lee", status: "Testing" } };
+  assert.deepEqual(claimedTasks([task], "Ana Lee"), []);
+  assert.equal(claimedTasks([{ ...task, props: { ...task.props, status: "In Progress" } }], "Ana Lee").length, 1);
 });

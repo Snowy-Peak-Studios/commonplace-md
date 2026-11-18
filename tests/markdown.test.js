@@ -167,15 +167,15 @@ test("a needs-attention block becomes a placeholder with what it shows, its owne
 
 test("a needs-attention block's options: show (both, or one), owner and login; other lines ignored", () => {
   const both = ["questions", "mentions"];
-  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false });
-  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false });
+  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false, reviewStatuses: ["Testing"] });
+  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false, reviewStatuses: ["Testing"] });
   assert.deepEqual(attentionOptions("show: mentions").show, ["mentions"]);
   assert.deepEqual(attentionOptions("show: [Mention]").show, ["mentions"]);
-  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true }, "always questions first");
+  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true, reviewStatuses: ["Testing"] }, "always questions first");
   assert.deepEqual(attentionOptions("show: both").show, both);
-  assert.deepEqual(attentionOptions("show: all").show, ["questions", "mentions", "assignments"]);
+  assert.deepEqual(attentionOptions("show: all").show, ["reviews", "questions", "mentions", "assignments"]);
   assert.deepEqual(attentionOptions("show: assignment").show, ["assignments"]);
-  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false, reviewStatuses: ["Testing"] });
 });
 
 test("@login becomes a mention, but not in code, a link or an email", () => {
@@ -214,4 +214,11 @@ test("board reads its options in order and renders the source as text", () => {
   });
   assert.deepEqual(boardOptions(""), { columns: [], areas: [], assignee: "", sprint: "", types: [] });
   assert.match(render("```board\nareas: <script>\n```"), /class="board-block"><pre><code>areas: &lt;script&gt;/);
+});
+
+test("reviews are optional, first in all, and retain custom multiword review statuses", () => {
+  assert.deepEqual(attentionOptions("show: reviews\nreview-statuses: [Testing, Needs review]").reviewStatuses, ["Testing", "Needs review"]);
+  assert.deepEqual(attentionOptions("show: review").show, ["reviews"]);
+  assert.deepEqual(attentionOptions("review-statuses: ").reviewStatuses, ["Testing"]);
+  assert.match(render("```needs-attention\nshow: reviews\nreview-statuses: Needs review\nowner: Ana Lee\n```"), /data-review-statuses="\[&quot;Needs review&quot;\]"/);
 });

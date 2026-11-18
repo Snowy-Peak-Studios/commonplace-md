@@ -104,7 +104,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Relations:** a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
 - **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](#task-fields)).
 - **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
-- **Inboxes:** an Inbox button that opens your own inbox, found by your GitHub login, with the top three free tasks you could start and a Claim button. A dot on the button says something there waits on you.
+- **Inboxes:** an Inbox button opens your own inbox. Needs attention can show **For review** first with `show: reviews`: tasks in Testing for the named reviewer, falling back to the assignee when no reviewer is declared. Use `review-statuses:` for custom review states. Reviews stay until the task leaves that state, and are not dismissed with Seen. **Tasks for today** keeps the existing `top-tasks` block and its Claim action. A dot says something waits on you.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](#working-with-ai-agents-optional)). A declared sibling registry can route an item to another authorized vault: the agent verifies the saved destination task before clearing the source ([how](example-vault/How%20To/Use%20your%20inbox.md#an-item-for-another-vault)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
 
@@ -454,7 +454,7 @@ example-vault/
 ├── Bases/
 │   ├── Tasks.base               a base with four views (By status, By parent, Open, Done), a formula, groups, sorts and filters
 │   └── Sprints.base             the sprints, with a Current sprint view (start <= today() and end >= today())
-├── Tasks/                       six task notes with id, status, priority, area, assignee and requested_by properties, and checklists;
+├── Tasks/                       seven task notes with id, status, priority, area, assignee, requested_by and optional reviewer properties, and checklists;
 │                                an epic, Get set up, with three of them under it (part_of); sprints and estimates
 ├── Sprints/
 │   ├── Sprint 1.md              a sprint: start, end and goal; its page lists its tasks by status

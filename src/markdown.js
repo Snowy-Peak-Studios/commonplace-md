@@ -223,8 +223,9 @@ export function createMarkdown() {
     }
     // A ```needs-attention block: the app puts the questions and mentions box (or one of them) there.
     if (lang === "needs-attention") {
-      const { owner, login, show, showSet } = attentionOptions(token.content);
+      const { owner, login, show, showSet, reviewStatuses } = attentionOptions(token.content);
       return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
+        + `${show.includes("reviews") ? ` data-review-statuses="${esc(JSON.stringify(reviewStatuses))}"` : ""}`
         + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     // A ```base block: a base view written in the page (what a .base file holds); the app draws its table there.
@@ -317,25 +318,28 @@ export function appBlockOptions(src) {
 
 /** What a ```needs-attention block can show, in the order the box lists them. */
 const DEFAULT_ATTENTION = ["questions", "mentions"];
-export const ATTENTION_SHOWS = [...DEFAULT_ATTENTION, "assignments"];
+export const ATTENTION_SHOWS = ["reviews", ...DEFAULT_ATTENTION, "assignments"];
 
 /**
  * The options of a ```needs-attention block, one per line, all written in the block: `show: questions, mentions`
- * (plus optional "assignments"; "both" means questions and mentions, "all" shows the three; omitted, both, with `showSet` false so the box can
+ * (plus "reviews" and "assignments"; "both" means questions and mentions, "all" shows every kind; omitted, both, with `showSet` false so the box can
  * say so), `owner: Your Name` (whose questions: the tasks they asked for, review or whose agent has them) and
  * `login: your-login` (whose mentions: `@` and that GitHub login; the `@` may be written too). Other lines are
- * ignored.
+ * ignored. `review-statuses` is a comma-separated list, defaulting to Testing.
  */
 export function attentionOptions(src) {
-  const out = { owner: "", login: "", show: [...DEFAULT_ATTENTION], showSet: false };
+  const out = { owner: "", login: "", show: [...DEFAULT_ATTENTION], showSet: false, reviewStatuses: ["Testing"] };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(owner|login|show)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(owner|login|show|review-statuses)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
     const key = m[1].toLowerCase();
     if (key === "owner") out.owner = unquote(m[2]);
     else if (key === "login") out.login = unquote(m[2]).replace(/^@/, "");
-    else {
+    else if (key === "review-statuses") {
+      const values = m[2].trim().replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+      if (values.length) out.reviewStatuses = [...new Set(values)];
+    } else {
       const words = m[2].toLowerCase().replace(/^\[|\]$/g, "").split(/[\s,]+/).map(unquote).filter(Boolean);
       const picked = words.includes("all") ? [...ATTENTION_SHOWS]
         : ATTENTION_SHOWS.filter((kind) => words.some((word) => word === kind || word + "s" === kind

@@ -1431,7 +1431,7 @@ await fresh.close();
 await page.setViewport({ width: 1280, height: 860 });
 await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
 const boardPicker = '.task-board select[aria-label="Status of T-3"]';
-check(await until(() => document.querySelectorAll(".task-board .board-column").length === 5, 15000),
+check(await until(() => document.querySelectorAll(".task-board .board-column").length === 6 && !!document.querySelector('.board-column[aria-label="Testing"]'), 15000),
   "the board shows a column for each configured status");
 check(await page.$eval(".task-board", (el) => !el.textContent.includes("Get set up") && el.textContent.includes("Columns use the statuses from Task fields.")),
   "the board names the source of its columns and omits the epic");

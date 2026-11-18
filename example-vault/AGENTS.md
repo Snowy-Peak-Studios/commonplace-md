@@ -57,10 +57,12 @@ Tasks that belong here can still be committed with their source cleanup in one s
 ## Tasks
 
 - One note per task in `Tasks/`, made from `Templates/Task.md`. Each task is a user story with acceptance criteria.
-- Properties: `id`, `status` (To Do / In Progress / Waiting / Done; *Waiting* is a task your person put off with **Not now**), `assignee`, `requested_by`, `area`, `priority` (High / Medium / Low).
+- Properties: `id`, `status` (To Do / In Progress / Testing / Waiting / Done; *Waiting* is a task your person put off with **Not now**), `assignee`, `requested_by`, `area`, `priority` (High / Medium / Low).
 - A new task's `id` is the highest one + 1 (`grep -h "^id:" Tasks/*.md | sort -V | tail -1`). IDs are never reused.
 
 ### Picking a task
+
+- Tasks in Testing (or your configured review state) await the person's decision. Even when assigned to them alone, they are not claims for an agent to take over; resume only when they request changes or return the task to active work.
 
 - Your person names one, or you take the next one in this order:
   1. **Tasks your person claimed for you**: `assignee` is exactly their name, with no agent after it (e.g. `Ann Example`), and the task isn't done. That's how they pick your next task, for example with **Claim** in the app's inbox. The highest priority first.
@@ -79,12 +81,13 @@ Tasks that belong here can still be committed with their source cleanup in one s
 
 ### One task at a time
 
-- Finish the task you claimed before you start another.
+- Finish the task you claimed, or hand it back for required review, before you start another.
 - **Giving one up:** set it back to `status: To Do` and `assignee: ""`, add a line on how far it got, commit and push.
 
 ### Done
 
-- Set `status: Done` only when every acceptance criterion is met. Write what was done and the commit in the task's notes. Done tasks keep their assignee.
+- When your person requires review, finish the criteria and checks, record the work/commit and previous agent assignment, then hand the task to its reviewer in Testing (or the configured review state). They have the final close/rework decision. Do not claim a review handoff as approval.
+- Otherwise set `status: Done` only when every criterion is met, or record an explicit decision by your person to close it. Write the work and commit in its notes; keep assignment/history.
 - If part of it is left, narrow the task to what was done (Done) and add a new To Do task for exactly what's left.
 
 ## Questions

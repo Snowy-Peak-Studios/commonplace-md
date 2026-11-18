@@ -609,7 +609,7 @@ export function assigneeOptions(people, collaborators, login = "") {
 export function claimedTasks(notes, owner, login = "") {
   if (!foldName(owner) && !login) return [];
   return notes
-    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
+    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !/^testing$/i.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
       && assigneeMatches(n.props.assignee, { name: owner, login }))
     .map((n) => ({ ...n, agent: splitAssignee(n.props.assignee).agent }))
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
@@ -835,7 +835,7 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
  * with no setup has had all along; `optional` ones start off in a new setup, until a project turns them on.
  */
 export const TASK_FIELDS = [
-  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Blocked", "Waiting", "Done"], legacy: true },
+  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Testing", "Blocked", "Waiting", "Done"], legacy: true },
   { key: "priority", label: "Priority", kind: "choice", values: ["High", "Medium", "Low"], legacy: true },
   { key: "assignee", label: "Assignee", kind: "person", legacy: true },
   { key: "area", label: "Area", kind: "text", legacy: true },
@@ -1332,6 +1332,25 @@ export function boardColumns(notes, options, setup, { sprint = null, resolve, id
   return columns;
 }
 
+
+/** Tasks waiting for this person's review. A declared reviewer takes precedence over the assignee. */
+export function reviewTasks(notes, setup, identity, statuses = ["Testing"]) {
+  const status = fieldProp(setup, "status"), type = fieldProp(setup, "type");
+  const reviewer = fieldProp(setup, "reviewer"), assignee = fieldProp(setup, "assignee");
+  const waiting = new Set(statuses.map(foldName).filter(Boolean));
+  const matches = (value) => (Array.isArray(value) ? value : [value]).some((v) => {
+    const person = splitAssignee(v).name;
+    return !/^[^@\s]+@[^@\s]+$/.test(person) && assigneeMatches(person, identity);
+  });
+  return notes.filter(({ props }) => {
+    const declared = props[reviewer];
+    const hasReviewer = (Array.isArray(declared) ? declared : [declared]).some((v) => String(v ?? "").trim());
+    return waiting.has(foldName(props[status])) && !isDoneStatus(props[status], setup)
+      && foldName(props[type]) !== "epic" && matches(hasReviewer ? declared : props[assignee]);
+  }).sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path)).map(({ path, props }) => ({
+    path, id: props.id, status: String(props[status] ?? ""),
+  }));
+}
 
 /** The open tasks assigned to the person's GitHub login or vault name. */
 export function assignmentTasks(notes, setup, identity) {

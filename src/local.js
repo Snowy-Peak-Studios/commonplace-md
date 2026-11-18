@@ -439,7 +439,7 @@ export const EXAMPLE_FILES = [
   "How To/Work with tasks.md", "How To/Write and link notes.md", "Notes/Inbox.md", "Notes/Inboxes/Your name.md",
   "Other kinds of files.md", "Set up tasks.md", "Sprints/Sprint 1.md", "Sprints/Sprint 2.md", "Task Board.md",
   "Tasks/Add a reading list.md", "Tasks/Get set up.md", "Tasks/Invite a friend.md", "Tasks/Make a note template.md",
-  "Tasks/Try the app on a phone.md", "Tasks/Write the welcome note.md", "Templates/Note.md", "Templates/Task.md",
+  "Tasks/Review the example vault.md", "Tasks/Try the app on a phone.md", "Tasks/Write the welcome note.md", "Templates/Note.md", "Templates/Task.md",
 ];
 
 /** The example vault's settings, as its README suggests them. */

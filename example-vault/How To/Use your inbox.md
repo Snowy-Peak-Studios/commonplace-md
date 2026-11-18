@@ -62,7 +62,15 @@ This is an agent workflow. The app's Inbox button still opens the current vault'
 
 Each person can have their own in `Notes/Inboxes/`, with their GitHub login in its `github` property. The **Inbox** button opens yours when you're signed in with that login ([Your name](../Notes/Inboxes/Your%20name.md) shows how).
 
-## The top tasks to start
+## Review completed work
+
+Add `reviews` to a needs-attention block's show line. For a review-only panel, use the same block with `show: reviews`. Set `review-statuses: Testing`, or a comma-separated list such as `Testing, Needs review`. The default is Testing; older blocks retain their existing show choices.
+
+Reviews come first. A named reviewer takes precedence over an assignee; with no reviewer the assignee identifies the person. A review task appears once within a combined box even when it also has a question or assignment. It stays visible until its status changes, including after Seen on other items.
+
+Press **Review** to open the task, check its criteria, then use its Status field to close it as Done or return it to In Progress with a comment explaining changes. Follow your project's review handoff rules. [Review the example vault](../Tasks/Review%20the%20example%20vault.md) demonstrates the Testing state.
+
+## Tasks for today
 
 A ` ```top-tasks ` block shows the free tasks you could start now, each with **Claim**. Everything it shows is written in the block, one line each:
 

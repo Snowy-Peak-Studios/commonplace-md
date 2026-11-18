@@ -11,7 +11,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -183,6 +183,8 @@ async function loadAccess(repo) {
  */
 const ownerTokens = () => store.get("tokens", {}) || {};
 const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
+/** The account actually used by a source; local vaults have no GitHub identity. */
+const loginFor = (repo) => isLocal(repo) ? "" : ownerTokens()[String(repo?.owner || "").toLowerCase()]?.login ?? store.get("user")?.login ?? "";
 /** The local vaults' files (`src/local.js`): `gh` sends every call about a local vault there, never to GitHub. */
 const local = new LocalSource();
 /** Each GitHub vault's copy on this device (`src/mirror.js`): its reads and saves go through it. */
@@ -334,7 +336,7 @@ const inboxOf = (repo) => (repo && app.trees.get(repo.id)?.ownInbox) || repo?.in
  * It runs in the background: the Inbox button and shortcut switch to it when it's found.
  */
 async function findOwnInbox(repo, tree) {
-  const login = store.get("user")?.login;
+  const login = loginFor(repo);
   const paths = inboxCandidates([...tree.files.keys()], repo.inbox, repo.inboxes || "");
   if (!login || !paths.some((p) => p !== repo.inbox)) return;
   try {
@@ -378,17 +380,20 @@ const INBOX_DOT_SAID = "Something needs you";
 async function checkInboxDot(repo) {
   const tree = app.trees.get(repo.id);
   const inbox = inboxOf(repo);
-  const login = store.get("user")?.login;
-  if (!tree || !app.token || !login || !inbox || !tree.files.has(inbox)) return;
+  const login = loginFor(repo);
+  if (!tree || !usable(repo) || (!isLocal(repo) && !login) || !inbox || !tree.files.has(inbox)) return;
   const key = `${tree.version}:${inbox}:${login}`;
   if (tree.attentionKey === key) return;
   tree.attentionKey = key;
   let waits = false;
   try {
     const [note] = await baseNotes(repo, tree, [inbox]);
-    if (String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
+    if (isLocal(repo) ? !!String(note.props.owner ?? "").trim() : String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
       for (const b of await inboxAttention(repo, tree, inbox)) {
-        if (b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
+        if (isLocal(repo) && foldName(b.owner) !== foldName(note.props.owner)) continue;
+        if (b.show.includes("reviews") && (b.owner || b.login)
+          && (await loadReviews(repo, b.owner, b.login, b.reviewStatuses)).length) waits = true;
+        if (!waits && b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
           && (await loadQuestions(repo, b.owner, b.login)).some((t) => !t.answer)) waits = true;
         if (!waits && b.show.includes("assignments") && (b.owner || b.login)
           && sortAssignments(await loadAssignments(repo, b.owner, b.login), note.props[SEEN_ASSIGNMENTS]).open.length) waits = true;
@@ -2071,7 +2076,9 @@ function fillAttention(root, f) {
   for (const el of root.querySelectorAll(".attention-block")) {
     if (el.parentElement.closest(".embed-page")) continue;
     const show = (el.dataset.show || "questions,mentions").split(",").filter(Boolean);
-    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault, note: f });
+    let reviewStatuses = ["Testing"];
+    try { reviewStatuses = JSON.parse(el.dataset.reviewStatuses || '["Testing"]'); } catch { /* use Testing for an older block */ }
+    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault, reviewStatuses, note: f });
     if (box) el.replaceWith(box);
   }
 }
@@ -2088,7 +2095,14 @@ async function loadAssignments(repo, name, login) {
   return assignmentTasks(entry.notes ?? [], setup, { name, login });
 }
 
-const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"], assignments: ["Assigned to you", "check"] };
+async function loadReviews(repo, name, login, statuses) {
+  const setup = await loadTaskSetup(repo);
+  const entry = taskNotes(repo, setup);
+  await entry.load;
+  return reviewTasks(entry.notes ?? [], setup, { name, login }, statuses);
+}
+
+const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"], assignments: ["Assigned to you", "check"], reviews: ["For review", "check"] };
 
 /**
  * What waits on someone, as one box or one of its halves (`show`): the questions waiting on `owner` (tasks with
@@ -2098,76 +2112,78 @@ const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["
  * A mention with a reply right under it is left out (the head counts them); one marked **Seen** folds under
  * *Seen*. The seen list is the `seen_mentions` property of `note`, the open note the box is in.
  */
-function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, note = null }) {
+function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, reviewStatuses = ["Testing"], note = null }) {
   const tree = app.trees.get(repo.id);
   if (!tree) return null;
-  const wantQ = show.includes("questions"), wantM = show.includes("mentions"), wantA = show.includes("assignments");
-  const [title, iconName] = ATTENTION_TITLES[show.length === 1 ? show[0] : "both"];
+  const wantQ = show.includes("questions"), wantM = show.includes("mentions"), wantA = show.includes("assignments"), wantR = show.includes("reviews");
+  const [title, iconName] = ATTENTION_TITLES[show.length === 1 ? show[0] : "both"] || ATTENTION_TITLES.both;
   const parts = () => [
+    wantR ? (owner || login ? `For review by ${owner || "@" + login} · ${reviewStatuses.join(", ")}` : "Add owner or login to show reviews") : "",
     wantQ ? (owner ? `Questions for ${owner}` : "No owner: line, so no questions") : "",
     wantM ? (login ? `Mentions of @${login}` : "No login: line, so no mentions") : "",
     wantA ? (owner || login ? "Assigned to " + (owner || "@" + login) : "Add owner or login to show assignments") : "",
-    showSet ? "" : "Both (the block sets no show)",
+    showSet ? "" : "Questions and mentions (the block sets no show)",
   ].filter(Boolean);
   const head = h("small", { class: "muted" }, parts().join(" · "));
   const list = h("ol", { class: "attention-list" }, h("li", { class: "muted" }, "Looking…"));
   const box = h("section", { class: "attention", "aria-label": title },
     h("div", { class: "suggest-head" }, icon(iconName), h("strong", {}, title), head), list);
-  const askQ = wantQ && owner, askM = wantM && login, askA = wantA && (owner || login);
-  if (!askQ && !askM && !askA) {
-    list.replaceChildren(h("li", { class: "muted" }, wantQ && wantM ? "Add owner: (your name) and login: (your GitHub login) to the block."
-      : wantA ? "Add owner or login to the block." : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
+  const askQ = wantQ && owner, askM = wantM && login, askA = wantA && (owner || login), askR = wantR && (owner || login);
+  if (!askQ && !askM && !askA && !askR) {
+    list.replaceChildren(h("li", { class: "muted" }, "Add owner: (your name) or login: (your GitHub login) for the items this block shows."));
     return box;
   }
   const hasTasks = [...tree.files.keys()].some(isTaskPath);
-  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, ({ question: "Question", mention: "Mention", assignment: "Assignment" })[k]);
+  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, ({ review: "Review", question: "Question", mention: "Mention", assignment: "Assignment" })[k]);
   const state = (t) => t.answer
     ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
     : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
   const questionRow = (t) => h("li", {}, show.length > 1 ? kind("question") : null,
     h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
-    h("span", { class: "suggest-tags" }, state(t)),
-    h("span", { class: "attention-text" }, t.question));
+    h("span", { class: "suggest-tags" }, state(t)), h("span", { class: "attention-text" }, t.question));
   const seenNow = note ? noteProps(note.text)[SEEN_MENTIONS] : [];
   const canMark = !!note && canWrite(repo) && usable(repo);
-  let allFound = [];
-  let allAssignments = [];
+  let allFound = [], allAssignments = [];
   const markSeen = (mentions, assignments = []) => markInboxSeen(note, mentions, allFound, assignments, allAssignments);
   const assignmentRow = (task, seen = false) => h("li", {}, show.length > 1 ? kind("assignment") : null,
-    h("a", { href: hrefFor(repo, task.path), class: "suggest-name" },
-      task.id ? h("span", { class: "muted" }, task.id + " ") : null, shownName(task.path)),
-    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button",
-      title: "Mark assignment as seen", onclick: () => markSeen([], [task]) }, icon("check"), "Seen") : null);
+    h("a", { href: hrefFor(repo, task.path), class: "suggest-name" }, task.id ? h("span", { class: "muted" }, task.id + " ") : null, shownName(task.path)),
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark assignment as seen", onclick: () => markSeen([], [task]) }, icon("check"), "Seen") : null);
   const mentionRow = (m, seen = false) => h("li", {}, show.length > 1 ? kind("mention") : null,
-    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
-      m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
+    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path), m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
     m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
-    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it",
-      onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it", onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
     h("span", { class: "attention-text" }, m.text));
   Promise.all([
+    askR ? loadReviews(repo, owner, login, reviewStatuses) : [],
     askQ && hasTasks ? loadQuestions(repo, owner, login) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
     askA ? loadAssignments(repo, owner, login) : [],
-  ]).then(([tasks, { found, read }, assignments]) => {
-    allFound = found;
-    allAssignments = assignments;
+  ]).then(([reviews, tasks, { found, read }, assignments]) => {
+    if (app.trees.get(repo.id) !== tree) return;
+    allFound = found; allAssignments = assignments;
+    const reviewPaths = new Set(reviews.map((t) => t.path));
+    const questions = tasks.filter((t) => !reviewPaths.has(t.path));
     const ms = sortMentions(found, seenNow);
-    const assigned = sortAssignments(assignments, note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
-    const said = parts();
-    if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
-    if (askM) said[wantQ ? 1 : 0] = `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes`
-      + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "");
-    if (askA) said[Number(wantQ) + Number(wantM)] = assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s");
-    head.textContent = said.join(" · ");
-    if (canMark && ms.open.length + assigned.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button",
-      title: "Mark every new item as seen", onclick: () => markSeen(ms.open, assigned.open) }, icon("check"), "All seen"));
-    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow),
-      ...assigned.open.map((task) => assignmentRow(task)), ...ms.open.map((m) => mentionRow(m))];
-    const seenRows = [...assigned.seen.map((task) => assignmentRow(task, true)), ...ms.seen.map((m) => mentionRow(m, true))];
-    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {},
-      h("summary", { class: "muted" }, `Seen (${seenRows.length})`),
-      h("ol", { class: "attention-list" }, seenRows))));
+    const assigned = sortAssignments(assignments.filter((t) => !reviewPaths.has(t.path)), note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
+    head.textContent = [
+      askR ? `${reviews.length} for review · ${reviewStatuses.join(", ")}` : wantR ? "Add owner or login to show reviews" : "",
+      askQ ? `${questions.length} question${questions.length === 1 ? "" : "s"} for ${owner} · Answer on the task` : wantQ ? "No owner: line, so no questions" : "",
+      askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
+      askA ? assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s") : "",
+      showSet ? "" : "Questions and mentions (the block sets no show)",
+    ].filter(Boolean).join(" · ");
+    if (canMark && ms.open.length + assigned.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button", title: "Mark every new assignment and mention as seen", onclick: () => markSeen(ms.open, assigned.open) }, icon("check"), "All seen"));
+    const reviewRow = (t) => h("li", { class: "attention-review" }, kind("review"),
+      h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(t.path)),
+      h("span", { class: "chip" }, t.status), h("a", { href: hrefFor(repo, t.path), class: "btn small" }, "Review"),
+      h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path)?.question || "Test, then close or request changes on the task."));
+    const rows = [
+      reviews.length && show.length > 1 ? h("li", { class: "attention-section" }, h("strong", {}, "For review")) : null,
+      ...reviews.map(reviewRow), ...questions.filter((t) => !t.answer).map(questionRow), ...questions.filter((t) => t.answer).map(questionRow),
+      ...assigned.open.map((t) => assignmentRow(t)), ...ms.open.map((m) => mentionRow(m)),
+    ].filter(Boolean);
+    const seenRows = [...assigned.seen.map((t) => assignmentRow(t, true)), ...ms.seen.map((m) => mentionRow(m, true))];
+    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), h("ol", { class: "attention-list" }, seenRows))));
     list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
@@ -2216,8 +2232,8 @@ function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, coun
   const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
     orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode],
     fieldsSet ? fieldsSaid : `${fieldsSaid} (the block sets no fields)`, who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
-  const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
-    h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
+  const box = h("section", { class: "suggest", "aria-label": "Tasks for today" },
+    h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Tasks for today"),
       h("small", { class: "muted" }, said.join(" · "))),
     list);
   const editable = canWrite(repo) && usable(repo);
