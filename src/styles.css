@@ -1086,6 +1086,8 @@ table.csv tr:hover th.rownum .num { display: none; }
 dialog.modal {
   width: min(460px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1095,12 +1097,13 @@ dialog.modal {
 }
 dialog.modal.wide { width: min(1240px, calc(100vw - 32px)); }
 dialog.modal::backdrop { background: rgba(15, 12, 30, 0.42); backdrop-filter: blur(2px); }
-dialog.modal[open] { animation: pop 0.14s ease-out; }
+dialog.modal[open] { display: flex; flex-direction: column; animation: pop 0.14s ease-out; }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
-.modal-body { padding: 20px 22px 6px; }
+/* Keep actions visible while long forms, including expanded vault details, scroll independently. */
+.modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 20px 22px 6px; }
 .modal-body h2 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
 .modal-body p { margin: 0 0 14px; color: var(--text-2); font-size: 14px; }
-.modal-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 22px 18px; }
+.modal-foot { flex: none; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 22px 18px; }
 .modal-foot .spacer { flex: 1; }
 .field { display: block; margin: 0 0 14px; }
 .field > span { display: block; font-size: 13px; font-weight: 550; margin-bottom: 6px; color: var(--text-2); }

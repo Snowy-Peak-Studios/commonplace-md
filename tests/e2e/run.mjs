@@ -68,7 +68,7 @@ const searches = [];
 const page = await browser.newPage();
 page.on("dialog", (d) => d.accept());
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text() + (m.location().url ? " (" + m.location().url.replace(/[?#].*$/, "") + ")" : "")); });
 // A failed request says which address it was, so an expected one can be told from a real one.
 page.on("response", (r) => { if (r.status() >= 400) errors.push(`  (${r.status()} ${r.request().method()} ${r.url().replace(/[?#].*$/, "")})`); });
 await page.setRequestInterception(true);
