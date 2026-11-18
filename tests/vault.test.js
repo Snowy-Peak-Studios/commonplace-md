@@ -1016,3 +1016,22 @@ test("multiline captures edit one closed block, preserving owner, neighbours and
   assert.equal(replaceNewTasks(note, 1, 4, expected, ["New"]), null, "an unclosed block cannot consume following content");
   assert.equal(replaceNewTasks(note, 1, 10, expected, ["New"]), null, "cannot replace another block");
 });
+
+test("capture attachments support other files, safe names, collisions and moving between notes", async () => {
+  const { captureAttachment, captureAttachmentText } = await import("../src/vault.js");
+  const now = new Date("2026-11-18T12:00:00Z");
+  const file = { name: "Report [final].PDF", type: "application/pdf", size: 64 };
+  const used = ["Elsewhere/Report-final-2026-11-18-12-00-00-deadbeef.pdf"];
+  const a = captureAttachment(file, "Notes/Inbox.md", "Attachments", used, now, "deadbeef");
+  assert.equal(a.path, "Attachments/Report-final-2026-11-18-12-00-00-deadbeef-2.pdf");
+  assert.match(a.link, /^\[\[[^|]+\|Report  final .PDF\]\]$/);
+  assert.equal(new LinkIndex([...used, a.path]).resolve(a.name, "Tasks/A new task.md"), a.path);
+  const picture = captureAttachment({ name: "paste.png", type: "image/png", size: 10 }, "Inbox.md", "Attachments", [], now, "imagekey");
+  assert.match(picture.link, /^!\[\[/);
+  assert.throws(() => captureAttachment({ ...file, size: 0 }, "Inbox.md", "", []), /empty/);
+  assert.throws(() => captureAttachment({ ...file, size: 11 * 1024 * 1024 }, "Inbox.md", "", []), /10 MiB/);
+  assert.throws(() => captureAttachment(file, "Inbox.md", "../outside", []), /valid Attachments/);
+  assert.deepEqual(captureAttachmentText("- First\n- Second", 3, a.link), { text: "- First " + a.link + "\n- Second", cursor: 8 + a.link.length });
+  assert.equal(captureAttachmentText("- First\n- Second", 13, a.link).text, "- First\n- Second " + a.link);
+  assert.equal(captureAttachmentText("", 0, picture.link).text, picture.link);
+});

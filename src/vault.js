@@ -36,6 +36,35 @@ export function imageAttachment(file, notePath, settings, paths, now = new Date(
   return { name, path: directory ? `${directory}/${name}` : name, link: `![[${name}]]` };
 }
 
+/** A capture accepts images and other files, with a stable vault-wide name that survives moving its item. */
+export function captureAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
+  if (IMAGE_TYPES.has(file.type) || ((!file.type || file.type === "application/octet-stream") && isImagePath(file.name))) {
+    return imageAttachment(file, notePath, settings, paths, now, key);
+  }
+  if (!file.size) throw new Error("This file is empty.");
+  if (file.size > MAX_IMAGE_BYTES) throw new Error("This file is over 10 MiB. Choose a smaller file.");
+  const extension = /\.([a-z0-9]{1,16})$/i.exec(file.name)?.[1].toLowerCase() || "bin";
+  // Reuse the folder and safe-name rules, comparing the final extension for collision detection.
+  const converted = [...paths].map((path) => path.toLowerCase().endsWith("." + extension) ? path.slice(0, -extension.length) + "png" : path);
+  const stem = file.name.replace(/\.[^.]*$/, "") || "file";
+  const base = imageAttachment({ name: stem + ".png", type: "image/png", size: file.size }, notePath, settings, converted, now, key);
+  const name = base.name.replace(/\.png$/, "." + extension);
+  const path = base.path.replace(/\.png$/, "." + extension);
+  const label = (file.name || name).replace(/[\[\]|\r\n]/g, " ").trim();
+  return { name, path, link: `[[${name}|${label}]]` };
+}
+
+/** Append an attachment to the line containing the cursor, keeping every other capture item intact. */
+export function captureAttachmentText(text, at, link) {
+  text = toLf(text);
+  at = Math.max(0, Math.min(text.length, Number.isFinite(at) ? at : text.length));
+  const next = text.indexOf("\n", at);
+  const end = next < 0 ? text.length : next;
+  const start = text.lastIndexOf("\n", at - 1) + 1;
+  const insert = (text.slice(start, end).trim() ? " " : "") + link;
+  return { text: text.slice(0, end) + insert + text.slice(end), cursor: end + insert.length };
+}
+
 const blankOut = (s) => s.replace(/[^\n]/g, "");
 
 /** Splits `[[target#heading|alias]]` (the part inside the brackets). */

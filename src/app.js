@@ -5,7 +5,7 @@ import { GitHub, newTokenUrl } from "./github.js";
 import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
-  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
+  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
@@ -316,7 +316,7 @@ function renderNudge() {
 
 /** Reads the repo again from GitHub, asking first when the open note has unsaved changes. */
 async function reloadFromGitHub() {
-  if (app.file?.imageUpload) return toast("Wait for the image upload to finish.", "info");
+  if (app.file?.imageUpload) return toast("Wait for the upload to finish.", "info");
   if (app.file?.dirty && !(await confirmDialog(isLocal(app.repo) ? "Reload the notes?" : "Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
   if (app.file) store.remove(draftKey(app.file));
   if (app.repo) {
@@ -781,7 +781,7 @@ async function mayLeave(depthBefore) {
   const { parts } = parseHash();
   if (parts[0] === f.repo.id && parts.slice(1).join("/") === f.path) return true;
   if (f.imageUpload) {
-    toast("Wait for the image upload to finish.", "info");
+    toast("Wait for the upload to finish.", "info");
     return restoreNoteRoute(f, depthBefore);
   }
   if (!f.dirty) return true;
@@ -977,7 +977,7 @@ function setMode(mode) {
 
 function onTextChanged(text, changes) {
   const f = app.file;
-  if (f?.imageUpload && changes) f.imageUpload.at = changes.mapPos(f.imageUpload.at, -1);
+  if (f?.imageUpload && !f.imageUpload.capture && changes) f.imageUpload.at = changes.mapPos(f.imageUpload.at, -1);
   if (!f || f.text === text) return;
   f.text = text;
   if (f.kind === "csv") f.csv = null;
@@ -2051,6 +2051,7 @@ function fillNewTasks(root, f) {
     if (draft.mode === "add") draft.source = source;
     const focus = () => boxAt(n)?.querySelector(".newtasks-add textarea")?.focus();
     const begin = (mode, index = -1) => {
+      if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
       if (draft.text.trim()) return toast("Add or clear your current draft before editing another item.", "info");
       Object.assign(draft, { mode, source, index, text: mode === "list"
         ? newTasksBlock(source).items.map((item) => "- " + item).join("\n") : newTasksBlock(source).items[index] });
@@ -2062,7 +2063,7 @@ function fillNewTasks(root, f) {
       li.append(h("span", { class: "newtasks-tools" },
         h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: () => begin("item", index) }, icon("edit")),
         h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out", onclick: () => {
-          if (app.saving) return toast("Wait for the note to finish saving.", "info");
+          if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
           applyPreviewEdit(f, editNewTask(f.text, line, was, ""));
         } }, icon("x"))));
     }
@@ -2071,14 +2072,75 @@ function fillNewTasks(root, f) {
       oninput: () => { draft.text = input.value; },
     }, draft.text);
     const reset = () => {
+      if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
       f.newTaskDrafts.delete(n);
       renderPreview();
       focus();
     };
+    const attachments = h("div", { class: "newtasks-attachments" });
+    const status = h("p", { class: "newtasks-hint", role: "status" });
+    const paintAttachments = () => {
+      const links = (draft.files ?? []).filter((file) => input.value.includes(file.link)).map((file) => file.link);
+      attachments.innerHTML = sanitize(md.renderInline(links.join(" "), linkEnv(f.repo, f.path)));
+      fillImages(attachments, f.repo, f.path);
+      status.textContent = draft.upload ? "Uploading attachment…" : draft.error || "";
+      status.setAttribute("role", draft.error ? "alert" : "status");
+    };
+    const upload = async (file, at = input.selectionStart) => {
+      if (!file || app.file !== f || !canWrite(f.repo)) return;
+      if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
+      if (!isLocal(f.repo) && navigator.onLine === false) {
+        draft.error = "Connect to GitHub before adding an attachment. Your text is kept.";
+        draft.failed = file;
+        renderPreview();
+        return;
+      }
+      draft.upload = true;
+      draft.error = "";
+      f.imageUpload = { at: 0, capture: true };
+      for (const control of form.querySelectorAll("textarea, button, input")) control.disabled = true;
+      paintAttachments();
+      renderHeader();
+      try {
+        const tree = app.trees.get(f.repo.id);
+        const attachment = captureAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const saved = await gh.writeBytes(f.repo, fullPath(f.repo, attachment.path), bytes, `Add ${attachment.path} from ${APP_NAME}`);
+        wroteCommit(f.repo, saved);
+        treeChanged(f.repo, attachment.path, saved.sha);
+        const inserted = captureAttachmentText(draft.text, at, attachment.link);
+        draft.text = inserted.text;
+        (draft.files ||= []).push(attachment);
+        draft.failed = null;
+      } catch (e) {
+        draft.error = `Attachment not added: ${e.message} Your text is kept. Retry or choose another file.`;
+        draft.failed = file;
+      } finally {
+        draft.upload = false;
+        f.imageUpload = null;
+        renderHeader();
+        if (app.file === f) { renderPreview(); focus(); }
+      }
+    };
+    let attachmentAt = input.value.length;
+    const picker = h("input", { type: "file", hidden: true, "aria-label": "Choose an attachment", onchange: () => {
+      const file = picker.files[0];
+      picker.value = "";
+      upload(file, attachmentAt);
+    } });
+    input.addEventListener("paste", (event) => {
+      const transfer = event.clipboardData;
+      const file = transfer?.files?.[0] || [...(transfer?.items ?? [])].find((item) => item.kind === "file")?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      upload(file);
+    });
+    input.addEventListener("input", paintAttachments);
+
     const form = h("form", { class: "note-add newtasks-add", onsubmit: (e) => {
       e.preventDefault();
       if (app.file !== f || !canWrite(f.repo)) return;
-      if (app.saving) return toast("Wait for the note to finish saving.", "info");
+      if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
       const entered = newTaskItems(input.value);
       if (draft.mode === "add" && !entered.length) return;
       const current = f.text.split("\n").slice(start + 1, close).join("\n");
@@ -2094,12 +2156,16 @@ function fillNewTasks(root, f) {
       f.newTaskDrafts.delete(n);
       if (!applyPreviewEdit(f, next)) renderPreview();
       focus();
-    } }, input, h("p", { class: "newtasks-hint" }, "One idea per line. Add or keep changes, then Save the note."),
+    } }, input, picker, attachments, status, h("p", { class: "newtasks-hint" }, "One idea per line. Add or keep changes, then Save the note."),
     h("div", { class: "newtasks-actions" },
       h("button", { class: "btn small", type: "submit" }, icon(draft.mode === "add" ? "plus" : "check"), draft.mode === "add" ? "Add" : "Keep changes"),
+      h("button", { class: "btn small ghost", type: "button", onclick: () => { attachmentAt = input.selectionStart; picker.click(); } }, icon("image"), "Attach file"),
+      draft.failed ? h("button", { class: "btn small ghost", type: "button", onclick: () => upload(draft.failed) }, "Retry attachment") : null,
       draft.mode === "add" ? h("button", { class: "btn small ghost", type: "button", onclick: () => begin("list") }, "Edit list") : null,
       h("button", { class: "btn small ghost", type: "button", onclick: reset }, draft.mode === "add" ? "Clear" : "Cancel")));
     if (draft.mode === "list") el.querySelector(".newtasks-list").hidden = true;
+    if (draft.upload) for (const control of form.querySelectorAll("textarea, button, input")) control.disabled = true;
+    paintAttachments();
     el.append(form);
   });
 }
@@ -3578,7 +3644,7 @@ function renderTable() {
 async function save() {
   const f = app.file;
   if (!(f?.dirty || uploadable(f)) || app.saving || viewOnly(f.kind)) return;
-  if (f.imageUpload) return toast("Wait for the image upload to finish.", "info");
+  if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
   const before = f.text;
   const text = toLf(before);
   app.saving = true;
