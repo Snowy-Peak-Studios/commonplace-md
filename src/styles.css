@@ -1406,3 +1406,6 @@ select.input { padding-right: 8px; }
 .preview .overview-sources { list-style: none; padding: 0; }
 .overview-row-source { flex-basis: 100%; overflow-wrap: anywhere; }
 .inbox-overview .suggest-head { flex-wrap: wrap; }
+
+.overview-binding-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.overview-binding-result { overflow-wrap: anywhere; }

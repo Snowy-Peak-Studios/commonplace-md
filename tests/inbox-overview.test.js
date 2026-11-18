@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { overviewOptions, overviewPath, sourceKey, resolveOverviewSource, overviewSource, overviewBlock, overviewContents, writeOverviewNote, overviewCaptures, overviewRows, overviewEach } from '../src/inbox-overview.js';
+import { overviewOptions, overviewPath, sourceKey, resolveOverviewSource, overviewSource, overviewBlock, overviewContents, writeOverviewNote, overviewCaptures, overviewRows, overviewEach, overviewOwnerProblem } from '../src/inbox-overview.js';
 import { taskSetup, assignmentTasks, findMentions, mentionKey } from '../src/vault.js';
 import { noteProps } from '../src/bases.js';
 import { upgradeInboxOverview, migrateInboxOverview } from '../src/store.js';
@@ -73,4 +73,14 @@ test('overview preference migration never enables missing, legacy or malformed s
  const m=new Map([['commonplace:inboxOverview','{"enabled":true}'],['other','keep']]);const storage={getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};
  assert.equal(migrateInboxOverview(storage),true);assert.equal(JSON.parse(m.get('commonplace:inboxOverview')).enabled,false);assert.equal(migrateInboxOverview(storage),false);assert.equal(m.get('other'),'keep');
  assert.equal(migrateInboxOverview({getItem:()=>{throw Error('blocked')}}),false);
+});
+
+test('overview owner checks accept name variants but retain exact diagnostics for a real mismatch',()=>{
+ const source={person:'Zoe Lukasz',inbox:'Notes/Inbox.md'};
+ assert.equal(overviewOwnerProblem({owner:'  Zoë  Łukasz  '},source),'');
+ const problem=overviewOwnerProblem({owner:'Different Person'},source);
+ for(const text of ['Zoe Lukasz','Different Person','Notes/Inbox.md','Check inbox'])assert(problem.includes(text));
+ assert.equal(overviewOwnerProblem({},source),'','an explicit person can retain the existing shared-inbox workflow');
+ assert(overviewOwnerProblem({owner:['One','Two']},source).includes('one text name'));
+ assert(overviewOwnerProblem({owner:42},source).includes('one text name'));
 });

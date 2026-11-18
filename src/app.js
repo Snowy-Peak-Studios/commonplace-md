@@ -2111,6 +2111,28 @@ async function openOverviewSetup() {
       const blocks = mod.overviewContents(data.text);
       return { ...data, block: blocks.length === 1 ? blocks[0] : "" };
     },
+    inspect: async (repo, inbox, current = () => true) => {
+      const check = () => { if (!current()) throw new Error("The inbox check was cancelled."); };
+      check();
+      if (app.repos.find((r) => r.id === repo.id) !== repo) throw new Error("This source changed in Settings. Reopen setup.");
+      const path = mod.overviewPath(inbox);
+      if (!path.toLowerCase().endsWith(".md")) throw new Error("Choose an inbox Markdown page.");
+      if (!isLocal(repo) && !gh.tokenFor(repo.owner)) throw new Error("Connect this source's owner in Settings first.");
+      try {
+        const marker = await readMarker(repo);
+        check();
+        if (marker.text && JSON.parse(marker.text).modules?.inboxes === false) throw new Error("This source has its inbox module turned off.");
+        const data = await gh.readText(repo, fullPath(repo, path), { fresh: true, readOnly: true });
+        check();
+        if (app.repos.find((r) => r.id === repo.id) !== repo) throw new Error("This source changed in Settings. Reopen setup.");
+        const props = noteProps(data.text);
+        return { owner: props.owner, github: typeof props.github === "string" ? props.github : "" };
+      } catch (e) {
+        if (e.need === "folder" || e.need === "permission") throw new Error("Open this source and allow its folder, then check the inbox again.");
+        if (e.status === 404) throw new Error(`The inbox ${path} was not found or this account cannot read it. Check the path and source access.`);
+        throw e;
+      }
+    },
     save: async ({ target, path, options }) => {
       let repo = target ? app.repos.find((r) => r.id === target) : null;
       if (target && (!repo || repo.local !== "browser")) throw new Error("Use a private vault kept in this browser.");
@@ -2256,7 +2278,6 @@ async function readOverviewSource(repo, source, options, files, current) {
   for (const path of [...files.keys()]) if (!paths.includes(path)) files.delete(path);
   const notes = paths.map((path) => ({ path, ...files.get(path), props: noteProps(files.get(path).text) }));
   const inboxProps = notes.find((n) => n.path === source.inbox)?.props || {};
-  if (inboxProps.owner && foldName(inboxProps.owner) !== foldName(source.person)) throw fail("setup", "This inbox's owner differs from the selected person. Check the binding.");
   return { notes, setup, inboxProps, state: tree.truncated ? "partial" : offline || tree.offline ? "offline" : "current",
     checkedAt: offline || tree.offline ? mirror.info(repo).syncedAt || Date.now() : Date.now(),
     message: tree.truncated ? "The vault file list is incomplete; these counts are partial." : options.show.includes("mentions") && !source.login ? "No mention login is configured; other selected kinds are shown." : "" };

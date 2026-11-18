@@ -144,6 +144,14 @@ export function overviewCaptures(textValue, owner) {
   return out;
 }
 
+/** Exact source diagnostics: preserve the owner boundary, and expose the values needed to correct it. */
+export function overviewOwnerProblem(props, source) {
+  if (props.owner == null || props.owner === "") return ""; // existing explicit-person configurations may use a shared inbox
+  if (typeof props.owner !== "string" || !props.owner.trim()) return `The owner in ${source.inbox} must be one text name. Open that inbox to check its properties.`;
+  return foldName(props.owner) === foldName(source.person) ? ""
+    : `Selected person ${JSON.stringify(source.person)} does not match inbox owner ${JSON.stringify(props.owner.trim())} in ${source.inbox}. In Settings, use Check inbox to read and deliberately use this owner.`;
+}
+
 export function overviewRows({ notes, setup, source, options, inboxProps = {} }) {
   const identity = { name: source.person, login: source.login }, rows = [];
   const add = (kind, path, label, detail = "", extra = {}) => rows.push({ kind, path, label, detail, ...extra,

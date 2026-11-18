@@ -1,6 +1,6 @@
 // Loaded only for the optional private inbox overview or its explicit setup action.
 import { overviewOptions, overviewRows, overviewEach, resolveOverviewSource, sourceKey, overviewSource,
-  overviewBlock, writeOverviewNote, overviewContents, overviewPath, OVERVIEW_KINDS } from "./inbox-overview.js";
+  overviewBlock, writeOverviewNote, overviewContents, overviewPath, overviewOwnerProblem, OVERVIEW_KINDS } from "./inbox-overview.js";
 export { overviewOptions, overviewSource, writeOverviewNote, overviewContents, overviewPath };
 
 const LABELS = { reviews: "For review", questions: "Questions", assignments: "Assignments", mentions: "Mentions", "new-tasks": "New tasks" };
@@ -70,6 +70,8 @@ export function mountOverview(el, optionsText, api) {
         entry.repo = resolveOverviewSource(entry.source, api.repos());
         const result = await api.read(entry.repo, entry.source, options, entry.files, () => current(g));
         if (!current(g)) return;
+        const ownerProblem = overviewOwnerProblem(result.inboxProps, entry.source);
+        if (ownerProblem) throw Object.assign(new Error(ownerProblem), { kind: "setup" });
         entry.rows = overviewRows({ ...result, source: entry.source, options });
         entry.state = result.state;
         entry.message = result.message || "";
@@ -115,11 +117,45 @@ export async function showOverviewSetup(api) {
     const person = h("input", { class: "input", value: prior?.person || "", placeholder: "Your name in this vault" });
     const login = h("input", { class: "input", value: prior?.login ?? api.login(repo), placeholder: "Mention login (optional)" });
     const inbox = h("input", { class: "input", value: prior?.inbox || repo.inbox || "", placeholder: "Notes/Inbox.md" });
+    let checkVersion = 0;
+    const result = h("p", { class: "note overview-binding-result", role: "status" });
+    const useOwner = h("button", { type: "button", class: "btn small", hidden: true }, "Use this inbox owner");
+    const checkInbox = h("button", { type: "button", class: "btn small" }, "Check inbox");
+    let checked = null;
+    const invalidate = () => { checkVersion++; checked = null; result.textContent = ""; useOwner.hidden = true; checkInbox.disabled = false; };
+    for (const input of [inbox, person, login]) input.addEventListener("input", invalidate);
+    checkInbox.addEventListener("click", async () => {
+      const version = ++checkVersion, requested = inbox.value.trim();
+      useOwner.hidden = true; checked = null; checkInbox.disabled = true;
+      result.className = "note overview-binding-result"; result.textContent = "Checking this inbox only…";
+      try {
+        const path = overviewPath(requested);
+        if (!path.toLowerCase().endsWith(".md")) throw new Error("Choose an inbox Markdown page.");
+        const data = await api.inspect(repo, path, () => version === checkVersion && check.checked && checkInbox.isConnected);
+        if (version !== checkVersion || !check.checked || !checkInbox.isConnected) return;
+        if (typeof data.owner !== "string" || !data.owner.trim()) throw new Error(`No single owner name is declared in ${path}. Open the inbox and check its owner property, or keep an explicit person binding for a shared inbox.`);
+        checked = { owner: data.owner.trim(), path };
+        result.textContent = `Inbox owner: ${checked.owner}${data.github ? ` · GitHub: ${data.github}` : ""}. Use this name for task and capture matching; the mention login is separate.`;
+        useOwner.hidden = false;
+      } catch (e) {
+        if (version !== checkVersion || !check.checked || !checkInbox.isConnected) return;
+        result.className = "error overview-binding-result"; result.textContent = e.message;
+      } finally { if (version === checkVersion) checkInbox.disabled = false; }
+    });
+    useOwner.addEventListener("click", () => {
+      if (!checked || !check.checked || checked.path !== inbox.value.trim()) return;
+      person.value = checked.owner;
+      result.className = "note overview-binding-result";
+      result.textContent = `Selected person now matches ${checked.owner}. Save and open overview to keep this binding.`;
+      useOwner.hidden = true;
+    });
     const details = h("div", { class: "overview-source-fields", hidden: !check.checked },
-      h("label", { class: "field" }, h("span", {}, "Person in this vault"), person),
+      h("label", { class: "field" }, h("span", {}, "Person in this vault"), person,
+        h("small", {}, "The exact name in your inbox's owner property. Check the inbox below if unsure.")),
       h("label", { class: "field" }, h("span", {}, "Mention login"), login),
-      h("label", { class: "field" }, h("span", {}, "Your inbox page"), inbox));
-    check.addEventListener("change", () => { details.hidden = !check.checked; });
+      h("label", { class: "field" }, h("span", {}, "Your inbox page"), inbox),
+      h("div", { class: "overview-binding-actions" }, checkInbox, useOwner), result);
+    check.addEventListener("change", () => { details.hidden = !check.checked; invalidate(); });
     return { repo, check, person, login, inbox, node: h("div", { class: "overview-source-choice" },
       h("label", { class: "checkline" }, check, h("span", {}, repo.label, h("small", { class: "muted" }, repo.local ? " · on this device" : ` · ${repo.owner}/${repo.repo} · ${repo.branch} · ${repo.folder || "/"}`))), details) };
   });

@@ -29,14 +29,14 @@ try{
   const box=await page.$eval('.modal-body',e=>{const r=e.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
   await page.mouse.move(box.x,box.y);await page.mouse.wheel({deltaY:16000});
   await page.waitForFunction(()=>{const e=document.querySelector('.modal-body');return e.scrollTop>0&&e.scrollTop+e.clientHeight>=e.scrollHeight-2;});
-  assert(await page.$eval('.overview-source-choice:last-of-type .overview-source-fields label:last-child input',visible),name+': last source field is reachable');
+  assert(await page.$eval('.overview-source-choice:last-of-type .overview-source-fields label:nth-of-type(3) input',visible),name+': last source field is reachable');
   assert(await page.$eval('.modal-foot',visible),name+': footer stays visible after scrolling');
   assert.equal(await page.$eval('#main',e=>e.scrollTop),before,name+': dialog scrolling leaves the background unchanged');
   assert.equal(await page.$eval('.overview-source-choice .overview-source-fields input',e=>e.value),'Person 1',name+': entered values survive scrolling and resize');
   await page.screenshot({path:OUT+'/'+name+'.png'});
   // Keyboard focus brings the first field and final field into view without moving the footer.
   await page.focus('.modal input');await frame();assert(await page.$eval('.modal input',visible),name+': first field can be focused');
-  await page.focus('.modal-foot button');await page.keyboard.down('Shift');await page.keyboard.press('Tab');await page.keyboard.up('Shift');await frame();
+  await page.focus('.modal-foot button');await page.keyboard.down('Shift');await page.keyboard.press('Tab');await page.keyboard.press('Tab');await page.keyboard.up('Shift');await frame();
   assert(await page.evaluate(()=>document.activeElement===document.querySelectorAll('.overview-source-choice:last-of-type input')[3]),name+': Shift+Tab reaches the last source field');
   assert(await page.evaluate(()=>{const r=document.activeElement.getBoundingClientRect(),b=document.querySelector('.modal-body').getBoundingClientRect();return r.top>=b.top&&r.bottom<=b.bottom;}),name+': keyboard focus stays in the scroll area');
   assert(await page.$eval('.modal-foot',visible),name+': keyboard navigation keeps the footer visible');

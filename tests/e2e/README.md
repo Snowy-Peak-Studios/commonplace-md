@@ -52,3 +52,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Expanded settings scrolling check
 
 `node settings-scroll.mjs <screenshot directory>` creates seven fictional local vaults with no token. It expands their Settings cards and selects every source in the inbox-overview setup. Real wheel scrolling and keyboard focus must reach the last fields while Cancel and Save stay visible, at desktop, phone and short-window sizes in light/dark. It also checks that entered values survive and the background stays still. No GitHub calls are made.
+
+## Inbox identity setup check
+
+`node inbox-overview-bindings.mjs <screenshot directory>` uses fictional local and remote vaults with every GitHub request intercepted. It verifies accent-equivalent names, exact mismatch diagnostics, explicit Check inbox/Use owner, absent owners, no initial source reads, per-owner credentials, access/module/folder failures, cancellation, source-write isolation and privately saved corrections. Desktop/phone light/dark screenshots include the fixed action footer.
