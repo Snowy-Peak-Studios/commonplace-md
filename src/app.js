@@ -1942,7 +1942,7 @@ function loadCollaborators(repo) {
 /** An assignee suggestion list that updates while the input remains usable. */
 function assigneeList(repo, id) {
   const list = h("datalist", { id });
-  const login = store.get("user")?.login ?? "";
+  const login = loginFor(repo);
   let people = [];
   let collaborators = [];
   const draw = () => fill(list, assigneeOptions(people, collaborators, login)
@@ -3256,7 +3256,7 @@ function fillBoards(root, f) {
 function taskBoard(f, columns, setup, options, index, identity) {
   const writable = canWrite(f.repo);
   const editableFields = setup.fields.filter((field) => field.on && ["priority", "assignee"].includes(field.key));
-  const login = store.get("user")?.login;
+  const login = loginFor(f.repo);
   const mine = login ? h("input", { type: "checkbox", checked: !!identity }) : null;
   mine?.addEventListener("change", async () => {
     if (!f.myBoards) f.myBoards = new Map();
@@ -4989,33 +4989,7 @@ function showSettings(adding = false, tokenOwner = "") {
 // Start
 // ================================================================
 
-/**
- * Which version this device follows. The released version sends a device that picked the development one on
- * to it, once per try: if the development version doesn't open (the device comes back here), it stays.
- * Resolves to false when the page is leaving.
- */
-function followVersion() {
-  let session = null;
-  try { session = sessionStorage; } catch { /* storage blocked: no sending on */ }
-  if (DEV_BUILD) {
-    session?.removeItem(TO_DEV);
-    if (store.get("version") !== "dev") store.set("version", "dev");
-    document.body.classList.add("dev-build");
-    return true;
-  }
-  if (store.get("version") !== "dev" || !session) return true;
-  if (session.getItem(TO_DEV)) {
-    session.removeItem(TO_DEV);
-    setTimeout(() => toast("The version in development didn't open, so this is the released one. Settings › This device picks the version.", "error"), 0);
-    return true;
-  }
-  session.setItem(TO_DEV, "1");
-  location.replace(versionHref(true));
-  return false;
-}
-
 function start() {
-  if (!followVersion()) return;
   fillIcons(document.body);
   renderWho();
   renderRepoPicker();

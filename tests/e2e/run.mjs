@@ -1476,6 +1476,28 @@ check(await until(() => !document.querySelector('[aria-label="Edit card T-4"]')
   && !!document.querySelector('[aria-label="Edit card T-3"]'), 15000), "Assigned to me includes the signed-in vault name and filters out other cards");
 await page.click(".board-mine input");
 check(await until(() => !!document.querySelector('[aria-label="Edit card T-4"]'), 10000), "clearing Assigned to me restores the other cards");
+// The repository owner's connected account may differ from the device's main account.
+const previousIdentity = await page.evaluate((owner) => {
+  const previous = { user: localStorage.getItem("commonplace:user"), tokens: localStorage.getItem("commonplace:tokens") };
+  const token = JSON.parse(localStorage.getItem("commonplace:token"));
+  localStorage.setItem("commonplace:tokens", JSON.stringify({ [owner.toLowerCase()]: { token, login: "your-github-login" } }));
+  localStorage.setItem("commonplace:user", JSON.stringify({ login: "different-main-account" }));
+  return previous;
+}, OWNER);
+fakeLogin = "different-main-account";
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector(".board-mine input");
+await page.click(".board-mine input");
+check(await until(() => !document.querySelector('[aria-label="Edit card T-4"]')
+  && !!document.querySelector('[aria-label="Edit card T-3"]'), 15000), "Assigned to me uses this repository owner's connected account, not the device's main account");
+await page.evaluate((previous) => {
+  for (const key of ["user", "tokens"]) {
+    if (previous[key] == null) localStorage.removeItem("commonplace:" + key);
+    else localStorage.setItem("commonplace:" + key, previous[key]);
+  }
+}, previousIdentity);
+fakeLogin = "your-github-login";
+await page.reload({ waitUntil: "networkidle0" });
 fakeLogin = null;
 
 // An assignee directory visible to the current writer, then unavailable on another visit.
