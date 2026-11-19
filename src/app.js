@@ -784,6 +784,10 @@ async function mayLeave(depthBefore) {
     toast("Wait for the upload to finish.", "info");
     return restoreNoteRoute(f, depthBefore);
   }
+  if (hasCaptureDraft(f)) {
+    const leave = await confirmDialog("Leave unapplied ideas?", "Use Add or Keep changes before leaving to keep the text in the New tasks box. Leaving now discards that text.", "Leave without adding", true);
+    if (!leave) return restoreNoteRoute(f, depthBefore);
+  }
   if (!f.dirty) return true;
   if (askingLeave) return false;
   askingLeave = true;
@@ -2037,6 +2041,10 @@ function noteAddForm(field, className, label, onAdd, read = () => field.value) {
 // ---- new tasks: a ```new-tasks block's box ----
 
 /** A multiline composer adds several ideas or edits one item/the whole list without changing its owner. */
+function hasCaptureDraft(f) {
+  return [...(f?.newTaskDrafts?.values() ?? [])].some((draft) => draft.text.trim() && draft.text !== (draft.initial ?? ""));
+}
+
 function fillNewTasks(root, f) {
   if (!canWrite(f.repo)) return;
   const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
@@ -2055,6 +2063,7 @@ function fillNewTasks(root, f) {
       if (draft.text.trim()) return toast("Add or clear your current draft before editing another item.", "info");
       Object.assign(draft, { mode, source, index, text: mode === "list"
         ? newTasksBlock(source).items.map((item) => "- " + item).join("\n") : newTasksBlock(source).items[index] });
+      draft.initial = draft.text;
       renderPreview();
       focus();
     };
@@ -5081,7 +5090,7 @@ function start() {
   addEventListener("pagehide", flushDraft);
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushDraft(); else checkForNewer(); });
   setInterval(checkForNewer, CHECK_EVERY);
-  addEventListener("beforeunload", (e) => { if (app.file?.dirty) e.preventDefault(); });
+  addEventListener("beforeunload", (e) => { if (app.file?.dirty || app.file?.imageUpload || hasCaptureDraft(app.file)) e.preventDefault(); });
   matchMedia("(min-width: 1180px)").addEventListener("change", () => applyMode());
   // Diagrams are drawn in the scheme's colours, so a scheme change redraws them.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if ($(".mermaid-diagram")) renderPreview(); });

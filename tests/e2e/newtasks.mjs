@@ -16,7 +16,7 @@ try{
   localStorage.clear();const {LocalSource}=await import('./src/local.js');const source=new LocalSource();
   const repo={id:'captures',label:'Capture check',local:'browser',home:'Inbox.md',inbox:'Inbox.md',inboxes:'',notes:'Notes',vault:false};
   const text='# Inbox\n\n```new-tasks\nowner: Ann Example\n- Existing thought\n```\n\n## Other person\n\n```new-tasks\nowner: Ben Example\n- Other thought\n```\n';
-  await source.create(repo,{seed:[{path:'Inbox.md',bytes:new TextEncoder().encode(text)}]});localStorage.setItem('commonplace:repos',JSON.stringify([repo]));
+  await source.create(repo,{seed:[{path:'Inbox.md',bytes:new TextEncoder().encode(text)},{path:'Other.md',bytes:new TextEncoder().encode('# Other\n')}]});localStorage.setItem('commonplace:repos',JSON.stringify([repo]));
  });
  await page.goto(BASE+'#/captures/Inbox.md',{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});await page.waitForSelector(field);
  await fill(field,'- First new idea\n- Second new idea');await page.focus(field);await page.keyboard.press('Enter');
@@ -42,5 +42,15 @@ try{
   assert(await page.$eval(field,e=>e.scrollWidth<=e.clientWidth+1));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:`${OUT}/${width}-${scheme}.png`});
  }
+ await page.evaluate(()=>{location.hash='#/captures/Other.md';});
+ await page.waitForSelector('dialog[open]');
+ assert.match(await page.$eval('dialog',e=>e.textContent),/Leave unapplied ideas/);
+ await page.$eval('dialog',e=>[...e.querySelectorAll('button')].find(b=>b.textContent==='Cancel').click());
+ await page.waitForFunction(()=>location.hash.endsWith('/Inbox.md'));
+ assert.match(await page.$eval(field,e=>e.value),/A longer idea written on a phone/);
+ assert(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});dispatchEvent(event);return event.defaultPrevented;}));
+ await fill(field,'');await page.evaluate(()=>{location.hash='#/captures/Other.md';});
+ await page.waitForFunction(()=>document.querySelector('.note-body h1')?.textContent==='Other');
+ console.log('PASS navigation warns about unapplied capture text, Cancel preserves it, reload warns, and clearing permits navigation');
  assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);console.log('PASS draft survives preview rebuild; desktop/phone light/dark wrap without overflow; no page errors or GitHub calls');
 }catch(e){await page.screenshot({path:OUT+'/failure.png'});throw e;}finally{await browser.close();}
