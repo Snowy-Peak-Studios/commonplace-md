@@ -12,6 +12,12 @@
 
 ## What it is
 
+<p align="center">
+  <img src="docs/images/illustrations/notes-and-wiki.png" alt="A pixel-art open book with a red ribbon beside a steaming cup of coffee" width="96" height="96">
+  <img src="docs/images/illustrations/tasks-and-planning.png" alt="A pixel-art wooden tavern notice board with task notes and checklists" width="96" height="96">
+  <img src="docs/images/illustrations/people-and-agents.png" alt="A pixel-art friendly blue flame spirit beside a handwritten note, a quill and an ink bottle" width="96" height="96">
+</p>
+
 **Commonplace.md** brings your wiki, notes and task board together as plain Markdown files you own. Keep them in a local vault on one device, or in your own GitHub repo for a team and multiple devices. It runs in your browser and can be installed as an app.
 
 - **Notes that stay yours:** linked pages, pictures, checklists, diagrams and tables.
@@ -57,4 +63,4 @@
 
 MIT: see [LICENSE](LICENSE) and the [third-party licenses](vendor/LICENSES.md).
 
-The logo (`icons/`) and banner (`docs/images/banner.png`) belong to Snowy Peak Studios, all rights reserved. Documentation screenshots and the annotated browser capture are under the repository's MIT license.
+The logo (`icons/`), banner (`docs/images/banner.png`) and illustrations (`docs/images/illustrations/`) belong to Snowy Peak Studios, all rights reserved. Documentation screenshots and the annotated browser capture are under the repository's MIT license.
