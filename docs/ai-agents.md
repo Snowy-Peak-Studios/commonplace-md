@@ -4,6 +4,8 @@
 
 ## Working with AI agents (optional)
 
+<img src="images/illustrations/people-and-agents.png" alt="A pixel-art friendly blue flame spirit beside a handwritten note, a quill and an ink bottle" width="240" height="240">
+
 AI agents that can run git (Claude Code, Codex and others) can work in your vault beside you. The example vault comes with the rules for them: `AGENTS.md`, which any agent reads, and `CLAUDE.md`, which loads it for Claude Code, plus [step-by-step skills](#the-skills) for the jobs they do. With them, an agent:
 
 - pulls first, and reads the **current goals** on the Task Board, so what it picks and proposes serves them;

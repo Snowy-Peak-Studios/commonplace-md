@@ -26,6 +26,8 @@ Settings live in this browser's storage, so each device has its own. An invite l
 
 ### Task fields
 
+<img src="images/illustrations/tasks-and-planning.png" alt="A pixel-art wooden tavern notice board with task notes and checklists" width="240" height="240">
+
 A task is a note in the tasks folder (`Tasks/` unless you change it), and its fields are properties in its front matter. In **Settings**, open the repo and press **Task fields**:
 
 - **Tick fields on and off.** The ones the app knows: Status, Priority, Assignee, Area, Requested by, Reviewer, Type (Epic, Story, Task, Bug), Parent task, the four relations (Blocked by, Related, Comes after, Comes before), Sprint, Estimate and Due date. A repo with no setup has the first five, as before; a new setup starts with all of them on but Reviewer, the person who checks and approves the work, which a project turns on if it wants one. A new task's reviewer is who asked for it (its Requested by), else whoever makes it, and can be changed.

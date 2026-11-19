@@ -4,6 +4,8 @@
 
 ## How to use it
 
+<img src="images/illustrations/notes-and-wiki.png" alt="A pixel-art open book with a red ribbon beside a steaming cup of coffee" width="240" height="240">
+
 - 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
 - 🤖 **Your agents' rules and reports** live in the project, as notes you own.
 - ✅ **A task board** for you and your agent, or a whole team.
