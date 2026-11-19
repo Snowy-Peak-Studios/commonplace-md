@@ -28,18 +28,6 @@ import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-t
 
 const APP_NAME = "Commonplace.md";
 
-// ---- which version: released (the main branch) or in development (the dev branch, served under dev/) ----
-
-/** This is the development version, served under dev/ beside the released one, on the same origin. */
-const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
-/** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
-const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
-/** The address of the released (`dev` false) or development version, at the same page. */
-const versionHref = (dev) =>
-  new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
-/** Set in this tab just before the released version sends it on to the development one. */
-const TO_DEV = "commonplace:to-dev";
-
 const $ = (sel, root = document) => root.querySelector(sel);
 
 function h(tag, attrs = {}, ...children) {
@@ -639,7 +627,7 @@ function renderHeader() {
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : uploadable(f) ? ["upload", "Upload"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
-  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
+  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${APP_NAME}` : app.pageTitle ? `${app.pageTitle} · ${APP_NAME}` : APP_NAME;
 }
 
 // ================================================================
@@ -1931,7 +1919,7 @@ const peopleLoads = new Map();
 const collaboratorLoads = new WeakMap();
 
 function loadCollaborators(repo) {
-  if (isLocal(repo) || !canWrite(repo) || !app.token) return Promise.resolve([]);
+  if (isLocal(repo) || !canWrite(repo) || !gh.tokenFor(repo.owner)) return Promise.resolve([]);
   if (!collaboratorLoads.has(gh)) collaboratorLoads.set(gh, new Map());
   const known = collaboratorLoads.get(gh);
   const key = (repo.owner + "/" + repo.repo).toLowerCase();
@@ -4910,10 +4898,6 @@ function showSettings(adding = false, tokenOwner = "") {
   const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(store.prefix + "draft:"));
   let drafts = [];
   try { drafts = draftKeys(); } catch { /* storage blocked */ }
-  const pickVersion = (dev) => {
-    store.set("version", dev ? "dev" : "main");
-    if (dev !== DEV_BUILD) location.assign(versionHref(dev));
-  };
   const copies = h("ul", { class: "checks copies" });
   const copyRepos = app.repos.filter((r) => !isLocal(r));
   for (const r of copyRepos) {
@@ -4958,14 +4942,6 @@ function showSettings(adding = false, tokenOwner = "") {
     copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
       h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),
       copies) : null,
-    h("div", { class: "field" },
-      h("span", {}, "App version"),
-      h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
-        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => pickVersion(false) }, "Released"),
-        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => pickVersion(true) }, "In development")),
-      h("small", { class: "hint" }, DEV_BUILD
-        ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
-        : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
     h("p", {}, drafts.length ? `${drafts.length} unsaved ${drafts.length === 1 ? "draft is" : "drafts are"} kept in this browser.` : "No unsaved drafts are kept in this browser."),
     drafts.length ? h("button", { class: "btn small danger", onclick: async () => {
       if (!(await confirmDialog("Discard every unsaved draft?", "Changes you never saved will be gone.", "Discard all", true))) return;

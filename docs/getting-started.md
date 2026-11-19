@@ -104,7 +104,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 Either:
 
-- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, served beside it at <https://snowy-peak-studios.github.io/commonplace-md/dev/>, and reaches `main` at the next release. **Settings › This device › App version** picks which one your device opens: *Released* or *In development* (the newest work, which may break). The choice is kept, so the usual address and the installed app open the one you picked; both use the same token and settings.
+- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It serves the latest reviewed release from this repo's `main` branch. Development previews run locally. Older `/dev/` bookmarks return to the released app, keeping the note link.
 - **B. Host your own copy:**
   1. Fork [github.com/Snowy-Peak-Studios/commonplace-md](https://github.com/Snowy-Peak-Studios/commonplace-md) (keep the name `commonplace-md`, or change the address below to match).
   2. In your fork: **Settings › Pages › Build and deployment**: Source *Deploy from a branch*, branch `main`, folder `/ (root)`. Save.
@@ -112,7 +112,7 @@ Either:
 
    Free GitHub Pages serves public repos only. That's fine: the app's repo holds code, never notes.
 
-   To serve the version in development too, fork with every branch (untick *Copy the main branch only*), and pick Source *GitHub Actions* in step 2 instead: `.github/workflows/pages.yml` then serves `main` at the address and `dev` under `dev/`, each time either branch moves. In **Settings › Environments › github-pages**, let the `dev` branch deploy too.
+   For a local preview, follow [Running locally](contributing.md#running-locally). The bundled Pages workflow publishes reviewed releases from the upstream repository only; configure your own deployment if you host a fork.
 
 #### 2. Make a notes repo
 
