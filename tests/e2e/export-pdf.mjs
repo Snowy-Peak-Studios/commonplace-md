@@ -15,6 +15,7 @@ const docs={
  "Embedded.md":"# Embedded note\n\nEMBEDDED CONTENT\n",
  "mark.svg":'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="45"><rect width="120" height="45" fill="#ddd"/><text x="10" y="28" fill="#111">Example image</text></svg>',
  "Tasks/Example.md":"---\nstatus: In Progress\npriority: High\nassignee: Example Reader\narea: Setup\n---\n# Example task\n\n```description\nA task to print.\n```\n\n```acceptance-criteria\n- [x] Completed check\n- [ ] Remaining check\n```\n\n```comments\nA saved comment.\n```\n\n```work-history\nSAVED HISTORY CONTENT\n```\n",
+ "Broken image.md":"# Broken image\n\n![A broken picture](data:image/png;base64,AAAA)\n\nAFTER THE BROKEN IMAGE\n",
  "Data.csv":"Name,Value\nOne,1\n",
 };
 const go=async path=>{await page.goto(BASE+'#/print-local/'+path.split('/').map(encodeURIComponent).join('/'),{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});};
@@ -45,6 +46,8 @@ try{
  console.log('PASS task values, checked/unchecked criteria, saved comments/history and composer removal');
  await page.click('#mode button:nth-child(2)');await page.click('.editor-pane .cm-content');await page.keyboard.down('Control');await page.keyboard.press('End');await page.keyboard.up('Control');await page.keyboard.type('\nUNSAVED PRINT TEXT');await exportPage();assert((await page.$eval('#print-note',e=>e.textContent)).includes('UNSAVED PRINT TEXT'));await page.evaluate(()=>dispatchEvent(new Event('afterprint')));assert((await page.$eval('#save-btn',e=>!e.disabled)));
  console.log('PASS printing unsaved editor content does not save or discard the draft');
+ await page.reload({waitUntil:'networkidle0'});await go('Broken image.md');await page.waitForSelector('.note-body img');await exportPage();assert((await page.$eval('#print-note',e=>e.textContent)).includes('AFTER THE BROKEN IMAGE'));await page.evaluate(()=>dispatchEvent(new Event('afterprint')));
+ console.log('PASS a broken image does not stop the export');
  await page.reload({waitUntil:'networkidle0'});await go('Data.csv');assert.equal(await page.$eval('#export-pdf-btn',e=>e.hidden),true);
  assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);console.log('PASS export action hidden outside notes, no remote requests and no page errors');
 }catch(e){console.log(errors);console.log(await page.evaluate(()=>[...document.querySelectorAll(".doc .preview .sk, .doc .preview img:not([src])")].map(e=>e.outerHTML.slice(0,300))));console.log(await page.evaluate(()=>document.body.innerText));await page.screenshot({path:`${OUT}/failure.png`});throw e;}

@@ -78,7 +78,8 @@ export async function printNote({ preview, title, isCurrent, drawDiagram, print 
     await Promise.all([...root.querySelectorAll("img")].map(async image => {
       let timer;
       try {
-        await Promise.race([image.decode(), new Promise((_, reject) => { timer = setTimeout(() => reject(Error("An image is still loading. Try exporting again.")), 10000); })]);
+        // A broken image prints as it shows on the page (its alt text), not as a failed export.
+        await Promise.race([image.decode().catch(() => {}), new Promise((_, reject) => { timer = setTimeout(() => reject(Error("An image is still loading. Try exporting again.")), 10000); })]);
       } finally { clearTimeout(timer); }
     }));
     if (!isCurrent()) throw Error("The page changed. Export the current page again.");
