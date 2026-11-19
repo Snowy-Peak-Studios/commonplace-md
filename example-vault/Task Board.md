@@ -20,6 +20,23 @@ Which fields a task has is set up per project: **[Set up task fields](#/settings
 
 New tasks start from [[Templates/Task|the task template]]: give each one the next `id`, and fill in who asked for it in `requested_by`.
 
+## Status board
+
+Use the card's status menu or drag the card to move it to a different column. Open the pencil button to edit priority or assignee. **Assigned to me** focuses the board on your own tasks when you are signed in.
+
+```board
+```
+
+## AI work history
+
+This chart uses fictional AI-only `work_time` minutes from completed tasks. An unfinished task with the same Area and Type shows its historical average beside its fields; [[Try the app on a phone]] has one matching sample. It never measures people or changes a manual estimate.
+
+```ai-work-time
+group: area-type
+```
+
+Use `group: area` or `group: type` for a broader chart. Only this vault is read. [[Set up tasks]] explains the records.
+
 ## Getting set up
 
 The epic [[Get set up]] and its subtasks, shown here by a ` ```subtasks ` block with a `task:` line (the task's ID, name or link). A task's ` ```subtasks `, ` ```relations ` and ` ```commits ` can show on any page this way; away from the task's own page they only read.

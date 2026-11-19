@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlockOptions } from "../src/markdown.js";
+import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlockOptions, boardOptions } from "../src/markdown.js";
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
@@ -51,6 +51,33 @@ test("task checkboxes point at their source line", () => {
   const html = render("---\na: 1\n---\n# T\n\n- [ ] first\n- [x] second\n");
   assert.match(html, /<input type="checkbox" class="task" data-line="5"> first/);
   assert.match(html, /<input type="checkbox" class="task" data-line="6" checked> second/);
+});
+
+test("task sections render Markdown, keep original checkbox lines and move folded history to the end", () => {
+  const note = [
+    "---", "id: T-1", "---", "# Task",
+    "```work-history", "- [ ] Recorded change", "```",
+    "```description", "**Use** [[Home]].", "```",
+    "```ACCEPTANCE-CRITERIA", "- [ ] Verify a save", "```",
+    "~~~comments", "Ask @alex.", "~~~", "Plain note text.",
+  ].join("\n");
+  const html = render(note);
+  assert.match(html, /data-section="description" data-heading="Description"><h2>Description<\/h2>/);
+  assert.match(html, /<strong>Use<\/strong> <a class="wikilink"/);
+  assert.match(html, /data-section="acceptance-criteria"[^>]*><h2>Acceptance Criteria<\/h2>[\s\S]*data-line="11"> Verify a save/);
+  assert.match(html, /data-section="comments"[\s\S]*data-login="alex"/);
+  assert.match(html, /Plain note text\.<\/p>\n<details class="note-section" data-section="work-history" data-heading="Work History"><summary>Work History<\/summary>[\s\S]*data-line="5"> Recorded change/);
+  const code = render("~~~markdown\n```comments\n@alex\n```\n~~~");
+  assert.doesNotMatch(code, /class="(note-section|mention)"/);
+});
+
+test("posted comments carry source lines and a distinct list style while their content stays Markdown", () => {
+  const note = "```comments\nEarlier note.\n\n- **alice** · 2026-11-17 11:22 UTC\n\n    Thanks @bob.\n```\n";
+  const html = render(note);
+  assert.match(html, /data-section="comments" data-heading="Comments" data-start="0" data-close="6"/);
+  assert.match(html, /<li class="posted-comment">\s*<p><strong>alice<\/strong> · 2026-11-17 11:22 UTC<\/p>/);
+  assert.match(html, /Thanks <span class="mention" data-login="bob"/);
+  assert.match(html, /<p>Earlier note\.<\/p>/);
 });
 
 test("headings carry their text for [[Page#Heading]] links", () => {
@@ -140,13 +167,15 @@ test("a needs-attention block becomes a placeholder with what it shows, its owne
 
 test("a needs-attention block's options: show (both, or one), owner and login; other lines ignored", () => {
   const both = ["questions", "mentions"];
-  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false });
-  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false });
+  assert.deepEqual(attentionOptions(""), { owner: "", login: "", show: both, showSet: false, reviewStatuses: ["Testing"] });
+  assert.deepEqual(attentionOptions("range: 3\n  Owner :  'Bo Park' \nlogin: @bo-p\n"), { owner: "Bo Park", login: "bo-p", show: both, showSet: false, reviewStatuses: ["Testing"] });
   assert.deepEqual(attentionOptions("show: mentions").show, ["mentions"]);
   assert.deepEqual(attentionOptions("show: [Mention]").show, ["mentions"]);
-  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true }, "always questions first");
+  assert.deepEqual(attentionOptions("show: mentions, questions"), { owner: "", login: "", show: both, showSet: true, reviewStatuses: ["Testing"] }, "always questions first");
   assert.deepEqual(attentionOptions("show: both").show, both);
-  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false });
+  assert.deepEqual(attentionOptions("show: all").show, ["reviews", "questions", "mentions", "assignments"]);
+  assert.deepEqual(attentionOptions("show: assignment").show, ["assignments"]);
+  assert.deepEqual(attentionOptions("show: nothing known"), { owner: "", login: "", show: both, showSet: false, reviewStatuses: ["Testing"] });
 });
 
 test("@login becomes a mention, but not in code, a link or an email", () => {
@@ -169,11 +198,40 @@ test("a file name ending in .md stays text, while web addresses still become lin
 
 test("a new-tasks block is a box with its items rendered, its owner, and its closing fence's line", () => {
   const html = render("Intro\n\n```new-tasks\nowner: Ana Lee\n- Read [[Home]]\n- [ ] **Bold** one\n```\n");
-  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-close="6">/);
+  assert.match(html, /^<p>Intro<\/p>\n<section class="newtasks" aria-label="New tasks" data-owner="Ana Lee" data-start="2" data-close="6">/);
   assert.match(html, /<small class="muted">For Ana Lee · 2 items · Your agent turns them into tasks<\/small>/);
   assert.match(html, /<ul class="newtasks-list"><li data-line="4" data-item="Read \[\[Home\]\]"><span class="newtasks-text">Read <a [^>]*class="wikilink[^"]*"[^>]*>Home<\/a><\/span><\/li>/);
   assert.match(html, /<li data-line="5" data-item="\*\*Bold\*\* one"><span class="newtasks-text"><strong>Bold<\/strong> one<\/span><\/li><\/ul><\/section>/);
   const none = render("```new-tasks\n```\n");
   assert.match(none, /No owner: line, so no agent sorts these/);
   assert.match(none, /<li class="muted">Nothing yet\.<\/li>/);
+});
+
+
+test("board reads its options in order and renders the source as text", () => {
+  assert.deepEqual(boardOptions("columns: Done, To Do, done\nareas: UI, Docs\nassignee: Pat\nsprint: next\ntype: Bug"), {
+    columns: ["Done", "To Do"], areas: ["UI", "Docs"], assignee: "Pat", sprint: "next", types: ["Bug"],
+  });
+  assert.deepEqual(boardOptions(""), { columns: [], areas: [], assignee: "", sprint: "", types: [] });
+  assert.match(render("```board\nareas: <script>\n```"), /class="board-block"><pre><code>areas: &lt;script&gt;/);
+});
+
+test("reviews are optional, first in all, and retain custom multiword review statuses", () => {
+  assert.deepEqual(attentionOptions("show: reviews\nreview-statuses: [Testing, Needs review]").reviewStatuses, ["Testing", "Needs review"]);
+  assert.deepEqual(attentionOptions("show: review").show, ["reviews"]);
+  assert.deepEqual(attentionOptions("review-statuses: ").reviewStatuses, ["Testing"]);
+  assert.match(render("```needs-attention\nshow: reviews\nreview-statuses: Needs review\nowner: Ana Lee\n```"), /data-review-statuses="\[&quot;Needs review&quot;\]"/);
+});
+
+test("overview fences remain escaped inert placeholders before explicit host approval", () => {
+  assert.match(render("```inbox-overview\ncontext: <script>\n```"), /class="inbox-overview-block"><pre><code>context: &lt;script&gt;/);
+  assert.doesNotMatch(render("````markdown\n```inbox-overview\nsources: []\n```\n````"), /class="inbox-overview-block"/);
+});
+
+test("AI history charts require an explicit fence and preserve escaped source options", () => {
+  assert.doesNotMatch(render("AI work history"), /ai-time-block/);
+  assert.match(render("```ai-work-time\ngroup: area-type\n```"), /class="ai-time-block"/);
+  const html = render("```ai-work-time\ngroup: <script>\n```");
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
 });

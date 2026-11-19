@@ -16,13 +16,19 @@ priority: Medium
 ```relations
 ```
 
+```description
+**As** someone who ..., **I want** ..., **so that** ...
+```
+
+```acceptance-criteria
+- [ ] ...
+```
+
+```comments
+```
+
 ```commits
 ```
 
-**As** someone who ..., **I want** ..., **so that** ...
-
-## Acceptance criteria
-
-- [ ] ...
-
-## Notes
+```work-history
+```

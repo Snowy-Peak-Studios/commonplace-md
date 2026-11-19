@@ -7,6 +7,8 @@ description: Pick or make a task on the Task Board and claim it before any other
 
 Claim first, then work (`AGENTS.md`, Tasks). Paths are from the vault's top folder.
 
+Tasks awaiting the person's final review are not agent claims. Do not take over a Testing/review-state task merely because its assignee is the person alone; resume when they request changes or return it to active work.
+
 ## 1. A clean start
 
 Run `git status --short`. If there's uncommitted work from before, say so in the report. Don't mix it into this task.

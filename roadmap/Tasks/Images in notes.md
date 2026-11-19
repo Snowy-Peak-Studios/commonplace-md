@@ -1,5 +1,5 @@
 ---
-status: Next
+status: Recently done
 ---
 
 # Images in notes

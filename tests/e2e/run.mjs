@@ -10,7 +10,7 @@ import { parseBase, candidatePaths, runView, noteProps } from "../../src/bases.j
 const BASE = process.env.BASE || "http://localhost:8765/";
 const OWNER = process.env.OWNER || "Snowy-Peak-Studios";
 const REPO = process.env.REPO || "commonplace-md";
-const BRANCH = process.env.BRANCH || "dev";
+const BRANCH = process.env.BRANCH || "main";
 const FOLDER = (process.env.FOLDER ?? "example-vault").replace(/^\/+|\/+$/g, "");
 const OUT = process.argv[2];
 const token = process.env.GH_TOKEN;
@@ -34,10 +34,12 @@ const hashPath = (url) => decodeURIComponent(url.split("#")[1] || "");
 const log = (...a) => console.log(...a);
 const errors = [];
 const puts = [];
+let boardState = null;
 // One commit of several files (Start the next sprint) goes through the Git data API: its writes are answered here.
 const treeWrites = [], commitWrites = [], refWrites = [];
 let putMode = "ok";
 let fakeHead = null; // answer "the branch's latest commit" with this sha, as if someone else had pushed
+let denyCollaborators = false;
 let readOnlyRepo = false; // answer GitHub's "can this person push?" with no
 let fakeLogin = null; // answer "who is signed in?" with this login, to be the example inboxes' person
 
@@ -66,7 +68,7 @@ const searches = [];
 const page = await browser.newPage();
 page.on("dialog", (d) => d.accept());
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
-page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text() + (m.location().url ? " (" + m.location().url.replace(/[?#].*$/, "") + ")" : "")); });
 // A failed request says which address it was, so an expected one can be told from a real one.
 page.on("response", (r) => { if (r.status() >= 400) errors.push(`  (${r.status()} ${r.request().method()} ${r.url().replace(/[?#].*$/, "")})`); });
 await page.setRequestInterception(true);
@@ -77,7 +79,9 @@ page.on("request", async (req) => {
     const body = JSON.parse(req.postData());
     puts.push({ url, body, text: Buffer.from(body.content, "base64").toString("utf8") });
     if (putMode === "conflict") return req.respond(json(409, { message: "is at abc but expected def" }));
-    return req.respond(json(200, { content: { sha: "fake" + puts.length }, commit: { sha: "c" + puts.length } }));
+    const sha = "fake" + puts.length;
+    if (boardState && url === contentsUrl(boardState.path)) Object.assign(boardState, { text: puts.at(-1).text, sha });
+    return req.respond(json(200, { content: { sha }, commit: { sha: "c" + puts.length } }));
   }
   if (req.method() === "POST" && url === `${REPO_API}/git/trees`) {
     treeWrites.push(JSON.parse(req.postData()));
@@ -101,6 +105,10 @@ page.on("request", async (req) => {
       headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ETag: `"${fakeHead}"` } });
   }
   if (fakeLogin && req.method() === "GET" && url === `${API}/user`) return req.respond(json(200, { login: fakeLogin, avatar_url: "" }));
+  if (req.method() === "GET" && url.startsWith(REPO_API + "/collaborators?")) {
+    return denyCollaborators ? req.respond(json(403, { message: "Collaborators are unavailable" }))
+      : req.respond(json(200, [{ login: "collaborator-test" }, { login: "your-github-login" }]));
+  }
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
@@ -119,6 +127,9 @@ page.on("request", async (req) => {
   }
   if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
     return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
+  }
+  if (boardState && req.method() === "GET" && url.split("?")[0] === contentsUrl(boardState.path)) {
+    return req.respond(json(200, { sha: boardState.sha, size: boardState.text.length, content: b64(boardState.text) }));
   }
   // A note "created" by the New note check: its PUT was answered here, so its GET is too.
   const created = puts.find((p) => !p.body.sha && p.url === url.split("?")[0]);
@@ -153,7 +164,7 @@ const storedRepos = (on = page) => on.evaluate(() => JSON.parse(localStorage.get
 // 0. Joining: the device starts empty and gets the example vault through an invite link.
 const invite = new URLSearchParams({
   owner: OWNER, repo: REPO, branch: BRANCH, label: "Example vault", vault: "1",
-  inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md",
+  inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments",
 });
 if (FOLDER) invite.set("folder", FOLDER);
 await page.setViewport({ width: 1280, height: 860 });
@@ -169,7 +180,7 @@ await page.click(".welcome .btn.primary");
 await until(() => !location.hash.startsWith("#/join") && !!document.querySelector(".preview h1"), 20000);
 check(page.url().includes(`#/${ID}/`), "after connecting, the invited repo opens: " + page.url());
 const joined = await storedRepos();
-const want = { owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md" };
+const want = { owner: OWNER, repo: REPO, branch: BRANCH, folder: FOLDER, vault: true, inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", home: "Home.md", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments" };
 check(joined?.length === 1 && Object.entries(want).every(([k, v]) => joined[0][k] === v),
   "the device has only the invited repo, with every setting from the link: " + JSON.stringify(joined));
 check(await page.evaluate(() => !Object.keys(localStorage).some((k) => k.startsWith("notes-app:"))), "everything is stored under commonplace:");
@@ -279,7 +290,7 @@ const attention = await page.evaluate(() => {
 });
 const qRow = attention.rows.findIndex((r) => r.kind === "Question" && r.name.includes("Add a reading list") && r.state === "Waiting for your answer"
   && r.text === "Books only, or articles too?" && r.href.includes("Tasks/Add a reading list.md"));
-const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Mentions")
+const mRow = attention.rows.findIndex((r) => r.kind === "Mention" && r.name.startsWith("Guide") && r.href.endsWith("/Guide.md?h=Comments")
   && r.text.includes("@your-github-login"));
 check(!attention.code && attention.boxes === 1 && attention.underTop && attention.title === "Needs your attention"
   && attention.head.includes("for Your name") && attention.head.includes("of @your-github-login") && qRow >= 0 && mRow > qRow,
@@ -289,8 +300,8 @@ await shot("2a-inbox-attention");
 
 // 2b. The inbox's top tasks: the owner's claimed ones first, then free tasks by priority; Claim saves the task.
 const boxRows = () => page.$$eval(".suggest > .suggest-list > li", (li) => li.filter((x) => x.querySelector(".suggest-name")).map((x) => ({
-  name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent.includes("Claim")),
-  claimed: x.querySelector(".chip.claimed")?.textContent ?? null,
+  name: x.querySelector(".suggest-name").textContent, claim: [...x.querySelectorAll("button")].some((b) => b.textContent === "Claim"),
+  claimed: x.querySelector(".claim-state, span.chip.claimed")?.textContent ?? null,
 })));
 const rows0 = await boxRows();
 const free0 = rows0.filter((r) => !r.claimed);
@@ -338,7 +349,7 @@ const first = free0[0]?.name ?? "";
 const firstId = first.split(" ")[0];
 const firstTitle = first.slice(firstId.length + 1);
 await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
-  ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), firstTitle);
+  ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Claim") b.click(); }), firstTitle);
 await page.waitForSelector("dialog.modal[open] .btn.primary");
 await page.click("dialog.modal .btn.primary");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("Claimed"), { timeout: 15000 }).catch(() => {});
@@ -362,13 +373,40 @@ const putsBeforePick = puts.length;
 await page.select('select[aria-label="Priority of Add a reading list"]', "High");
 await page.waitForFunction((n) => document.querySelector("#toast.show")?.textContent.includes("priority is now High"), { timeout: 15000 }).catch(() => {});
 const pickPut = puts.length > putsBeforePick ? puts.at(-1) : null;
-const pickBefore = await ghGet(`/repos/${OWNER}/${REPO}/contents/${encPath(PRE + "Tasks/Add a reading list.md")}?ref=${BRANCH}`)
-  .then((d) => Buffer.from(d.content, "base64").toString("utf8")).catch(() => "");
+const pickBefore = claim?.url === contentsUrl("Tasks/Add a reading list.md") ? claim.text : (await realFile("Tasks/Add a reading list.md")).text;
 check(pickPut?.url === contentsUrl("Tasks/Add a reading list.md") && pickPut.text === pickBefore.replace(/^priority: .*$/m, "priority: High"),
   "a new priority saves the task with only that line changed");
 check(pickPut?.body.message?.startsWith("T-5: priority set to High"), "the commit says what changed: " + pickPut?.body.message);
 await page.waitForFunction(() => document.querySelector('select[aria-label="Priority of Add a reading list"]')?.value === "High", { timeout: 10000 }).catch(() => {});
 check(await page.$eval('select[aria-label="Priority of Add a reading list"]', (s) => s.value).catch(() => null) === "High", "the box shows the new priority");
+// A person can release their own claim before their agent starts.
+const taskAction = (title, label) => page.evaluate((title, label) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
+  .find((li) => li.querySelector(".suggest-name")?.textContent.includes(title))
+  ?.querySelectorAll("button").forEach((button) => { if (label === "Unclaim" ? button.matches(".unclaim") : button.textContent === label) button.click(); }), title, label);
+const waitForFreeTask = (title) => page.waitForFunction((title) => [...document.querySelectorAll(".suggest > .suggest-list > li")]
+  .some((li) => li.querySelector(".suggest-name")?.textContent.includes(title) &&
+    [...li.querySelectorAll("button")].some((b) => b.textContent === "Claim")), { timeout: 15000 }, title);
+const claimedActions = await page.$$eval(".suggest > .suggest-list > li", (rows) => rows
+  .filter((row) => row.querySelector(".claimed"))
+  .map((row) => [...row.querySelectorAll("button")].map((b) => b.matches(".unclaim") ? "Unclaim" : b.textContent)));
+check(claimedActions.length > 0 && claimedActions.every((actions) => actions.includes("Unclaim") &&
+  !actions.some((label) => ["Not now", "Push to the next sprint"].includes(label))),
+  "claimed tasks can be unclaimed, and only free tasks can be put off");
+check(await page.$$eval(".suggest > .suggest-list > li", (rows) => rows.filter((row) => row.querySelector(".claimed"))
+  .every((row) => row.querySelectorAll(".claimed").length === 1 && row.querySelector("button.claimed.unclaim"))),
+  "each personal claim has one control for its state and Unclaim");
+const putsBeforeUnclaim = puts.length;
+await taskAction(firstTitle, "Unclaim");
+await page.waitForSelector("dialog.modal[open] .btn.primary");
+check(await page.$eval("dialog.modal[open]", (dialog, title) => dialog.textContent.includes(`Unclaim ${title}?`)
+  && dialog.textContent.includes("To Do"), firstTitle), "Unclaim asks before clearing the assignment");
+await page.click("dialog.modal[open] .btn.primary");
+await waitForFreeTask(firstTitle);
+const unclaimPut = puts.length > putsBeforeUnclaim ? puts.at(-1) : null;
+const expectedUnclaim = (pickPut?.url === claim?.url ? pickPut?.text : claim?.text)?.replace(/^status: .*$/m, "status: To Do").replace(/^assignee: .*$/m, 'assignee: ""');
+check(puts.length === putsBeforeUnclaim + 1 && unclaimPut?.url === contentsUrl(`Tasks/${firstTitle}.md`)
+  && unclaimPut.text === expectedUnclaim && unclaimPut.body.message.startsWith(`${firstId}: unclaimed by Your name`),
+  "Unclaim commits only the status and assignee, and the task becomes free");
 // Not now: a task goes on the waiting list (status Waiting), out of the suggestions; Bring back takes it off.
 // With sprints the button is Push to the next sprint; this task is in the last sprint there is, so it asks, and offers the waiting list.
 const putsBeforeWait = puts.length;
@@ -386,7 +424,8 @@ if (sprintShown) {
 }
 await page.waitForFunction(() => document.querySelector(".suggest-waiting summary")?.textContent.includes("Waiting (1)"), { timeout: 15000 }).catch(() => {});
 const waitPut = puts.length > putsBeforeWait ? puts.at(-1) : null;
-check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? ""), "Not now saves the task with status Waiting");
+check(waitPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: Waiting$/m.test(waitPut.text ?? "")
+  && waitPut.text.includes(`waiting_since: ${isoDate()}`), "Not now saves the status and waiting date");
 check(waitPut?.body.message?.startsWith("T-5: status set to Waiting"), "the commit says so: " + waitPut?.body.message);
 const afterWait = await boxRows();
 check(!afterWait.some((r) => r.name === "T-5 Add a reading list" && !r.waiting), "it leaves the suggestions: " + JSON.stringify(afterWait.map((r) => r.name)));
@@ -400,26 +439,29 @@ await page.waitForFunction(() => !document.querySelector(".suggest-waiting")
   && [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")),
 { timeout: 15000 }).catch(() => {});
 const backPut = puts.length > putsBeforeBack ? puts.at(-1) : null;
-// Saves here are faked, so the real note still says To Do: Bring back reads it fresh, finds nothing to change and
-// commits nothing. Any commit it does make must say To Do.
-check((!backPut || /^status: To Do$/m.test(backPut.text)) && !(await page.$(".suggest-waiting"))
+check(backPut?.url === contentsUrl("Tasks/Add a reading list.md") && /^status: To Do$/m.test(backPut.text)
+  && /^assignee: ""$/m.test(backPut.text) && /^waiting_since: ""$/m.test(backPut.text) && !(await page.$(".suggest-waiting"))
   && (await boxRows()).some((r) => r.name === "T-5 Add a reading list" && r.claim), "Bring back takes it off the waiting list, back into the suggestions");
 // Push to the next sprint: a task in the current sprint moves into the next one, one commit of its sprint line.
 const sprintNext = inboxSprints.find((x) => x.when === "next");
 if (inboxSprints.find((x) => x.when === "now") && sprintNext) {
+  await taskAction("Try the app on a phone", "Unclaim");
+  await page.waitForSelector("dialog.modal[open] .btn.primary");
+  await page.click("dialog.modal .btn.primary");
+  await waitForFreeTask("Try the app on a phone");
+  const pushBefore = puts.at(-1).text;
   const putsBeforePush = puts.length;
   await page.evaluate(() => [...document.querySelectorAll(".suggest-list li")].find((li) => li.textContent.includes("Try the app on a phone"))
     ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Push to the next sprint") b.click(); }));
   await page.waitForFunction(() => document.querySelector("#toast.show")?.textContent.includes("pushed to"), { timeout: 15000 }).catch(() => {});
   const pushPut = puts.length > putsBeforePush ? puts.at(-1) : null;
-  const pushBefore = (await realFile("Tasks/Try the app on a phone.md")).text;
   check(pushPut?.url === contentsUrl("Tasks/Try the app on a phone.md")
     && pushPut.text === pushBefore.replace(/^sprint: .*$/m, `sprint: "[[${sprintNext.name}]]"`),
   `Push to the next sprint saves the task in ${sprintNext.name}, with only that line changed`);
   check(pushPut?.body.message?.startsWith(`T-3: pushed to ${sprintNext.name}`), "the commit says so: " + pushPut?.body.message);
   // The box is drawn again after the change; wait until it has its tasks back.
   await page.waitForFunction(() => [...document.querySelectorAll(".suggest > .suggest-list > li")].some((li) => li.textContent.includes("Add a reading list")
-    && [...li.querySelectorAll("button")].some((b) => b.textContent.includes("Claim"))), { timeout: 15000 }).catch(() => {});
+    && [...li.querySelectorAll("button")].some((b) => b.textContent === "Claim")), { timeout: 15000 }).catch(() => {});
 } else {
   log("SKIP  Push to the next sprint: the example vault has no current and next sprint today");
 }
@@ -431,7 +473,7 @@ if (sprintNow && fromNext) {
   const putsBeforeNext = puts.length;
   await shot("2d-from-the-next-sprint");
   await page.evaluate((t) => [...document.querySelectorAll(".suggest > .suggest-list > li")].find((li) => li.textContent.includes(t))
-    ?.querySelectorAll("button").forEach((b) => { if (b.textContent.includes("Claim")) b.click(); }), nextTitle);
+    ?.querySelectorAll("button").forEach((b) => { if (b.textContent === "Claim") b.click(); }), nextTitle);
   await page.waitForSelector("dialog.modal[open] .btn.primary");
   const askNext = await page.$eval("dialog.modal[open]", (d) => d.textContent);
   check(askNext.includes(`moves into ${sprintNow.name}`), "claiming one from the next sprint says it moves into the current one: " + askNext);
@@ -540,11 +582,11 @@ check(guide.folded === false, "a [!warning]- callout starts folded");
 // A mention is a link to that person's inbox; one in code isn't a mention.
 await page.waitForSelector(".preview a.mention", { timeout: 10000 }).catch(() => {});
 const guideMentions = await page.evaluate(() => ({
-  links: [...document.querySelectorAll(".preview a.mention")].map((a) => [a.textContent, decodeURIComponent(a.getAttribute("href"))]),
+  links: [...document.querySelectorAll('.preview [data-section="comments"] a.mention')].map((a) => [a.textContent, decodeURIComponent(a.getAttribute("href"))]),
   inCode: [...document.querySelectorAll(".preview code")].some((c) => c.querySelector(".mention")),
 }));
 check(guideMentions.links.length >= 1 && guideMentions.links.every(([text, href]) => text === "@your-github-login" && /\/Notes\/Inbox(es\/Your name)?\.md$/.test(href))
-  && !guideMentions.inCode, "@your-github-login in the Guide is a link to that person's inbox, and not in code: " + JSON.stringify(guideMentions));
+  && !guideMentions.inCode, "a mention in the Comments block on a regular page links to the person's inbox: " + JSON.stringify(guideMentions));
 await shot("2b-guide-desktop");
 // Lists with subpoints: each point that has some gets an arrow that folds them; only the view changes.
 const foldState = () => page.evaluate(() => {
@@ -574,8 +616,36 @@ check((await foldState()).shown === true, "a second tap shows them again");
 // 5. A task page: tick a checkbox, save (faked), check the commit body.
 const taskPath = "Tasks/Try the app on a phone.md";
 await page.goto(at(taskPath), { waitUntil: "networkidle0" });
-await page.waitForSelector(".preview input.task");
-await page.click(".preview input.task:not([checked])");
+const criteriaSelector = '.note-section[data-section="acceptance-criteria"] input.task';
+await page.waitForSelector(criteriaSelector);
+const sections = await page.$$eval(".note-body > .note-section", (blocks) => blocks.map((block) => [block.dataset.section, block.open ?? null]));
+check(JSON.stringify(sections) === JSON.stringify([
+  ["description", null], ["acceptance-criteria", null], ["comments", null], ["work-history", false],
+]), "the task has four sections and History is last and folded: " + JSON.stringify(sections));
+const commentEditor = ".comment-add .cm-editor";
+const commentField = ".comment-add .cm-content";
+await page.waitForSelector(commentField);
+const commentText = () => page.$eval(commentEditor, async (node) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  return EditorView.findFromDOM(node).state.doc.toString();
+});
+const replyDraft = await commentText();
+check(replyDraft === "@your-github-login " &&
+  await page.$eval(".comment-add button", (button) => button.textContent.trim() === "Post"),
+  "the task's Comments form suggests the previous author and can post a reply");
+await page.focus(commentField);
+await page.keyboard.press("End");
+await page.keyboard.type("Ask @");
+const commentOption = commentEditor + " .cm-tooltip-autocomplete li";
+await page.waitForSelector(commentOption, { timeout: 8000 });
+check(await page.$eval(commentOption, (option) => option.textContent.includes("@your-github-login")),
+  "typing @ in a comment offers people from the vault");
+await page.click(commentOption);
+check(await commentText() === replyDraft + "Ask @your-github-login", "choosing a person completes the mention in the comment");
+await page.click('.note-section[data-section="work-history"] > summary');
+check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History opens to show its entries");
+await page.click(criteriaSelector + ":not([checked])");
+check(await page.$eval('.note-section[data-section="work-history"]', (history) => history.open), "Work History stays open while changing a criterion");
 await wait(200);
 check(await page.$eval("#save-btn", (b) => !b.disabled), "ticking a checkbox enables Save");
 await page.click("#save-btn");
@@ -588,6 +658,52 @@ const real = await realFile(taskPath);
 const diff = real.text.split("\n").map((l, i) => [l, p1?.text.split("\n")[i]]).filter(([a, b]) => a !== b);
 check(diff.length === 1 && diff[0][0].includes("[ ]") && diff[0][1].includes("[x]"), "exactly one line changed, [ ] to [x]: " + JSON.stringify(diff));
 check(p1?.body.sha === real.sha, "save used the file's current sha");
+
+// 5a. Editing: paste binary image data at the cursor and commit only the attachment.
+await page.evaluate(() => document.querySelectorAll("#mode button")[1].click());
+await page.waitForSelector(".image-tools button");
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIAK+Y6GQAAAABJRU5ErkJggg==";
+const putsBeforeImage = puts.length;
+const pasteImage = () => page.$eval(".editor-pane .cm-editor", async (node, png) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(node);
+  const before = view.state.doc.toString();
+  view.dispatch({ selection: { anchor: before.length } });
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([Uint8Array.from(atob(png), c => c.charCodeAt(0))], "Screenshot.png", { type: "image/png" }));
+  view.contentDOM.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+  return before;
+}, png);
+const imageNote = await pasteImage();
+check(await until(() => [...document.querySelectorAll(".editor-pane .cm-line")].some(x => x.textContent.includes("![[Screenshot-"))),
+  "pasting an image inserts a dated embed at the cursor");
+const imagePut = puts.length === putsBeforeImage + 1 ? puts.at(-1) : null;
+const imageName = imagePut?.url.split("/").at(-1);
+check(Boolean(imagePut && /^Screenshot-.*[.]png$/.test(imageName)
+  && imagePut.url === contentsUrl("Attachments/" + imageName) && imagePut.body.content === png && !imagePut.body.sha && imagePut.body.branch === BRANCH),
+  "the paste sends exact image bytes in its own create-only commit to the invite link's Attachments folder");
+const imageDraft = await page.$eval(".editor-pane .cm-editor", async (node, before) => {
+  const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+  const view = EditorView.findFromDOM(node);
+  const text = view.state.doc.toString();
+  view.dispatch({ changes: { from: 0, to: text.length, insert: before }, filter: false });
+  return text;
+}, imageNote);
+check(imageDraft === imageNote + `![[${imageName}]]`, "the note stays a draft with only the embed added");
+
+const putsBeforeOfflineImage = puts.length;
+await page.evaluate(() => Object.defineProperty(navigator, "onLine", { configurable: true, value: false }));
+try {
+  await pasteImage();
+  check(await until(() => document.querySelector("#toast").textContent.includes("Connect to GitHub before adding an image")),
+    "offline, adding an image explains how to continue");
+  check(puts.length === putsBeforeOfflineImage && await page.$eval(".editor-pane .cm-editor", async (node, text) => {
+    const { EditorView } = await import(new URL("vendor/vendor.js", location.href).href);
+    return EditorView.findFromDOM(node).state.doc.toString() === text;
+  }, imageNote), "the offline image is not uploaded or added to the note");
+} finally {
+  await page.evaluate(() => delete navigator.onLine);
+}
 
 // 6. Edit mode: the nav box can't be changed, typing at the end works.
 await page.goto(at("Guide.md"), { waitUntil: "networkidle0" });
@@ -1085,6 +1201,7 @@ const boardSubs = await page.evaluate(() => {
 });
 check(!boardSubs.code && boardSubs.of === "of T-6Get set up" && boardSubs.href.endsWith("/Tasks/Get set up.md") && boardSubs.count === "2 of 3 done"
   && boardSubs.rows === 3 && !boardSubs.add, "a ```subtasks block with task: shows that task's subtasks on another page, read only: " + JSON.stringify(boardSubs));
+
 await page.goto(at(epic), { waitUntil: "networkidle0" });
 check(await until(() => document.querySelectorAll(".subtasks .st-list li").length === 3, 15000), "the epic lists its three subtasks");
 const subs = await page.evaluate(() => ({
@@ -1135,6 +1252,9 @@ await page.type("dialog[open] input", "Set up a second device");
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Add subtask").click());
 check(await until(() => location.hash.endsWith("/Tasks/Set%20up%20a%20second%20device.md"), 10000), "Add subtask opens the new task");
 const subPut = puts.slice(putsBeforeSub).find((p) => p.url === contentsUrl("Tasks/Set up a second device.md"));
+const newTaskBlocks = [...(subPut?.text ?? "").matchAll(/^```([a-z-]+)$/gm)].map((m) => m[1]);
+check(newTaskBlocks.join(",") === "subtasks,relations,description,acceptance-criteria,comments,commits,work-history",
+  "a new task puts Commits below Comments and Work History last");
 check(!!subPut && /\npart_of: "?\[\[Get set up\]\]"?\n/.test(subPut.text) && /\narea: Setup\n/.test(subPut.text) && /\nstatus: To Do\n/.test(subPut.text)
   && /^---\nparent: "\[\[Task Board\]\]"\n/.test(subPut.text),
   "it's a new task under the epic, with the epic's area and place in the tree: " + JSON.stringify(subPut?.text.split("\n---")[0]));
@@ -1230,7 +1350,7 @@ check(currentShown.tab === "Current sprint" && currentShown.count === currentVie
 
 // 10a. The inbox's ```new-tasks block: a box with its items; Add puts one in the block, and Save would commit it.
 await page.goto(at("Notes/Inbox.md"), { waitUntil: "networkidle0" });
-await page.waitForSelector(".note-body section.newtasks .newtasks-add input", { timeout: 15000 }).catch(() => {});
+await page.waitForSelector(".note-body section.newtasks .newtasks-add textarea", { timeout: 15000 }).catch(() => {});
 const newTasks = await page.evaluate(() => {
   const box = document.querySelector(".note-body section.newtasks");
   return {
@@ -1242,13 +1362,13 @@ const newTasks = await page.evaluate(() => {
 });
 check(!newTasks.code && newTasks.head.startsWith("For Your name · 2 items") && newTasks.items.includes("Try the app on a second device")
   && newTasks.link === "Data/Reading list.csv", "the inbox's ```new-tasks block is a box with its items, links working: " + JSON.stringify(newTasks));
-await page.type(".note-body section.newtasks .newtasks-add input", "An idea from the browser check");
-await page.keyboard.press("Enter");
+await page.type(".note-body section.newtasks .newtasks-add textarea", "An idea from the browser check");
+await page.click(".newtasks-add button[type=submit]");
 await page.waitForFunction(() => [...document.querySelectorAll(".note-body section.newtasks .newtasks-list li")].some((li) => li.textContent === "An idea from the browser check"), { timeout: 5000 }).catch(() => {});
 const added = await page.evaluate(() => ({
   items: document.querySelectorAll(".note-body section.newtasks .newtasks-list li").length,
   save: !document.querySelector("#save-btn")?.disabled,
-  focus: document.activeElement?.matches(".newtasks-add input") ?? false,
+  focus: document.activeElement?.matches(".newtasks-add textarea") ?? false,
 }));
 check(added.items === 3 && added.save && added.focus, "Add puts the item in the block, the note can be saved, and the field keeps the focus: " + JSON.stringify(added));
 await page.evaluate(() => document.querySelector(".note-body section.newtasks")?.scrollIntoView({ block: "center" }));
@@ -1307,6 +1427,99 @@ check(await newcomer.title() === shownApp, "the page is called " + shownApp);
 await newcomer.screenshot({ path: `${OUT}/9-welcome-phone.png` });
 await fresh.close();
 
+// The Task Board moves one card, in one intercepted save.
+await page.setViewport({ width: 1280, height: 860 });
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+const boardPicker = '.task-board select[aria-label="Status of T-3"]';
+check(await until(() => document.querySelectorAll(".task-board .board-column").length === 6 && !!document.querySelector('.board-column[aria-label="Testing"]'), 15000),
+  "the board shows a column for each configured status");
+check(await page.$eval(".task-board", (el) => !el.textContent.includes("Get set up") && el.textContent.includes("Columns use the statuses from Task fields.")),
+  "the board names the source of its columns and omits the epic");
+const boardTask = await realFile("Tasks/Try the app on a phone.md");
+boardState = { path: taskPath, ...boardTask };
+const boardPuts = puts.length;
+await page.select(boardPicker, "Done");
+check(await until(() => !!document.querySelector('.board-column[aria-label="Done"] select[aria-label="Status of T-3"]'), 15000),
+  "the status menu moves a board card to the chosen column");
+check(puts.length === boardPuts + 1 && puts.at(-1).text === boardTask.text.replace(/^status: In Progress$/m, "status: Done"),
+  "the move makes one commit that changes only the status");
+
+
+const editBoard = '[aria-label="Edit card T-3"]';
+await page.click(editBoard);
+await page.waitForSelector("#board-edit-priority");
+const beforeBoardPriority = boardState.text;
+const boardPriorityPuts = puts.length;
+await page.select("#board-edit-priority", "High");
+check(await until(() => document.querySelector("#toast")?.textContent.includes("priority is now High"), 10000)
+  && puts.length === boardPriorityPuts + 1 && puts.at(-1).text === beforeBoardPriority.replace(/^priority: Medium$/m, "priority: High"),
+  "editing a card priority commits only the priority");
+check(await until(() => !!document.querySelector('#board-assignee-options option[value="@collaborator-test"]'), 15000),
+  "the card uses the project collaborator picker");
+const beforeBoardAssignee = boardState.text;
+const boardAssigneePuts = puts.length;
+await page.$eval("#board-edit-assignee", (input) => {
+  input.value = "@collaborator-test";
+  input.dispatchEvent(new Event("change"));
+});
+check(await until(() => document.querySelector("#toast")?.textContent.includes("assignee updated"), 10000)
+  && puts.length === boardAssigneePuts + 1 && puts.at(-1).text.replace(/^assignment_id: [^\n]+\n/m, "") === beforeBoardAssignee.replace(/^assignee: Your name$/m, 'assignee: "@collaborator-test"'),
+  "editing a card assignee commits only the assignee");
+await page.waitForSelector("#board-edit-assignee:enabled");
+await page.click("dialog .modal-foot .primary");
+boardState = null;
+fakeLogin = "your-github-login";
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector(".board-mine input");
+await page.click(".board-mine input");
+check(await until(() => !document.querySelector('[aria-label="Edit card T-4"]')
+  && !!document.querySelector('[aria-label="Edit card T-3"]'), 15000), "Assigned to me includes the signed-in vault name and filters out other cards");
+await page.click(".board-mine input");
+check(await until(() => !!document.querySelector('[aria-label="Edit card T-4"]'), 10000), "clearing Assigned to me restores the other cards");
+// The repository owner's connected account may differ from the device's main account.
+const previousIdentity = await page.evaluate((owner) => {
+  const previous = { user: localStorage.getItem("commonplace:user"), tokens: localStorage.getItem("commonplace:tokens") };
+  const token = JSON.parse(localStorage.getItem("commonplace:token"));
+  localStorage.setItem("commonplace:tokens", JSON.stringify({ [owner.toLowerCase()]: { token, login: "your-github-login" } }));
+  localStorage.setItem("commonplace:user", JSON.stringify({ login: "different-main-account" }));
+  return previous;
+}, OWNER);
+fakeLogin = "different-main-account";
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector(".board-mine input");
+await page.click(".board-mine input");
+check(await until(() => !document.querySelector('[aria-label="Edit card T-4"]')
+  && !!document.querySelector('[aria-label="Edit card T-3"]'), 15000), "Assigned to me uses this repository owner's connected account, not the device's main account");
+await page.evaluate((previous) => {
+  for (const key of ["user", "tokens"]) {
+    if (previous[key] == null) localStorage.removeItem("commonplace:" + key);
+    else localStorage.setItem("commonplace:" + key, previous[key]);
+  }
+}, previousIdentity);
+fakeLogin = "your-github-login";
+await page.reload({ waitUntil: "networkidle0" });
+fakeLogin = null;
+
+// An assignee directory visible to the current writer, then unavailable on another visit.
+await page.goto(at(taskPath), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector('#tf-list-assignee option[value="@collaborator-test"]'), 15000),
+  "the assignee picker suggests repository collaborators");
+check(await page.$$eval('#tf-list-assignee option[value="@your-github-login"]',
+  (options) => options.length === 1 && options[0].label === "Your name"), "the vault name labels its GitHub account once");
+denyCollaborators = true;
+await page.reload({ waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector('#tf-list-assignee option[value="@your-github-login"]'), 15000)
+  && !(await page.$('#tf-list-assignee option[value="@collaborator-test"]')), "denied lookup leaves vault people available");
+const beforeEmailAssignee = puts.length;
+await page.$eval("#tf-assignee", (input) => {
+  input.value = "pat@example.com";
+  input.dispatchEvent(new Event("change"));
+});
+check(await until(() => document.querySelector("#toast")?.textContent.includes("Assignee: pat@example.com"), 10000)
+  && puts.length === beforeEmailAssignee + 1 && /assignee: "pat@example.com"/.test(puts.at(-1).text),
+  "a typed email stays an assignee label when the lookup is denied");
+denyCollaborators = false;
+
 // 10c. Read only: GitHub says this person can read the repo but not change it.
 readOnlyRepo = true;
 await page.setViewport({ width: 1280, height: 860 });
@@ -1316,7 +1529,11 @@ await page.waitForSelector(".preview input.task");
 check(await page.$eval("#title .badge", (b) => b.textContent === "Read only").catch(() => false), "a read-only repo says so in the toolbar");
 check(await page.evaluate(() => ["#mode", "#save-btn", "#side-new"].every((s) => document.querySelector(s).hidden)), "no Edit, Save or New note there");
 check(await page.$$eval(".preview input.task", (bs) => bs.length > 0 && bs.every((b) => b.disabled)), "its checkboxes can't be ticked");
+check(!(await page.$(".image-tools")), "a read-only vault has no Add image control");
 await shot("10-read-only");
+await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
+check(await until(() => !!document.querySelector(".board-card a"), 15000)
+  && !(await page.$('.task-board .board-edit, .task-board select, .task-board [draggable="true"]')), "a read-only board shows cards without move controls");
 readOnlyRepo = false;
 
 // 10d. A new device without an invite: after the token it's sent to add a repo, and asks GitHub about none.

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 
 // The example vault's agent skills: one real copy in .agents/skills/, a pointer in .claude/skills/,
-// and a line for each in AGENTS.md and the README.
+// and a line for each in AGENTS.md and the linked agent guide.
 const vault = new URL("../example-vault/", import.meta.url);
 const read = (path) => readFileSync(new URL(path, vault), "utf8");
 const skills = readdirSync(new URL(".agents/skills/", vault));
@@ -41,12 +41,14 @@ test("every skill has a Claude Code pointer with the same name and description, 
   }
 });
 
-test("AGENTS.md and the README list every skill", () => {
+test("AGENTS.md and the agent guide list every skill, reachable from README", () => {
   const agents = read("AGENTS.md");
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const guide = readFileSync(new URL("../docs/ai-agents.md", import.meta.url), "utf8");
+  assert.ok(readme.includes("(docs/ai-agents.md)"), "the README links the agent guide");
   for (const name of skills) {
     assert.ok(agents.includes(`\`${name}\``), `AGENTS.md lists ${name}`);
-    assert.ok(readme.includes(`(example-vault/.agents/skills/${name}/SKILL.md)`), `the README links ${name}`);
+    assert.ok(guide.includes(`(../example-vault/.agents/skills/${name}/SKILL.md)`), `the agent guide links ${name}`);
   }
 });
 

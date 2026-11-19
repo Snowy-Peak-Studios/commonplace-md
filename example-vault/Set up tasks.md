@@ -49,3 +49,19 @@ A sprint is a note in `Sprints/` with its `start`, `end` and `goal`, like [[Spri
 ## No setup yet?
 
 A repo that was never set up has Status, Priority, Assignee, Area and Requested by, as before. The first time you open the setup, every field but Reviewer is ticked: untick the ones you don't need (and tick Reviewer if you want one), then save.
+
+## AI work history
+
+Reserve `work_time` for agents' whole minutes only: `work_time: 12`. Never record a person's work in it. A human assignee or reviewer does not change what an existing AI record means. You can add a number field named **AI work minutes** with property `work_time` to see the raw records among task fields.
+
+A completed task contributes to the chart when its `work_time` is a non-negative whole number and its grouping fields are filled in. Zero means less than one recorded minute. Cancelled tasks, epics, missing values and invalid numbers are excluded. The last configured status counts as completed, as well as Done. Configure that last status as your successful completion status. Area, Type and Status use the property names in your task setup.
+
+Add this block wherever you want a chart (the [[Task Board]] has one):
+
+```ai-work-time
+group: area-type
+```
+
+Change `group` to `area` or `type` to group more broadly. The text gives the mean, sample count and observed minimum/maximum; the bars compare averages. Records are only from this vault's task folder.
+
+On an unfinished task, **AI time estimate** beside the fields uses only completed tasks with the same Area **and** Type. One sample is labelled provisional; no match says there is no history. This read-only derived field makes no AI call, records no person's time, and never writes over the manual Estimate in points, hours or days. The range is observed history, not a forecast interval or promised finishing time.

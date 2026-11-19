@@ -13,6 +13,19 @@ test("base64 keeps UTF-8 text as it is", () => {
   for (const s of ["", "plain", "zażółć gęślą jaźń", "emoji 🌲\n"]) assert.equal(decodeBase64(encodeBase64(s)), s);
 });
 
+test("a binary upload sends exact bytes in a create-only contents request", async () => {
+  const gh = new GitHub("test");
+  const bytes = new Uint8Array([0, 1, 127, 128, 254, 255]);
+  gh.request = async (method, path, { body }) => {
+    assert.equal(method, "PUT");
+    assert.equal(path, "/repos/owner/repo/contents/Notes/My%20image.png");
+    assert.deepEqual(body, { message: "Add image", branch: "dev", content: "AAF/gP7/" });
+    return { content: { sha: "blob" }, commit: { sha: "commit", parents: [{ sha: "parent" }] } };
+  };
+  assert.deepEqual(await gh.writeBytes({ owner: "owner", repo: "repo", branch: "dev" }, "Notes/My image.png", bytes, "Add image"),
+    { sha: "blob", commit: "commit", parent: "parent" });
+});
+
 test("each request about a repo goes with its owner's token, else the main one", () => {
   assert.equal(ownerOfPath("/repos/Ann-Example/notes/contents/a.md"), "ann-example");
   assert.equal(ownerOfPath("/repos/ann/notes"), "ann");
@@ -38,4 +51,19 @@ test("the new-token link fills in GitHub's form for one owner", () => {
   assert.equal(ro.get("contents"), "read");
   assert.equal(ro.has("target_name"), false, "no owner: GitHub picks the person's own account");
   assert.equal(ro.get("name").length, 40, "GitHub takes at most 40 characters");
+});
+
+
+test("repository collaborators are fetched in pages from the repository owner", async () => {
+  const gh = new GitHub("test");
+  const paths = [];
+  gh.request = async (method, path) => {
+    assert.equal(method, "GET");
+    paths.push(path);
+    return paths.length === 1 ? Array.from({ length: 100 }, (_, i) => ({ login: "person-" + i })) : [{ login: "last" }];
+  };
+  const collaborators = await gh.collaborators({ owner: "owner", repo: "repo" });
+  assert.equal(collaborators.length, 101);
+  assert.equal(collaborators.at(-1).login, "last");
+  assert.deepEqual(paths, [1, 2].map((page) => "/repos/owner/repo/collaborators?affiliation=all&per_page=100&page=" + page));
 });

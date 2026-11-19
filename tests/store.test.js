@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { migratePrefix, upgradeRepo } from "../src/store.js";
+import { migratePrefix, upgradeRepo, retireDevelopmentPreference } from "../src/store.js";
 
 /** A Storage-like object over a Map, as localStorage behaves. */
 function fakeStorage(entries = {}) {
@@ -52,4 +52,15 @@ test("older vault settings get the New notes folder and template they used to im
   assert.equal(upgradeRepo(plain), plain, "not a vault: unchanged");
   const chosen = { id: "c", vault: true, notes: "", template: "" };
   assert.equal(upgradeRepo(chosen), chosen, "already set (even empty): unchanged");
+});
+
+test("retiring public dev clears only version preferences and tolerates blocked storage", () => {
+  const original = { "commonplace:version": '"dev"', "commonplace:to-dev": "1", "commonplace:token": '"keep"', "commonplace:repos": "[]", "commonplace:draft:demo:Home.md": "draft", "other:version": "keep" };
+  const storage = fakeStorage(original);
+  retireDevelopmentPreference(storage);
+  const { "commonplace:version": version, "commonplace:to-dev": sent, ...kept } = original;
+  assert.deepEqual(storage.dump(), kept);
+  retireDevelopmentPreference(storage);
+  assert.deepEqual(storage.dump(), kept);
+  assert.doesNotThrow(() => retireDevelopmentPreference({ removeItem() { throw Error("blocked"); } }));
 });

@@ -2,41 +2,31 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
-import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_SETTINGS } from "./local.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
-  LinkIndex, findWikilinks, findNavBlock, isImagePath, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
+  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
-  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, addNewTask, editNewTask,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint,
+  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
 } from "./vault.js";
-import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions } from "./markdown.js";
-import { createEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
+import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
+import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
 import { parseCsv, serializeCsv } from "./csv.js";
 import { parseBase, candidatePaths, runView, usesFileMtime, noteProps, reviveDates } from "./bases.js";
-import { store, upgradeRepo } from "./store.js";
+import { store, upgradeRepo, upgradeInboxOverview } from "./store.js";
 import { icon, fillIcons } from "./icons.js";
+import { createPrintView, clearPrintView, printNote } from "./print.js";
+import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-time.js";
 
 // ================================================================
 // Helpers
 // ================================================================
 
 const APP_NAME = "Commonplace.md";
-
-// ---- which version: released (the main branch) or in development (the dev branch, served under dev/) ----
-
-/** This is the development version, served under dev/ beside the released one, on the same origin. */
-const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
-/** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
-const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
-/** The address of the released (`dev` false) or development version, at the same page. */
-const versionHref = (dev) =>
-  new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
-/** Set in this tab just before the released version sends it on to the development one. */
-const TO_DEV = "commonplace:to-dev";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -183,6 +173,8 @@ async function loadAccess(repo) {
  */
 const ownerTokens = () => store.get("tokens", {}) || {};
 const tokenMap = () => Object.fromEntries(Object.entries(ownerTokens()).map(([o, t]) => [o, t.token]));
+/** The account actually used by a source; local vaults have no GitHub identity. */
+const loginFor = (repo) => isLocal(repo) ? "" : ownerTokens()[String(repo?.owner || "").toLowerCase()]?.login ?? store.get("user")?.login ?? "";
 /** The local vaults' files (`src/local.js`): `gh` sends every call about a local vault there, never to GitHub. */
 const local = new LocalSource();
 /** Each GitHub vault's copy on this device (`src/mirror.js`): its reads and saves go through it. */
@@ -251,12 +243,13 @@ const linkEnv = (repo, fromPath, depth = 0) => {
 // Goes up whenever a tree's files change, so work done for an older tree (base views) is done again.
 let treeVersion = 0;
 
-async function loadTree(repo, force = false) {
-  if (!force && app.trees.has(repo.id)) return app.trees.get(repo.id);
+async function loadTree(repo, force = false, { readOnly = false, current = () => true } = {}) {
+  if (!readOnly && !force && app.trees.has(repo.id)) return app.trees.get(repo.id);
   // The branch's latest commit first, so the tree is that commit's and newer ones can be told apart later.
   let head = null;
   try { head = await gh.headSha(repo); } catch { /* the tree still loads by the branch's name */ }
-  const data = await gh.tree(repo, head?.sha || repo.branch);
+  if (!current()) throw new Error("The source selection changed.");
+  const data = await gh.tree(repo, head?.sha || repo.branch, { readOnly, current });
   const prefix = repo.folder ? repo.folder.replace(/\/+$/, "") + "/" : "";
   const files = new Map();
   for (const e of data.tree) {
@@ -272,8 +265,7 @@ async function loadTree(repo, force = false) {
     offline: !!data.offline, syncedAt: data.syncedAt ?? null,
     changed: new Set([...(data.changed || [])].filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length))),
   };
-  app.trees.set(repo.id, tree);
-  findOwnInbox(repo, tree);
+  if (!readOnly) { app.trees.set(repo.id, tree); findOwnInbox(repo, tree); }
   return tree;
 }
 
@@ -312,6 +304,7 @@ function renderNudge() {
 
 /** Reads the repo again from GitHub, asking first when the open note has unsaved changes. */
 async function reloadFromGitHub() {
+  if (app.file?.imageUpload) return toast("Wait for the upload to finish.", "info");
   if (app.file?.dirty && !(await confirmDialog(isLocal(app.repo) ? "Reload the notes?" : "Reload from GitHub?", "Your unsaved changes to this note will be lost.", "Reload", true))) return;
   if (app.file) store.remove(draftKey(app.file));
   if (app.repo) {
@@ -333,7 +326,7 @@ const inboxOf = (repo) => (repo && app.trees.get(repo.id)?.ownInbox) || repo?.in
  * It runs in the background: the Inbox button and shortcut switch to it when it's found.
  */
 async function findOwnInbox(repo, tree) {
-  const login = store.get("user")?.login;
+  const login = loginFor(repo);
   const paths = inboxCandidates([...tree.files.keys()], repo.inbox, repo.inboxes || "");
   if (!login || !paths.some((p) => p !== repo.inbox)) return;
   try {
@@ -377,18 +370,23 @@ const INBOX_DOT_SAID = "Something needs you";
 async function checkInboxDot(repo) {
   const tree = app.trees.get(repo.id);
   const inbox = inboxOf(repo);
-  const login = store.get("user")?.login;
-  if (!tree || !app.token || !login || !inbox || !tree.files.has(inbox)) return;
+  const login = loginFor(repo);
+  if (!tree || !usable(repo) || (!isLocal(repo) && !login) || !inbox || !tree.files.has(inbox)) return;
   const key = `${tree.version}:${inbox}:${login}`;
   if (tree.attentionKey === key) return;
   tree.attentionKey = key;
   let waits = false;
   try {
     const [note] = await baseNotes(repo, tree, [inbox]);
-    if (String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
+    if (isLocal(repo) ? !!String(note.props.owner ?? "").trim() : String(note.props.github ?? "").trim().replace(/^@/, "").toLowerCase() === login.toLowerCase()) {
       for (const b of await inboxAttention(repo, tree, inbox)) {
-        if (b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
-          && (await loadQuestions(repo, b.owner)).some((t) => !t.answer)) waits = true;
+        if (isLocal(repo) && foldName(b.owner) !== foldName(note.props.owner)) continue;
+        if (b.show.includes("reviews") && (b.owner || b.login)
+          && (await loadReviews(repo, b.owner, b.login, b.reviewStatuses)).length) waits = true;
+        if (!waits && b.show.includes("questions") && b.owner && [...tree.files.keys()].some(isTaskPath)
+          && (await loadQuestions(repo, b.owner, b.login)).some((t) => !t.answer)) waits = true;
+        if (!waits && b.show.includes("assignments") && (b.owner || b.login)
+          && sortAssignments(await loadAssignments(repo, b.owner, b.login), note.props[SEEN_ASSIGNMENTS]).open.length) waits = true;
         if (!waits && b.show.includes("mentions") && b.login
           && sortMentions((await loadMentions(repo, b.login)).found, note.props[SEEN_MENTIONS]).open.length) waits = true;
         if (waits) break;
@@ -435,6 +433,9 @@ function renderShortcuts() {
   const tree = repo && app.trees.get(repo.id);
   if (!tree) return fill(host);
   const fixed = [];
+  const overview = overviewPrefs();
+  const dashboard = app.repos.find((r) => r.id === overview.repo && r.local === "browser");
+  if (overview.enabled && dashboard) fixed.push(fileRow(dashboard, overview.path, "inbox", "All inboxes"));
   const inbox = inboxOf(repo);
   if (inbox && tree.files.has(inbox)) fixed.push(fileRow(repo, inbox, "inbox", "Inbox", null, tree.attention ? INBOX_DOT_SAID : ""));
   if (repo.home && tree.files.has(repo.home) && repo.home !== inbox) fixed.push(fileRow(repo, repo.home, "home"));
@@ -595,6 +596,7 @@ function renderHeader() {
   const title = $("#title");
   const writable = canWrite();
   $("#new-btn").hidden = !writable;
+  $("#export-pdf-btn").hidden = f?.kind !== "md";
   $("#side-new").hidden = !writable;
   if (f) {
     const dir = dirName(f.path);
@@ -621,11 +623,11 @@ function renderHeader() {
   }
   const save = $("#save-btn");
   save.hidden = !f || viewOnly(f.kind) || !writable;
-  save.disabled = !(f?.dirty || uploadable(f)) || app.saving;
+  save.disabled = !(f?.dirty || uploadable(f)) || app.saving || !!f?.imageUpload;
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : uploadable(f) ? ["upload", "Upload"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
-  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
+  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${APP_NAME}` : app.pageTitle ? `${app.pageTitle} · ${APP_NAME}` : APP_NAME;
 }
 
 // ================================================================
@@ -763,9 +765,18 @@ async function route() {
  */
 async function mayLeave(depthBefore) {
   const f = app.file;
-  if (!f?.dirty) return true;
+  if (!f) return true;
   const { parts } = parseHash();
   if (parts[0] === f.repo.id && parts.slice(1).join("/") === f.path) return true;
+  if (f.imageUpload) {
+    toast("Wait for the upload to finish.", "info");
+    return restoreNoteRoute(f, depthBefore);
+  }
+  if (hasCaptureDraft(f)) {
+    const leave = await confirmDialog("Leave unapplied ideas?", "Use Add or Keep changes before leaving to keep the text in the New tasks box. Leaving now discards that text.", "Leave without adding", true);
+    if (!leave) return restoreNoteRoute(f, depthBefore);
+  }
+  if (!f.dirty) return true;
   if (askingLeave) return false;
   askingLeave = true;
   let choice;
@@ -794,6 +805,10 @@ async function mayLeave(depthBefore) {
   // Saved, discarded or kept as a draft: on to the new page. Stay, or a save that didn't go through
   // (refused, or someone else's change to sort out first): back to the file.
   if ((choice === "save" && !f.dirty) || choice === "discard" || choice === "draft") return true;
+  return restoreNoteRoute(f, depthBefore);
+}
+
+function restoreNoteRoute(f, depthBefore) {
   if (navDepth !== depthBefore) {
     skipRoute = true;
     if (navDepth > depthBefore) history.back();
@@ -805,7 +820,9 @@ async function mayLeave(depthBefore) {
 }
 
 function closeFile() {
+  clearPrintView();
   app.file?.editor?.destroy();
+  app.file?.commentEditors?.forEach(({ view }) => view.destroy());
   app.file = null;
 }
 
@@ -899,6 +916,7 @@ function renderFile() {
     linkWarn: h("div", { class: "banner warn link-warn", hidden: true }),
   };
   f.dom.banners.append(f.dom.linkWarn);
+  if (f.kind === "md" && canWrite(f.repo)) setupImageTools(f);
   view.append(f.dom.banners, h("div", { class: "panes" }, f.dom.editorPane, f.dom.preview));
   showMain(view);
   f.dom.preview.addEventListener("click", onPreviewClick);
@@ -949,14 +967,90 @@ function setMode(mode) {
   applyMode(true);
 }
 
-function onTextChanged(text) {
+function onTextChanged(text, changes) {
   const f = app.file;
+  if (f?.imageUpload && !f.imageUpload.capture && changes) f.imageUpload.at = changes.mapPos(f.imageUpload.at, -1);
   if (!f || f.text === text) return;
   f.text = text;
   if (f.kind === "csv") f.csv = null;
   updateDirty();
   if (f.kind === "md" && isWide()) previewLater();
   warnLater();
+}
+
+/** The chooser, clipboard and editor drop all go through the same image action. */
+function setupImageTools(f) {
+  const input = h("input", { type: "file", accept: IMAGE_ACCEPT, hidden: true, "aria-label": "Choose an image",
+    onchange: () => {
+      const file = input.files[0];
+      input.value = "";
+      if (file) addImage(f, file);
+    } });
+  const pick = h("button", { type: "button", class: "btn small", onclick: () => input.click() }, icon("image"), "Add image");
+  const status = h("span", { class: "muted", role: "status" });
+  f.dom.imageTools = { pick, status };
+  const pane = f.dom.editorPane;
+  pane.append(h("div", { class: "image-tools" }, pick, input, status));
+  const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => file.type.startsWith("image/") || isImagePath(file.name))
+    || [...(transfer.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile());
+  const handle = (event, transfer, at) => {
+    const file = imageFile(transfer);
+    if (!file) return;
+    event.preventDefault();
+    event.stopPropagation();
+    addImage(f, file, at);
+  };
+  pane.addEventListener("paste", (event) => handle(event, event.clipboardData), true);
+  pane.addEventListener("dragover", (event) => {
+    if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === "file" && (!item.type || item.type.startsWith("image/")))) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }, true);
+  pane.addEventListener("drop", (event) => handle(event, event.dataTransfer,
+    f.editor?.posAtCoords({ x: event.clientX, y: event.clientY }) ?? undefined), true);
+}
+
+async function addImage(f, file, at = f.editor?.state.selection.main.head) {
+  if (app.file !== f || app.mode !== "edit" || !canWrite(f.repo) || at == null) return;
+  if (f.imageUpload || app.saving) return toast("Wait for the current save or upload to finish.", "info");
+  if (!isLocal(f.repo) && navigator.onLine === false) return toast("Connect to GitHub before adding an image.", "error");
+  const nav = f.repo.vault && findNavBlock(f.text);
+  if (nav && at >= nav.from && at <= nav.to) return toast("Move the cursor outside the navigation box to add an image.", "info");
+
+  const { pick, status } = f.dom.imageTools;
+  const tree = app.trees.get(f.repo.id);
+  f.imageUpload = { at };
+  pick.disabled = true;
+  status.textContent = "Uploading image…";
+  renderHeader();
+  try {
+    const image = imageAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const saved = await gh.writeBytes(f.repo, fullPath(f.repo, image.path), bytes, `Add ${image.path} from ${APP_NAME}`);
+    wroteCommit(f.repo, saved);
+    treeChanged(f.repo, image.path, saved.sha);
+    if (app.file !== f) return toast(`Image saved to ${image.path}.`, "ok");
+    const { at: cursor, insert } = imageInsertion(f.text, f.imageUpload.at, image.link);
+    const currentNav = f.repo.vault && findNavBlock(f.text);
+    if (currentNav && cursor >= currentNav.from && cursor <= currentNav.to) {
+      // Keep the protected box on its original lines when insertion falls at its edge.
+      const line = insert.endsWith("\n") ? insert : insert + "\n";
+      f.editor.dispatch({ changes: { from: currentNav.from, insert: line }, filter: false });
+    } else {
+      f.editor.dispatch({ changes: { from: cursor, insert }, selection: { anchor: cursor + insert.length }, scrollIntoView: true });
+    }
+    if (app.mode === "edit") f.editor.focus();
+    else renderPreview();
+    toast("Image added. Save the note to keep the link.", "ok");
+  } catch (e) {
+    toast(`Image not added: ${e.message}`, "error");
+  } finally {
+    f.imageUpload = null;
+    pick.disabled = false;
+    status.textContent = "";
+    renderHeader();
+  }
 }
 
 function updateDirty() {
@@ -981,17 +1075,30 @@ function renderPreview() {
   const body = h("div", { class: "note-body" });
   body.innerHTML = sanitize(html);
   // A note without a title of its own shows its file name.
-  if (!body.querySelector("h1")) body.prepend(h("h1", { class: "inline-title" }, shownName(f.path)));
+  if (!body.querySelector("h1:not(.note-section h1)")) body.prepend(h("h1", { class: "inline-title" }, shownName(f.path)));
+  const history = '.note-body > details[data-section="work-history"]';
+  const previous = f.dom.preview.querySelectorAll(history);
+  body.querySelectorAll(':scope > details[data-section="work-history"]').forEach((section, i) => { section.open = previous[i]?.open ?? false; });
   decorate(body, f.repo, f.path);
   if (!canWrite(f.repo)) for (const box of body.querySelectorAll("input.task")) box.disabled = true;
   fillEmbeds(body, f.repo, f.path);
   fillBases(body, f.repo, f.path);
+  const previousBoards = [...f.dom.preview.querySelectorAll(".board-columns")].map((board) => board.scrollLeft);
+  fillBoards(body, f);
+  fillAiTime(body, f);
+  if (previousBoards.some(Boolean)) {
+    requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
+      board.scrollLeft = previousBoards[i] ?? 0;
+    }));
+  }
   // The top tasks show only where a ```top-tasks block is, an inbox's too.
   fillTopTasks(body, f);
-  // The questions and mentions waiting on someone show only where a ```needs-attention block is, like the top tasks.
+  // Inbox items show only where a ```needs-attention block is, like the top tasks.
   fillAttention(body, f);
-  // A ```new-tasks box gets its Add field, where the note can be changed.
+  fillInboxOverview(body, f);
+  // New tasks and Comments get their inline forms where the note can be changed.
   fillNewTasks(body, f);
+  const commentFocus = fillComments(body, f);
   // A task shows its project's fields as a form, and the other properties in the box below it.
   const setup = usable(f.repo) ? taskSetupOf(f.repo) : null;
   if (usable(f.repo) && !setup) {
@@ -1001,7 +1108,7 @@ function renderPreview() {
   const form = isTask && canWrite(f.repo) ? taskForm(f, setup) : null;
   // A task with a ```commits block shows its commits there, not again among its properties.
   const ownCommits = isTask && hasBlock(f.text, "commits");
-  const inForm = isTask ? new Set([...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
+  const inForm = isTask ? new Set([ASSIGNMENT_ID, ...(ownCommits ? ["commits"] : []), ...(form ? setup.fields.filter((x) => x.on).map((x) => x.prop.toLowerCase()) : [])]) : null;
   let props = null;
   if (isTask && frontMatter) try { props = yamlLoad(frontMatter); } catch { /* the properties box shows what's wrong */ }
   const isSprint = setup && !isTask && isSprintNote(setup, f.path);
@@ -1011,8 +1118,53 @@ function renderPreview() {
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && (() => sprintBox(f, setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
-  fill(f.dom.preview, form, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
+  fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  commentFocus?.focus();
   fitWide(f);
+}
+
+// AI history stays in this vault and shares the existing task-property cache.
+function aiEstimateField(f, setup) {
+  const entry = taskNotes(f.repo, setup);
+  if (!entry.notes) return null;
+  const samples = aiTimeSamples(entry.notes, setup);
+  // Vaults without AI records or an explicitly configured work_time field need no AI UI.
+  if (!samples.length && !setup.fields.some((field) => field.prop === "work_time")) return null;
+  const estimate = aiTimeEstimate(samples, noteProps(f.text), setup, f.path);
+  if (!estimate) return null;
+  return h("div", { class: "ai-time-estimate", "aria-label": "AI time estimate" },
+    h("strong", {}, "AI time estimate: "), estimate.reason || `${aiTimeLabel(estimate.mean)} average`,
+    estimate.count ? h("small", { class: "muted" }, ` · ${estimate.count} completed task${estimate.count === 1 ? "" : "s"} · observed ${aiTimeLabel(estimate.min)}–${aiTimeLabel(estimate.max)}${estimate.count === 1 ? " · provisional: one sample" : ""}`) : null,
+    h("small", { class: "muted ai-time-note" }, "Recorded AI work only, never human time. A guide, not a promised finish time."));
+}
+
+function fillAiTime(root, f) {
+  const blocks = root.querySelectorAll(".ai-time-block");
+  const setup = taskSetupOf(f.repo);
+  if (!blocks.length || !setup) return;
+  const entry = taskNotes(f.repo, setup);
+  for (const el of blocks) {
+    // Embedded pages retain their fence, as other app blocks do.
+    if (el.parentElement.closest(".embed-page")) continue;
+    if (!entry.notes) { fill(el, h("p", { class: "muted", role: "status" }, "Loading AI work history…")); continue; }
+    let options;
+    try { options = yamlLoad(el.querySelector("code").textContent) || {}; }
+    catch { fill(el, h("p", { class: "muted" }, "Check this ai-work-time block: use group: area-type, area or type.")); continue; }
+    const group = options.group || "area-type";
+    if (!["area-type", "area", "type"].includes(group)) { fill(el, h("p", { class: "muted" }, "Use group: area-type, area or type.")); continue; }
+    const groups = aiTimeGroups(aiTimeSamples(entry.notes, setup), group);
+    const largest = groups[0]?.mean || 1;
+    el.replaceWith(h("section", { class: "ai-time-chart", "aria-label": "AI work history" },
+      h("h3", {}, "AI work history"),
+      h("p", { class: "muted" }, "Average recorded AI minutes by " + (group === "area-type" ? "area and type" : group) + ". Completed tasks only; never a measure of a person."),
+      groups.length ? h("ul", { class: "ai-time-groups" }, groups.map((g) => h("li", {},
+        h("strong", {}, g.label), h("span", {}, `${aiTimeLabel(g.mean)} average · ${g.count} task${g.count === 1 ? "" : "s"}`),
+        h("div", { class: "ai-time-track", "aria-hidden": "true" }, h("span", { style: `width: ${g.mean / largest * 100}%` })),
+        h("small", { class: "muted" }, `Observed ${aiTimeLabel(g.min)}–${aiTimeLabel(g.max)}${g.count === 1 ? " · one sample" : ""}`))))
+        : h("p", { class: "muted" }, "No completed AI tasks with valid work_time minutes and these grouping fields yet."),
+      h("small", { class: "muted" }, "work_time is AI-only whole minutes. Missing or invalid values, cancelled tasks and epics are excluded. History does not predict a guaranteed finish time.")));
+  }
 }
 
 /** How wide a table or base view may grow on a big screen. */
@@ -1550,7 +1702,10 @@ function taskForm(f, setup) {
       if (field.kind === "task") list = parentList(f, field, setup, notes, lists);
       else if (field.kind === "sprint") list = sprintList(f, field, setup, notes, lists);
       else if (field.kind === "link") list = listFor(field, notes.map(shownName));
-      else if (field.kind === "person") list = listFor(field, [login, cur]);
+      else if (field.key === "assignee") {
+        list = "tf-list-" + field.prop;
+        lists.push(assigneeList(f.repo, list));
+      } else if (field.kind === "person") list = listFor(field, [login, cur]);
       control = h("input", {
         class: "input", id, list,
         type: field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text",
@@ -1611,7 +1766,9 @@ async function setTaskField(f, field, input, control) {
   }
   const value = fieldValue(field, input);
   if (value == null) return toast(`${field.label}: that isn't a ${field.kind === "date" ? "date" : "number"}.`, "error");
-  const next = withProps(f.text, [[field.prop, value]]);
+  const assigned = field.key === "assignee" && value !== shownValue(noteProps(f.text)[field.prop]).trim();
+  const entries = [[field.prop, value], ...(assigned ? assignmentEdits(value) : [])];
+  const next = withProps(f.text, entries);
   if (next === toLf(f.text)) return;
   const redraw = () => {
     const scroll = $("#main").scrollTop;
@@ -1629,15 +1786,16 @@ async function setTaskField(f, field, input, control) {
   try {
     const id = String(noteProps(f.text).id ?? "").trim();
     const res = await gh.writeText(f.repo, fullPath(f.repo, f.path), next, f.sha,
-      `${id ? id + ": " : ""}${field.prop} set to ${saidValue(value, "nothing")} from ${APP_NAME}`);
+      `${id ? id + ": " : ""}${field.key === "assignee" ? field.prop + " updated" : field.prop + " set to " + saidValue(value, "nothing")} from ${APP_NAME}`);
     wroteCommit(f.repo, res);
     baseCache("baseProps", f.repo)[res.sha] = noteProps(next);
     treeChanged(f.repo, f.path, res.sha);
+    if (assigned) checkInboxDot(f.repo);
     if (app.file === f) {
       f.sha = res.sha;
       f.saved = next;
       // Typed into the editor meanwhile: those edits stay, with the field's new line in them.
-      f.text = f.dirty ? withProps(f.text, [[field.prop, value]]) : next;
+      f.text = f.dirty ? withProps(f.text, entries) : next;
       if (f.editor) setEditorText(f.editor, f.text);
       updateDirty();
       if (!f.dirty) store.remove(draftKey(f));
@@ -1652,11 +1810,19 @@ async function setTaskField(f, field, input, control) {
 
 // ---- the top tasks to start: in a ```top-tasks block, on an inbox or any other page ----
 
+/** A deferred task can be shown as free before any change is written to the note. */
+const returnFromWaiting = (note, days, today) => waitingReady(note.props, days, today)
+  ? { ...note, props: { ...note.props, status: "To Do" }, backFromWaiting: true }
+  : note;
+
+const clearWaitingDate = (props) => props.waiting_since ? [["waiting_since", ""]] : [];
+
 /** One look-up per tree version and options, so typing in the inbox doesn't redo it. */
 const suggestLoads = new Map();
-function loadSuggestions(repo, areas, who, count, sprintMode, order) {
+function loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}`;
+  const today = isoDate();
+  const key = `${repo.id}:${tree.version}:${areas.join(",")}:${who}:${count}:${sprintMode}:${order}:${today}:${waitDays}`;
   if (!suggestLoads.has(key)) {
     for (const k of suggestLoads.keys()) if (k.startsWith(`${repo.id}:`)) suggestLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath))
@@ -1669,11 +1835,16 @@ function loadSuggestions(repo, areas, who, count, sprintMode, order) {
         const blocked = blockedTasks(notes, { setup, resolve });
         // `current-only` never reaches into the next sprint, and with no sprint running it has nothing to show.
         const only = sprintMode === "current-only";
+        const available = notes.map((note) => returnFromWaiting(note, waitDays, today));
         const fromSprint = !sprint ? null : only && !sprint.now ? []
-          : sprintSuggestions(notes, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
+          : sprintSuggestions(available, { areas, count, prop: sprint.prop, now: sprint.now?.path, next: only ? null : sprint.next?.path, resolve, blocked, order });
+        const free = fromSprint ?? suggestTasks(available, { areas, count, blocked, order });
+        const returned = new Set(free.filter((note) => note.backFromWaiting).map((note) => note.path));
+        const people = who ? await loadPeople(repo).catch(() => []) : [];
+        const whoLogin = people.find((person) => foldName(person.name) === foldName(who))?.login ?? "";
         const shown = {
-          mine: claimedTasks(notes, who), free: fromSprint ?? suggestTasks(notes, { areas, count, blocked, order }),
-          waiting: waitingTasks(notes, { areas, owner: who, order }), allAreas: taskAreas(notes),
+          mine: claimedTasks(notes, who, whoLogin), whoLogin, free,
+          waiting: waitingTasks(notes, { areas, owner: who, login: whoLogin, order }).filter((note) => !returned.has(note.path)), allAreas: taskAreas(notes),
           sprint: fromSprint && (sprint.now || sprint.next) ? sprint : null,
           noSprintNow: !!fromSprint && only && !sprint.now, setup,
         };
@@ -1704,14 +1875,17 @@ async function suggestSprints(repo, tree) {
 
 /**
  * Each ```top-tasks block on the page becomes the box, with only the options written in it: `range`, `areas`,
- * `sprint` and `owner` (whom Claim claims for). Nothing comes from the page's properties or the device; a page
+ * `sprint` and `owner` (whom Claim claims for). The page can set `waiting_days` for deferrals. A page
  * without the block has no box, an inbox too. In a repo without tasks, the block's code stays.
  */
 function fillTopTasks(root, f) {
-  for (const el of root.querySelectorAll(".top-tasks-block")) {
+  const blocks = root.querySelectorAll(".top-tasks-block");
+  if (!blocks.length) return;
+  const waitDays = waitingDays(noteProps(f.text).waiting_days);
+  for (const el of blocks) {
     if (el.parentElement.closest(".embed-page")) continue;
     const shown = (el.dataset.areas || "").split(",").map((a) => a.trim()).filter(Boolean);
-    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "",
+    const box = suggestBox(f.repo, { areas: listProp(shown), shown, who: el.dataset.owner || "", waitDays,
       count: Number(el.dataset.count) || TOP_TASKS_COUNT, countSet: !el.dataset.countDefault,
       order: el.dataset.order || "priority-newest", orderSet: !el.dataset.orderDefault, sprintMode: el.dataset.sprint || "off",
       fields: el.dataset.fieldsDefault ? [...TOP_TASKS_FIELDS] : (el.dataset.fields || "").split(",").filter(Boolean), fieldsSet: !el.dataset.fieldsDefault });
@@ -1721,13 +1895,13 @@ function fillTopTasks(root, f) {
 
 /** One look-up per tree version and owner, so typing in the inbox doesn't redo it. */
 const questionLoads = new Map();
-function loadQuestions(repo, who) {
+function loadQuestions(repo, who, login) {
   const tree = app.trees.get(repo.id);
-  const key = `${repo.id}:${tree.version}:${who}`;
+  const key = `${repo.id}:${tree.version}:${who}:${login}`;
   if (!questionLoads.has(key)) {
     for (const k of questionLoads.keys()) if (k.startsWith(`${repo.id}:`)) questionLoads.delete(k);
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then(async (notes) => {
-      const tasks = questionTasks(notes, who);
+      const tasks = questionTasks(notes, who, login);
       // Only the tasks with a question are read whole, to see whether an answer is written on them yet.
       const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path)).catch(() => new Map());
       return tasks.map((t) => ({ ...t, answer: answers.get(t.path) ?? "" }));
@@ -1742,6 +1916,30 @@ function loadQuestions(repo, who) {
 
 /** The vault's people, from its inboxes' `github` and `owner`: one look-up per tree version. */
 const peopleLoads = new Map();
+const collaboratorLoads = new WeakMap();
+
+function loadCollaborators(repo) {
+  if (isLocal(repo) || !canWrite(repo) || !gh.tokenFor(repo.owner)) return Promise.resolve([]);
+  if (!collaboratorLoads.has(gh)) collaboratorLoads.set(gh, new Map());
+  const known = collaboratorLoads.get(gh);
+  const key = (repo.owner + "/" + repo.repo).toLowerCase();
+  if (!known.has(key)) known.set(key, gh.collaborators(repo).catch(() => []));
+  return known.get(key);
+}
+
+/** An assignee suggestion list that updates while the input remains usable. */
+function assigneeList(repo, id) {
+  const list = h("datalist", { id });
+  const login = loginFor(repo);
+  let people = [];
+  let collaborators = [];
+  const draw = () => fill(list, assigneeOptions(people, collaborators, login)
+    .map(({ value, label }) => h("option", { value, label: label || null })));
+  draw();
+  loadPeople(repo).then((known) => { people = known; draw(); }).catch(() => {});
+  loadCollaborators(repo).then((known) => { collaborators = known; draw(); });
+  return list;
+}
 function loadPeople(repo) {
   const tree = app.trees.get(repo.id);
   if (!tree) return Promise.resolve([]);
@@ -1772,14 +1970,15 @@ function fillMentions(root, repo) {
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
 async function noteMentions(repo, tree, paths) {
-  // "mentions2": now each mention also says whether a reply is under it, so the older cache is dropped.
+  // Mentions in named sections now count, so older scans must be rebuilt.
   store.remove(`mentions:${repo.id}`);
-  const cache = baseCache("mentions2", repo);
+  store.remove(`mentions2:${repo.id}`);
+  const cache = baseCache("mentions3", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("mentions2", repo, (sha) => live.has(sha));
+    keepBaseCache("mentions3", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
 }
@@ -1807,64 +2006,429 @@ function loadMentions(repo, login) {
   return mentionLoads.get(key);
 }
 
+/** Apply a change from an inline note control and keep the reader's place. */
+function applyPreviewEdit(f, next) {
+  if (app.file !== f || next === f.text) return false;
+  f.text = next;
+  if (f.editor) setEditorText(f.editor, f.text);
+  updateDirty();
+  const scroll = $("#main").scrollTop;
+  renderPreview();
+  $("#main").scrollTop = scroll;
+  return true;
+}
+
+function noteAddForm(field, className, label, onAdd, read = () => field.value) {
+  return h("form", { class: `note-add ${className}`, onsubmit: (e) => {
+    e.preventDefault();
+    const text = read().trim();
+    if (text) onAdd(text);
+  } }, field, h("button", { class: "btn small", type: "submit" }, icon("plus"), label));
+}
+
 // ---- new tasks: a ```new-tasks block's box ----
 
-/**
- * With write access, each ```new-tasks box on the open note (not inside an embed) gets an Add field, and each
- * item an Edit and a Remove button. A change goes into the block like a ticked checkbox changes its line (the
- * note changes, Save commits it). After Add the field keeps the focus, for the next one.
- */
+/** A multiline composer adds several ideas or edits one item/the whole list without changing its owner. */
+function hasCaptureDraft(f) {
+  return [...(f?.newTaskDrafts?.values() ?? [])].some((draft) => draft.text.trim() && draft.text !== (draft.initial ?? ""));
+}
+
 function fillNewTasks(root, f) {
   if (!canWrite(f.repo)) return;
   const boxes = [...root.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"));
-  const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((x) => !x.closest(".embed-page"))[n];
-  // Puts the changed note in place and draws it again where it was; false when nothing changed.
-  const apply = (next) => {
-    if (app.file !== f || next === f.text) return false;
-    f.text = next;
-    if (f.editor) setEditorText(f.editor, f.text);
-    updateDirty();
-    const scroll = $("#main").scrollTop;
-    renderPreview();
-    $("#main").scrollTop = scroll;
-    return true;
-  };
+  const boxAt = (n) => [...f.dom.preview.querySelectorAll("section.newtasks")].filter((el) => !el.closest(".embed-page"))[n];
+  f.newTaskDrafts ||= new Map();
   boxes.forEach((el, n) => {
-    const close = Number(el.dataset.close);
-    if (!(close >= 0)) return;
-    for (const li of el.querySelectorAll(".newtasks-list li[data-line]")) {
-      const line = Number(li.dataset.line);
-      const was = li.dataset.item;
-      const text = li.querySelector(".newtasks-text");
-      const edit = () => {
-        const input = h("input", { class: "input", value: was, "aria-label": "Change this task", autocomplete: "off", enterkeyhint: "done",
-          onkeydown: (e) => { if (e.key === "Escape") { e.preventDefault(); form.replaceWith(text, tools); } } });
-        const form = h("form", { class: "newtasks-edit", onsubmit: (e) => {
-          e.preventDefault();
-          if (!apply(editNewTask(f.text, line, was, input.value))) form.replaceWith(text, tools);
-        } }, input,
-        h("button", { class: "btn small", type: "submit", title: "Keep the change (empty takes it out)" }, icon("check"), "Done"),
-        h("button", { class: "btn small ghost", type: "button", onclick: () => form.replaceWith(text, tools) }, "Cancel"));
-        tools.remove();
-        text.replaceWith(form);
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
-      };
-      const tools = h("span", { class: "newtasks-tools" },
-        h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: edit }, icon("edit")),
-        h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out",
-          onclick: () => apply(editNewTask(f.text, line, was, "")) }, icon("x")));
-      li.append(tools);
+    const start = Number(el.dataset.start), close = Number(el.dataset.close);
+    if (!(start >= 0 && close > start)) return;
+    const source = f.text.split("\n").slice(start + 1, close).join("\n");
+    const draft = f.newTaskDrafts.get(n) ?? { text: "", mode: "add", source };
+    f.newTaskDrafts.set(n, draft);
+    if (draft.mode === "add") draft.source = source;
+    const focus = () => boxAt(n)?.querySelector(".newtasks-add textarea")?.focus();
+    const begin = (mode, index = -1) => {
+      if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
+      if (draft.text.trim()) return toast("Add or clear your current draft before editing another item.", "info");
+      Object.assign(draft, { mode, source, index, text: mode === "list"
+        ? newTasksBlock(source).items.map((item) => "- " + item).join("\n") : newTasksBlock(source).items[index] });
+      draft.initial = draft.text;
+      renderPreview();
+      focus();
+    };
+    for (const [index, li] of [...el.querySelectorAll(".newtasks-list li[data-line]")].entries()) {
+      const line = Number(li.dataset.line), was = li.dataset.item;
+      li.append(h("span", { class: "newtasks-tools" },
+        h("button", { class: "icon-btn", type: "button", title: "Change this task", "aria-label": "Change this task", onclick: () => begin("item", index) }, icon("edit")),
+        h("button", { class: "icon-btn", type: "button", title: "Take this task out", "aria-label": "Take this task out", onclick: () => {
+          if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
+          applyPreviewEdit(f, editNewTask(f.text, line, was, ""));
+        } }, icon("x"))));
     }
-    const input = h("input", { class: "input", placeholder: "A new task…", "aria-label": "A new task", autocomplete: "off", enterkeyhint: "done" });
-    el.append(h("form", { class: "newtasks-add", onsubmit: (e) => {
+    const input = h("textarea", { class: "input", rows: 4, placeholder: "Write ideas here, one per line. Bullets are optional.",
+      "aria-label": draft.mode === "add" ? "New tasks" : draft.mode === "list" ? "Edit new tasks" : "Change this task",
+      oninput: () => { draft.text = input.value; },
+    }, draft.text);
+    const reset = () => {
+      if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
+      f.newTaskDrafts.delete(n);
+      renderPreview();
+      focus();
+    };
+    const attachments = h("div", { class: "newtasks-attachments" });
+    const status = h("p", { class: "newtasks-hint", role: "status" });
+    const paintAttachments = () => {
+      const links = (draft.files ?? []).filter((file) => input.value.includes(file.link)).map((file) => file.link);
+      attachments.innerHTML = sanitize(md.renderInline(links.join(" "), linkEnv(f.repo, f.path)));
+      fillImages(attachments, f.repo, f.path);
+      status.textContent = draft.upload ? "Uploading attachment…" : draft.error || "";
+      status.setAttribute("role", draft.error ? "alert" : "status");
+    };
+    const upload = async (file, at = input.selectionStart) => {
+      if (!file || app.file !== f || !canWrite(f.repo)) return;
+      if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
+      if (!isLocal(f.repo) && navigator.onLine === false) {
+        draft.error = "Connect to GitHub before adding an attachment. Your text is kept.";
+        draft.failed = file;
+        renderPreview();
+        return;
+      }
+      draft.upload = true;
+      draft.error = "";
+      f.imageUpload = { at: 0, capture: true };
+      for (const control of form.querySelectorAll("textarea, button, input")) control.disabled = true;
+      paintAttachments();
+      renderHeader();
+      try {
+        const tree = app.trees.get(f.repo.id);
+        const attachment = captureAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const saved = await gh.writeBytes(f.repo, fullPath(f.repo, attachment.path), bytes, `Add ${attachment.path} from ${APP_NAME}`);
+        wroteCommit(f.repo, saved);
+        treeChanged(f.repo, attachment.path, saved.sha);
+        const inserted = captureAttachmentText(draft.text, at, attachment.link);
+        draft.text = inserted.text;
+        (draft.files ||= []).push(attachment);
+        draft.failed = null;
+      } catch (e) {
+        draft.error = `Attachment not added: ${e.message} Your text is kept. Retry or choose another file.`;
+        draft.failed = file;
+      } finally {
+        draft.upload = false;
+        f.imageUpload = null;
+        renderHeader();
+        if (app.file === f) { renderPreview(); focus(); }
+      }
+    };
+    let attachmentAt = input.value.length;
+    const picker = h("input", { type: "file", hidden: true, "aria-label": "Choose an attachment", onchange: () => {
+      const file = picker.files[0];
+      picker.value = "";
+      upload(file, attachmentAt);
+    } });
+    input.addEventListener("paste", (event) => {
+      const transfer = event.clipboardData;
+      const file = transfer?.files?.[0] || [...(transfer?.items ?? [])].find((item) => item.kind === "file")?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      upload(file);
+    });
+    input.addEventListener("input", paintAttachments);
+
+    const form = h("form", { class: "note-add newtasks-add", onsubmit: (e) => {
       e.preventDefault();
-      const said = input.value.trim();
-      if (!said || !apply(addNewTask(f.text, close, said))) return;
-      boxAt(n)?.querySelector(".newtasks-add input")?.focus();
-    } }, input, h("button", { class: "btn small", type: "submit" }, icon("plus"), "Add")));
+      if (app.file !== f || !canWrite(f.repo)) return;
+      if (app.saving || f.imageUpload) return toast("Wait for the current save or upload to finish.", "info");
+      const entered = newTaskItems(input.value);
+      if (draft.mode === "add" && !entered.length) return;
+      const current = f.text.split("\n").slice(start + 1, close).join("\n");
+      if (current !== draft.source) return toast("The list changed. Your text is kept; reopen the list before applying it.", "error");
+      const items = newTasksBlock(current).items;
+      if (draft.mode === "add") items.push(...entered);
+      else if (draft.mode === "list") items.splice(0, items.length, ...entered);
+      else items.splice(draft.index, 1, ...entered);
+      const next = replaceNewTasks(f.text, start, close, current, items);
+      if (next == null) {
+        return toast("Close the New tasks block in Edit before changing its list.", "error");
+      }
+      f.newTaskDrafts.delete(n);
+      if (!applyPreviewEdit(f, next)) renderPreview();
+      focus();
+    } }, input, picker, attachments, status, h("p", { class: "newtasks-hint" }, "One idea per line. Add or keep changes, then Save the note."),
+    h("div", { class: "newtasks-actions" },
+      h("button", { class: "btn small", type: "submit" }, icon(draft.mode === "add" ? "plus" : "check"), draft.mode === "add" ? "Add" : "Keep changes"),
+      h("button", { class: "btn small ghost", type: "button", onclick: () => { attachmentAt = input.selectionStart; picker.click(); } }, icon("image"), "Attach file"),
+      draft.failed ? h("button", { class: "btn small ghost", type: "button", onclick: () => upload(draft.failed) }, "Retry attachment") : null,
+      draft.mode === "add" ? h("button", { class: "btn small ghost", type: "button", onclick: () => begin("list") }, "Edit list") : null,
+      h("button", { class: "btn small ghost", type: "button", onclick: reset }, draft.mode === "add" ? "Clear" : "Cancel")));
+    if (draft.mode === "list") el.querySelector(".newtasks-list").hidden = true;
+    if (draft.upload) for (const control of form.querySelectorAll("textarea, button, input")) control.disabled = true;
+    paintAttachments();
+    el.append(form);
   });
 }
+
+
+// ---- comments: inline posting in a Markdown note ----
+
+function fillComments(root, f) {
+  const previous = f.commentEditors ?? [];
+  const boxes = canWrite(f.repo)
+    ? root.querySelectorAll(':scope > section.note-section[data-section="comments"][data-start][data-close]') : [];
+  previous.slice(boxes.length).forEach(({ view }) => view.destroy());
+  f.commentEditors = [];
+  if (!boxes.length) return null;
+
+  const source = f.text;
+  const lines = source.split("\n");
+  const login = isLocal(f.repo) ? "" : ownerTokens()[f.repo.owner.toLowerCase()]?.login || store.get("user")?.login || "";
+  let focused = null;
+  boxes.forEach((box, index) => {
+    const start = Number(box.dataset.start), close = Number(box.dataset.close);
+    const suggested = commentReply(lines.slice(start + 1, close).join("\n"), login);
+    const old = previous[index];
+    const field = old?.field ?? h("div", { class: "input comment-input" });
+    const view = old?.view ?? createCommentEditor(field, suggested, () => loadPeople(f.repo));
+    if (old && view.state.doc.toString() === old.suggested) setEditorText(view, suggested);
+    if (view.hasFocus) focused = view;
+    f.commentEditors.push({ field, view, suggested });
+    box.append(noteAddForm(field, "comment-add", "Post", (message) => {
+      if (app.file !== f || !canWrite(f.repo) || message === suggested.trim()) return;
+      if (app.saving) return toast("Wait for the note to finish saving.", "info");
+      if (f.text !== source) {
+        renderPreview();
+        return toast("The note changed. Review your comment and post it again.", "info");
+      }
+      const next = addComment(source, start, close, message, login);
+      if (next === source) return toast("Close the Comments block in Edit before posting.", "info");
+      const wasDirty = f.dirty;
+      setEditorText(view, suggested);
+      if (!applyPreviewEdit(f, next)) return;
+      if (wasDirty) toast("Comment added to your draft. Save the note to post it.", "info");
+      else save();
+    }, () => view.state.doc.toString()));
+  });
+  return focused;
+}
+
+// ---- optional private inbox overview: no source reads until explicitly enabled ----
+const overviewPrefs = () => upgradeInboxOverview(store.get("inboxOverview"));
+let overviewModule = null;
+function loadOverviewModule() {
+  return overviewModule ||= import("./inbox-overview-view.js").catch((e) => { overviewModule = null; throw e; });
+}
+
+function overviewSettings() {
+  const prefs = overviewPrefs();
+  const toggle = h("input", { type: "checkbox", checked: prefs.enabled, "aria-label": "Enable inbox overview" });
+  toggle.addEventListener("change", async () => {
+    if (toggle.checked && !prefs.repo) {
+      toggle.checked = false;
+      try { await openOverviewSetup(); } catch (e) { toast(e.message, "error"); }
+      return;
+    }
+    if (!store.set("inboxOverview", { ...overviewPrefs(), enabled: toggle.checked })) {
+      toggle.checked = !toggle.checked; toast("Can't keep this setting in this browser.", "error"); return;
+    }
+    if (!toggle.checked) store.remove("inboxOverviewSourceSettings");
+    renderShortcuts();
+  });
+  return h("div", { class: "field overview-setting" }, h("label", { class: "checkline" }, toggle, "Inbox overview"),
+    h("small", { class: "hint" }, "Off by default. A private read-only view of vaults you select. Open or refresh it to read those sources; act on each item in its original vault."),
+    h("div", { class: "btn-row" }, h("button", { class: "btn small", type: "button", onclick: () => openOverviewSetup().catch((e) => toast(e.message, "error")) }, "Set up inbox overview"),
+      prefs.enabled && prefs.repo ? h("a", { class: "btn small", href: hrefFor({ id: prefs.repo }, prefs.path) }, "Open overview") : null));
+}
+
+async function openOverviewSetup() {
+  const mod = await loadOverviewModule();
+  return mod.showOverviewSetup({ h, fill, modal, preferences: overviewPrefs, repos: () => app.repos, login: loginFor,
+    existing: async (prefs) => {
+      const repo = app.repos.find((r) => r.id === prefs.repo && r.local === "browser");
+      if (!repo) throw new Error("Choose a private dashboard kept in this browser.");
+      const data = await gh.readText(repo, prefs.path);
+      const blocks = mod.overviewContents(data.text);
+      return { ...data, block: blocks.length === 1 ? blocks[0] : "" };
+    },
+    inspect: async (repo, inbox, current = () => true) => {
+      const check = () => { if (!current()) throw new Error("The inbox check was cancelled."); };
+      check();
+      if (app.repos.find((r) => r.id === repo.id) !== repo) throw new Error("This source changed in Settings. Reopen setup.");
+      const path = mod.overviewPath(inbox);
+      if (!path.toLowerCase().endsWith(".md")) throw new Error("Choose an inbox Markdown page.");
+      if (!isLocal(repo) && !gh.tokenFor(repo.owner)) throw new Error("Connect this source's owner in Settings first.");
+      try {
+        const marker = await readMarker(repo);
+        check();
+        if (marker.text && JSON.parse(marker.text).modules?.inboxes === false) throw new Error("This source has its inbox module turned off.");
+        const data = await gh.readText(repo, fullPath(repo, path), { fresh: true, readOnly: true });
+        check();
+        if (app.repos.find((r) => r.id === repo.id) !== repo) throw new Error("This source changed in Settings. Reopen setup.");
+        const props = noteProps(data.text);
+        return { owner: props.owner, github: typeof props.github === "string" ? props.github : "" };
+      } catch (e) {
+        if (e.need === "folder" || e.need === "permission") throw new Error("Open this source and allow its folder, then check the inbox again.");
+        if (e.status === 404) throw new Error(`The inbox ${path} was not found or this account cannot read it. Check the path and source access.`);
+        throw e;
+      }
+    },
+    save: async ({ target, path, options }) => {
+      let repo = target ? app.repos.find((r) => r.id === target) : null;
+      if (target && (!repo || repo.local !== "browser")) throw new Error("Use a private vault kept in this browser.");
+      const fresh = !repo;
+      if (fresh) repo = { id: `inbox-${crypto.randomUUID()}`, label: options.context, local: "browser", owner: "", repo: "", branch: "", folder: "", home: path, inbox: "", inboxes: "", notes: "", template: "", vault: false };
+      let existing = { text: "# Inbox overview\n", sha: null };
+      if (!fresh) {
+        try { existing = await gh.readText(repo, path); } catch (e) { if (e.status !== 404) throw e; }
+      }
+      const text = mod.writeOverviewNote(existing.text, options);
+      if (fresh) {
+        if (!(await local.create(repo, { seed: [{ path, bytes: new TextEncoder().encode(text) }] }))) throw new Error("This dashboard already has files. Choose another one.");
+        const next = [...app.repos, repo];
+        if (!store.set("repos", next)) { await local.remove(repo); throw new Error("Can't keep the dashboard settings in this browser."); }
+        app.repos = next;
+      } else await gh.writeText(repo, path, text, existing.sha, "Update private inbox overview");
+      if (!store.set("inboxOverview", { version: 1, enabled: true, repo: repo.id, path })) throw new Error("The private note was saved, but the overview switch could not be kept. Check browser storage.");
+      app.trees.delete(repo.id);
+      store.remove("inboxOverviewSourceSettings");
+      renderRepoPicker(); renderShortcuts();
+      location.hash = hrefFor(repo, path);
+      if (app.file?.repo.id === repo.id && app.file.path === path) {
+        const tree = await loadTree(repo, true);
+        await openFile(repo, tree, path, null, ++app.nav);
+      }
+      toast("Private overview saved. Its source notes stay in their vaults.", "ok");
+    },
+  });
+}
+
+function fillInboxOverview(root, f) {
+  const blocks = [...root.querySelectorAll(".inbox-overview-block")];
+  if (!blocks.length) return;
+  const prefs = overviewPrefs();
+  for (const el of blocks) {
+    const message = f.repo.local !== "browser" || el.parentElement.closest(".embed-page")
+      ? "An inbox overview can run only in its private browser-local dashboard, never in a shared note or embed."
+      : !prefs.enabled ? "Inbox overview is off. Enable it in Settings › This device."
+        : prefs.repo !== f.repo.id || prefs.path !== f.path ? "This is not the private dashboard selected in Settings."
+          : blocks.length !== 1 ? "Use one overview block per dashboard; choose separate notes for separate contexts."
+            : f.dirty ? "Save the dashboard before reading its selected sources." : "";
+    if (message) { fill(el, h("p", { class: "note" }, message)); continue; }
+    const options = el.querySelector("code")?.textContent || "";
+    // Repainting the note (layout, task settings) keeps this scan; only opening or Refresh reads again.
+    if (f.overview?.options === options && f.overview.el.isConnected) { el.replaceWith(f.overview.el); continue; }
+    f.overview = { options, el };
+    const current = () => app.file === f && !f.dirty && el.isConnected && overviewPrefs().enabled
+      && overviewPrefs().repo === f.repo.id && overviewPrefs().path === f.path;
+    loadOverviewModule().then((mod) => {
+      if (!current()) return;
+      mod.mountOverview(el, options, { h, fill, icon, current, repos: () => app.repos, href: hrefFor,
+        read: readOverviewSource,
+        prune: (keys) => {
+          const kept = store.get("inboxOverviewSourceSettings", {});
+          if (!kept || typeof kept !== "object" || Array.isArray(kept)) { store.remove("inboxOverviewSourceSettings"); return; }
+          for (const key of Object.keys(kept)) if (!keys.includes(key)) delete kept[key];
+          store.set("inboxOverviewSourceSettings", kept);
+        },
+        forget: (key) => { const kept = store.get("inboxOverviewSourceSettings", {}); if (kept && typeof kept === "object") { delete kept[key]; store.set("inboxOverviewSourceSettings", kept); } },
+      });
+    }).catch(() => { if (current()) fill(el, h("p", { class: "note error" }, "Couldn't load the inbox overview. Reload and try again.")); });
+  }
+}
+
+/** Only this adapter reads sources. The renderer receives data and source links, never write access. */
+async function readOverviewSource(repo, source, options, files, current) {
+  const fail = (kind, message, status) => Object.assign(new Error(message), { kind, status });
+  const check = () => { if (!current()) throw fail("cancelled", "The overview selection changed."); };
+  check();
+  if (repo.id === overviewPrefs().repo) throw fail("setup", "Keep the dashboard separate from its selected source vaults.");
+  const localSource = isLocal(repo), login = loginFor(repo);
+  if (!localSource && !gh.tokenFor(repo.owner)) throw fail("access", "Connect this vault in Settings first.");
+  if (!localSource && source.login && source.login.toLowerCase() !== login.toLowerCase()) throw fail("setup", "The selected mention login does not match this vault's connected account.");
+  const key = JSON.stringify(localSource ? [repo.local, repo.id] : ["github", repo.owner.toLowerCase(), repo.repo.toLowerCase(), repo.branch, repo.folder || ""]);
+  const credential = localSource ? repo.id : gh.tokenFor(repo.owner);
+  if (files.credential !== credential) { files.clear(); files.credential = credential; files.accessEpoch = (files.accessEpoch || 0) + 1; }
+  let offline = false;
+  if (!localSource) {
+    try { await gh.repo(repo); } catch (e) {
+      if (e.status !== 0) throw fail("access", "Open this source to check its token and access.", e.status);
+      // The copy may be on disk but not loaded in this session yet. Its tree validates availability below.
+      offline = true;
+    }
+  }
+  check();
+  const settings = store.get("inboxOverviewSourceSettings", {});
+  let marker = null;
+  try {
+    const read = await readMarker(repo);
+    check();
+    marker = read.text ? JSON.parse(read.text) : {};
+    const latest = store.get("inboxOverviewSourceSettings", {});
+    const kept = latest && typeof latest === "object" && !Array.isArray(latest) ? latest : {};
+    kept[key] = { login, disabled: marker.modules?.inboxes === false, tasks: marker.tasks ?? null, checkedAt: Date.now() };
+    store.set("inboxOverviewSourceSettings", kept);
+  } catch (e) {
+    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    const prior = settings?.[key];
+    if ((offline || e.status === 0) && prior && prior.login === login) { marker = { modules: { inboxes: !prior.disabled }, tasks: prior.tasks }; offline = true; }
+    else throw fail(e.status === 401 || e.status === 403 ? "access" : "setup", "The source's settings could not be checked. Open it online, then refresh.", e.status);
+  }
+  check();
+  if (marker.modules?.inboxes === false) throw fail("disabled", "This source has its inbox module turned off.");
+  const setup = taskSetup(marker.tasks ?? null);
+  let tree;
+  try { tree = await loadTree(repo, true, { readOnly: true, current }); } catch (e) {
+    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    throw e;
+  }
+  check();
+  if (!tree.files.has(source.inbox)) throw fail("setup", "The configured inbox page is missing. Check the source binding.");
+  const whole = options.show.includes("mentions") || options.show.includes("new-tasks");
+  const paths = [...tree.files.keys()].filter((p) => /\.md$/i.test(p) && (whole || p === source.inbox || isSetupTask(setup, p)));
+  const missing = paths.filter((p) => files.get(p)?.sha !== tree.files.get(p));
+  const readHere = localSource || mirror.searchesHere(repo);
+  let failed = false;
+  if (readHere) {
+    let next = 0;
+    const worker = async () => { while (current() && !failed && next < missing.length) {
+      const path = missing[next++];
+      try { const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text }); }
+      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder."); throw e; }
+    } };
+    await Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
+  } else {
+    for (const batch of chunks(missing, BLOBS_PER_QUERY)) {
+      check();
+      const good = batch.filter((p) => IS_SHA.test(tree.files.get(p)));
+      if (good.length) {
+        const fields = good.map((p, i) => `b${i}: object(oid: "${tree.files.get(p)}") { ... on Blob { text } }`).join("\n");
+        try {
+          const data = await gh.graphql(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {\n${fields}\n} }`, { owner: repo.owner, name: repo.repo });
+          check();
+          good.forEach((p, i) => { const text = data.repository?.[`b${i}`]?.text; if (text != null) files.set(p, { sha: tree.files.get(p), text }); });
+        } catch (e) { if (e.status === 401 || e.status === 403 || e.status === 0) throw e; /* use this source's REST reader for unsupported GraphQL */ }
+      }
+      for (const path of batch.filter((p) => files.get(p)?.sha !== tree.files.get(p))) {
+        check(); const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text });
+      }
+    }
+  }
+  check();
+  for (const path of [...files.keys()]) if (!paths.includes(path)) files.delete(path);
+  const notes = paths.map((path) => ({ path, ...files.get(path), props: noteProps(files.get(path).text) }));
+  const inboxProps = notes.find((n) => n.path === source.inbox)?.props || {};
+  return { notes, setup, inboxProps, state: tree.truncated ? "partial" : offline || tree.offline ? "offline" : "current",
+    checkedAt: offline || tree.offline ? mirror.info(repo).syncedAt || Date.now() : Date.now(),
+    message: tree.truncated ? "The vault file list is incomplete; these counts are partial." : options.show.includes("mentions") && !source.login ? "No mention login is configured; other selected kinds are shown." : "" };
+}
+
+window.addEventListener("storage", (event) => {
+  if (["commonplace:token", "commonplace:tokens", "commonplace:user"].includes(event.key)) { app.token = store.get("token", ""); gh = client(app.token, tokenMap()); }
+  if (["commonplace:inboxOverview", "commonplace:token", "commonplace:tokens", "commonplace:user"].includes(event.key)) {
+    if (!overviewPrefs().enabled) store.remove("inboxOverviewSourceSettings");
+    if (app.file) app.file.overview = null;
+    if (app.file?.kind === "md") renderPreview();
+    renderShortcuts();
+  }
+});
 
 // ---- needs your attention: questions and mentions ----
 
@@ -1873,13 +2437,33 @@ function fillAttention(root, f) {
   for (const el of root.querySelectorAll(".attention-block")) {
     if (el.parentElement.closest(".embed-page")) continue;
     const show = (el.dataset.show || "questions,mentions").split(",").filter(Boolean);
-    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault, note: f });
+    let reviewStatuses = ["Testing"];
+    try { reviewStatuses = JSON.parse(el.dataset.reviewStatuses || '["Testing"]'); } catch { /* use Testing for an older block */ }
+    const box = attentionBox(f.repo, { owner: el.dataset.owner || "", login: el.dataset.login || "", show, showSet: !el.dataset.showDefault, reviewStatuses, note: f });
     if (box) el.replaceWith(box);
   }
 }
 
 /** Each kind of box: its name, and the icon in its head. */
-const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"] };
+function assignmentEdits(value) {
+  return value ? [[ASSIGNMENT_ID, crypto.randomUUID()]] : [];
+}
+
+async function loadAssignments(repo, name, login) {
+  const setup = await loadTaskSetup(repo);
+  const entry = taskNotes(repo, setup);
+  await entry.load;
+  return assignmentTasks(entry.notes ?? [], setup, { name, login });
+}
+
+async function loadReviews(repo, name, login, statuses) {
+  const setup = await loadTaskSetup(repo);
+  const entry = taskNotes(repo, setup);
+  await entry.load;
+  return reviewTasks(entry.notes ?? [], setup, { name, login }, statuses);
+}
+
+const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"], assignments: ["Assigned to you", "check"], reviews: ["For review", "check"] };
 
 /**
  * What waits on someone, as one box or one of its halves (`show`): the questions waiting on `owner` (tasks with
@@ -1889,76 +2473,94 @@ const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["
  * A mention with a reply right under it is left out (the head counts them); one marked **Seen** folds under
  * *Seen*. The seen list is the `seen_mentions` property of `note`, the open note the box is in.
  */
-function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, note = null }) {
+function attentionBox(repo, { owner = "", login = "", show = ["questions", "mentions"], showSet = true, reviewStatuses = ["Testing"], note = null }) {
   const tree = app.trees.get(repo.id);
   if (!tree) return null;
-  const wantQ = show.includes("questions"), wantM = show.includes("mentions");
-  const [title, iconName] = ATTENTION_TITLES[wantQ && wantM ? "both" : wantQ ? "questions" : "mentions"];
+  const wantQ = show.includes("questions"), wantM = show.includes("mentions"), wantA = show.includes("assignments"), wantR = show.includes("reviews");
+  const [title, iconName] = ATTENTION_TITLES[show.length === 1 ? show[0] : "both"] || ATTENTION_TITLES.both;
   const parts = () => [
+    wantR ? (owner || login ? `For review by ${owner || "@" + login} · ${reviewStatuses.join(", ")}` : "Add owner or login to show reviews") : "",
     wantQ ? (owner ? `Questions for ${owner}` : "No owner: line, so no questions") : "",
     wantM ? (login ? `Mentions of @${login}` : "No login: line, so no mentions") : "",
-    showSet ? "" : "Both (the block sets no show)",
+    wantA ? (owner || login ? "Assigned to " + (owner || "@" + login) : "Add owner or login to show assignments") : "",
+    showSet ? "" : "Questions and mentions (the block sets no show)",
   ].filter(Boolean);
   const head = h("small", { class: "muted" }, parts().join(" · "));
   const list = h("ol", { class: "attention-list" }, h("li", { class: "muted" }, "Looking…"));
   const box = h("section", { class: "attention", "aria-label": title },
     h("div", { class: "suggest-head" }, icon(iconName), h("strong", {}, title), head), list);
-  const askQ = wantQ && owner, askM = wantM && login;
-  if (!askQ && !askM) {
-    list.replaceChildren(h("li", { class: "muted" }, wantQ && wantM ? "Add owner: (your name) and login: (your GitHub login) to the block."
-      : wantQ ? "Add owner: (your name) to the block." : "Add login: (your GitHub login) to the block."));
+  const askQ = wantQ && owner, askM = wantM && login, askA = wantA && (owner || login), askR = wantR && (owner || login);
+  if (!askQ && !askM && !askA && !askR) {
+    list.replaceChildren(h("li", { class: "muted" }, "Add owner: (your name) or login: (your GitHub login) for the items this block shows."));
     return box;
   }
   const hasTasks = [...tree.files.keys()].some(isTaskPath);
-  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, k === "question" ? "Question" : "Mention");
+  const kind = (k) => h("span", { class: `chip kind kind-${k}` }, ({ review: "Review", question: "Question", mention: "Mention", assignment: "Assignment" })[k]);
   const state = (t) => t.answer
     ? h("span", { class: "chip state state-ready", title: `Answered: ${t.answer.slice(0, 200)}` }, "Answered, waiting for the agent")
     : h("span", { class: "chip state state-decision", title: "Open the task and write your answer under Answer:" }, "Waiting for your answer");
-  const questionRow = (t) => h("li", {}, wantM ? kind("question") : null,
+  const questionRow = (t) => h("li", {}, show.length > 1 ? kind("question") : null,
     h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.props.id ? h("span", { class: "muted" }, `${t.props.id} `) : null, shownName(t.path)),
-    h("span", { class: "suggest-tags" }, state(t)),
-    h("span", { class: "attention-text" }, t.question));
+    h("span", { class: "suggest-tags" }, state(t)), h("span", { class: "attention-text" }, t.question));
   const seenNow = note ? noteProps(note.text)[SEEN_MENTIONS] : [];
   const canMark = !!note && canWrite(repo) && usable(repo);
-  let allFound = [];
-  const markSeen = (ms) => markMentionsSeen(note, ms, allFound);
-  const mentionRow = (m, seen = false) => h("li", {}, wantQ ? kind("mention") : null,
-    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path),
-      m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
+  let allFound = [], allAssignments = [];
+  const markSeen = (mentions, assignments = []) => markInboxSeen(note, mentions, allFound, assignments, allAssignments);
+  const assignmentRow = (task, seen = false) => h("li", {}, show.length > 1 ? kind("assignment") : null,
+    h("a", { href: hrefFor(repo, task.path), class: "suggest-name" }, task.id ? h("span", { class: "muted" }, task.id + " ") : null, shownName(task.path)),
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark assignment as seen", onclick: () => markSeen([], [task]) }, icon("check"), "Seen") : null);
+  const mentionRow = (m, seen = false) => h("li", {}, show.length > 1 ? kind("mention") : null,
+    h("a", { href: hrefFor(repo, m.path, m.heading || null), class: "suggest-name" }, shownName(m.path), m.heading ? h("span", { class: "muted" }, ` › ${m.heading}`) : null),
     m.date ? h("span", { class: "chip", title: m.date.toLocaleString() }, m.date.toLocaleDateString()) : null,
-    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it",
-      onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
+    !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it", onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
     h("span", { class: "attention-text" }, m.text));
   Promise.all([
-    askQ && hasTasks ? loadQuestions(repo, owner) : [],
+    askR ? loadReviews(repo, owner, login, reviewStatuses) : [],
+    askQ && hasTasks ? loadQuestions(repo, owner, login) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
-  ]).then(([tasks, { found, read }]) => {
-    allFound = found;
+    askA ? loadAssignments(repo, owner, login) : [],
+  ]).then(([reviews, tasks, { found, read }, assignments]) => {
+    if (app.trees.get(repo.id) !== tree) return;
+    allFound = found; allAssignments = assignments;
+    const reviewPaths = new Set(reviews.map((t) => t.path));
+    const questions = tasks.filter((t) => !reviewPaths.has(t.path));
     const ms = sortMentions(found, seenNow);
-    const said = parts();
-    if (askQ) said[0] = `${tasks.length} question${tasks.length === 1 ? "" : "s"} for ${owner} · Answer on the task`;
-    if (askM) said[wantQ ? 1 : 0] = `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes`
-      + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "");
-    head.textContent = said.join(" · ");
-    if (canMark && ms.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button",
-      title: "Mark every new mention as seen", onclick: () => markSeen(ms.open) }, icon("check"), "All seen"));
-    const rows = [...tasks.filter((t) => !t.answer).map(questionRow), ...tasks.filter((t) => t.answer).map(questionRow), ...ms.open.map((m) => mentionRow(m))];
-    if (ms.seen.length) rows.push(h("li", { class: "attention-seen" }, h("details", {},
-      h("summary", { class: "muted" }, `Seen (${ms.seen.length})`),
-      h("ol", { class: "attention-list" }, ms.seen.map((m) => mentionRow(m, true))))));
+    const assigned = sortAssignments(assignments.filter((t) => !reviewPaths.has(t.path)), note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
+    head.textContent = [
+      askR ? `${reviews.length} for review · ${reviewStatuses.join(", ")}` : wantR ? "Add owner or login to show reviews" : "",
+      askQ ? `${questions.length} question${questions.length === 1 ? "" : "s"} for ${owner} · Answer on the task` : wantQ ? "No owner: line, so no questions" : "",
+      askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
+      askA ? assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s") : "",
+      showSet ? "" : "Questions and mentions (the block sets no show)",
+    ].filter(Boolean).join(" · ");
+    if (canMark && ms.open.length + assigned.open.length > 1) head.after(h("button", { class: "btn small ghost attention-all", type: "button", title: "Mark every new assignment and mention as seen", onclick: () => markSeen(ms.open, assigned.open) }, icon("check"), "All seen"));
+    const reviewRow = (t) => h("li", { class: "attention-review" }, kind("review"),
+      h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(t.path)),
+      h("span", { class: "chip" }, t.status), h("a", { href: hrefFor(repo, t.path), class: "btn small" }, "Review"),
+      h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path)?.question || "Test, then close or request changes on the task."));
+    const rows = [
+      reviews.length && show.length > 1 ? h("li", { class: "attention-section" }, h("strong", {}, "For review")) : null,
+      ...reviews.map(reviewRow), ...questions.filter((t) => !t.answer).map(questionRow), ...questions.filter((t) => t.answer).map(questionRow),
+      ...assigned.open.map((t) => assignmentRow(t)), ...ms.open.map((m) => mentionRow(m)),
+    ].filter(Boolean);
+    const seenRows = [...assigned.seen.map((t) => assignmentRow(t, true)), ...ms.seen.map((m) => mentionRow(m, true))];
+    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), h("ol", { class: "attention-list" }, seenRows))));
     list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
 }
 
 /**
- * Marks mentions as seen in the open note's `seen_mentions` property (keeping only mentions still there and not
- * answered). The note changes like a ticked checkbox; with nothing else unsaved it's saved at once, one commit.
+ * Saves the inbox's seen lists in one commit, or with its existing draft.
  */
-function markMentionsSeen(f, ms, found) {
-  if (app.file !== f || !ms.length) return;
+function markInboxSeen(f, mentions, found, assignments, allAssignments) {
+  if (app.file !== f || (!mentions.length && !assignments.length)) return;
   const was = f.dirty;
-  const next = setProps(f.text, [[SEEN_MENTIONS, withSeenMentions(noteProps(f.text)[SEEN_MENTIONS], ms, found)]]);
+  const props = noteProps(f.text);
+  const entries = [];
+  if (mentions.length) entries.push([SEEN_MENTIONS, withSeenMentions(props[SEEN_MENTIONS], mentions, found)]);
+  if (assignments.length) entries.push([SEEN_ASSIGNMENTS, withSeenAssignments(props[SEEN_ASSIGNMENTS], assignments, allAssignments)]);
+  const next = setProps(f.text, entries);
   if (!next || next === f.text) return;
   f.text = next;
   if (f.editor) setEditorText(f.editor, f.text);
@@ -1982,7 +2584,7 @@ const ORDER_SAID = { "priority-newest": "By priority, newest first", "priority-o
  * finished: waiting for their agent, or with an agent on it. Without `who`, nothing can be claimed, and the head
  * says to add an owner. The head says every option in use, and when the range or the order is the default.
  */
-function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off",
+function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, count = TOP_TASKS_COUNT, countSet = true, order = "priority-newest", orderSet = true, sprintMode = "off",
   fields = TOP_TASKS_FIELDS, fieldsSet = true }) {
   const tree = app.trees.get(repo.id);
   if (!tree || ![...tree.files.keys()].some(isTaskPath)) return null;
@@ -1991,14 +2593,15 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
   const said = [areas.length ? `Areas: ${shown.join(", ")}` : "All areas", countSet ? `Top ${count}` : `Top ${count} (the block sets no range)`,
     orderSet ? ORDER_SAID[order] : `${ORDER_SAID[order]} (the block sets no order)`, SPRINT_SAID[sprintMode],
     fieldsSet ? fieldsSaid : `${fieldsSaid} (the block sets no fields)`, who ? `For ${who}` : "No owner in the block, so nothing can be claimed"].filter(Boolean);
-  const box = h("section", { class: "suggest", "aria-label": "Top tasks to start" },
-    h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Top tasks to start"),
+  const box = h("section", { class: "suggest", "aria-label": "Tasks for today" },
+    h("div", { class: "suggest-head" }, icon("todo"), h("strong", {}, "Tasks for today"),
       h("small", { class: "muted" }, said.join(" · "))),
     list);
   const editable = canWrite(repo) && usable(repo);
   let allAreas = [];
+  const restore = (props) => waitingReady(props, waitDays) ? [["status", "To Do"], ...clearWaitingDate(props)] : [];
   /** A property as a chip, or as a chip-like picker that saves the task when it changes. */
-  const tag = (path, t, key, options, cls = "") => {
+  const tag = (path, t, key, options, cls = "", backFromWaiting = false) => {
     const value = String(t[key] ?? "").trim();
     if (!editable) return value ? h("span", { class: `chip ${cls}` }, value) : null;
     const list = value && !options.some((o) => o.toLowerCase() === value.toLowerCase()) ? [value, ...options] : options;
@@ -2006,7 +2609,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const pick = h("select", { class: `chip pick ${cls}`, "aria-label": `${label} of ${shownName(path)}`, title: `Change its ${label.toLowerCase()}` },
       value ? null : h("option", { value: "", selected: true, disabled: true }, label),
       list.map((o) => h("option", { value: o, selected: o.toLowerCase() === value.toLowerCase() }, o)));
-    pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick));
+    pick.addEventListener("change", () => changeTask(repo, path, key, pick.value, pick, backFromWaiting ? { also: restore } : {}));
     return pick;
   };
   let states = new Map();
@@ -2034,22 +2637,29 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     return parts.length ? h("span", { class: "chip", title: `${name}: ${parts.join(", ")}` }, parts.join(", ")) : null;
   };
   /** What each task shows besides its name and Claim: the block's `fields`, in its order. */
-  const fieldChip = (path, t, name) => name === "state" ? stateChip(path)
+  const fieldChip = ({ path, props: t, backFromWaiting }, name) => name === "state" ? stateChip(path)
     : name === "parent" ? parentChip(path, t)
-    : name === "priority" ? tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : "")
-    : name === "area" ? tag(path, t, "area", allAreas)
+    : name === "priority" ? tag(path, t, "priority", PRIORITIES, t.priority ? `prio-${String(t.priority).trim().toLowerCase()}` : "", backFromWaiting)
+    : name === "area" ? tag(path, t, "area", allAreas, "", backFromWaiting)
     : valueChip(t, name);
-  const row = ({ path, props: t }, extra) => h("li", {},
-    h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
-    h("span", { class: "suggest-tags" }, fields.map((name) => fieldChip(path, t, name))),
-    extra);
-  /** Sets a task's status from the box: "Not now" puts it on the waiting list, "Bring back" takes it off. */
-  const statusButton = (path, label, value, title) => editable
-    ? h("button", { class: "btn small ghost", type: "button", title,
-      onclick: (e) => changeTask(repo, path, "status", value, e.currentTarget) }, label)
-    : null;
-  const WAIT_TITLE = "Put it on the waiting list: it stops being suggested until you bring it back";
-  loadSuggestions(repo, areas, who, count, sprintMode, order).then(({ mine, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
+  const row = (note, extra) => {
+    const { path, props: t } = note;
+    return h("li", {},
+      h("a", { href: hrefFor(repo, path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(path)),
+      h("span", { class: "suggest-tags" }, fields.map((name) => fieldChip(note, name))),
+      extra);
+  };
+  const canDefer = (path, props) => suggestTasks([returnFromWaiting({ path, props }, waitDays)]).length > 0;
+  const defer = (path, button) => changeTask(repo, path, "status", WAITING, button, {
+    allow: (props) => canDefer(path, props),
+    also: () => [["waiting_since", isoDate()]],
+  });
+  const bringBack = (path, button) => changeTask(repo, path, "status", "To Do", button, {
+    allow: (props) => String(props.status ?? "").trim().toLowerCase() === WAITING.toLowerCase(),
+    also: clearWaitingDate,
+  });
+  const WAIT_TITLE = `Put it on the waiting list for ${waitDays} ${waitDays === 1 ? "day" : "days"}`;
+  loadSuggestions(repo, areas, who, count, sprintMode, order, waitDays).then(({ mine, whoLogin, free, waiting, allAreas: found, states: told, sprint, noSprintNow, setup: s }) => {
     allAreas = found;
     states = told;
     setup = s;
@@ -2059,7 +2669,8 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
      */
     const notNow = (n) => {
       if (!editable) return null;
-      if (!sprint) return statusButton(n.path, "Not now", WAITING, WAIT_TITLE);
+      if (!sprint) return h("button", { class: "btn small ghost", type: "button", title: WAIT_TITLE,
+        onclick: (e) => defer(n.path, e.currentTarget) }, "Not now");
       const next = sprint.now && sprint.next && !n.nextSprint && linkName(String(n.props[sprint.prop] ?? "")) !== sprint.next.name
         ? sprint.next : null;
       const latest = sprint.next ?? sprint.now;
@@ -2068,11 +2679,13 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
           : `There's no sprint after ${latest.name} yet: put it on the waiting list instead`,
         onclick: async (e) => {
           const button = e.currentTarget;
-          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, `pushed to ${next.name}`);
+          if (next) return changeTask(repo, n.path, sprint.prop, `[[${next.name}]]`, button, {
+            said: `pushed to ${next.name}`, allow: (props) => canDefer(n.path, props), also: restore,
+          });
           if (await confirmDialog(`No sprint after ${latest.name} yet`,
-            `Put ${shownName(n.path)} on the waiting list instead? It stops being suggested until you bring it back. `
+            `Put ${shownName(n.path)} on the waiting list instead? It comes back after the waiting period. `
             + `To push tasks to a new sprint, open ${latest.name} and press Start the next sprint.`, "Not now")) {
-            changeTask(repo, n.path, "status", WAITING, button);
+            defer(n.path, button);
           }
         } }, "Push to the next sprint");
     };
@@ -2089,21 +2702,29 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
     const none = noSprintNow ? "No sprint is running now, and this box shows the current sprint only."
       : sprint ? `No free tasks in ${sprint.now ? sprint.now.name : sprint.next.name}${sprint.now && sprint.next ? ` or ${sprint.next.name}` : ""}.`
       : "No free tasks right now.";
-    const claimed = mine.map((n) => row(n, [h("span", {
-      class: `chip claimed${n.agent ? " working" : ""}`,
-      title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
-    }, n.agent ? `${n.agent} is on it` : "Claimed"), n.agent ? null : notNow(n)]));
+    const claimed = mine.map((n) => row(n, editable && !n.agent
+      ? h("button", { class: "chip claimed unclaim", type: "button",
+        "aria-label": `Claimed task. Unclaim ${shownName(n.path)}`,
+        onclick: (e) => unclaimSuggested(repo, n.path, who, whoLogin, e.currentTarget),
+      }, h("span", { class: "claim-state", "aria-hidden": "true" }, "Claimed"),
+      h("span", { class: "claim-action", "aria-hidden": "true" }, "Unclaim"))
+      : h("span", { class: `chip claimed${n.agent ? " working" : ""}`,
+        title: n.agent ? `${n.props.assignee}: an agent is working on it` : `Claimed by ${who}: your agent starts with it`,
+      }, n.agent ? `${n.agent} is on it` : "Claimed")));
     const waitingList = waiting.length ? h("details", { class: "suggest-waiting" },
       h("summary", {}, icon("chevron"), `Waiting (${waiting.length})`),
       h("ol", { class: "suggest-list" }, waiting.map((n) => row(n,
-        statusButton(n.path, "Bring back", "To Do", "Take it off the waiting list: its status goes back to To Do"))))) : null;
+        editable ? h("button", { class: "btn small ghost", type: "button",
+          title: "Return this task to To Do", onclick: (e) => bringBack(n.path, e.currentTarget),
+        }, "Bring back") : null)))) : null;
     if (!claimed.length && !free.length) return fill(list, h("li", { class: "muted" }, none), waitingList);
     fill(list, claimed, free.map((n) => row(n, [
       nextChip(n),
+      n.backFromWaiting ? h("span", { class: "chip" }, "Back from waiting") : null,
       editable && who
         ? h("button", { class: "btn small", type: "button", title: `Set its status to In Progress and its assignee to ${who}${
           moveTo(n) ? `, and move it into ${moveTo(n).name}` : ""}`,
-          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n)) }, icon("check"), "Claim")
+          onclick: (e) => claimSuggested(repo, n.path, who, e.currentTarget, moveTo(n), waitDays) }, icon("check"), "Claim")
         : null,
       notNow(n)])),
     !free.length ? h("li", { class: "muted" }, none) : null, waitingList);
@@ -2115,7 +2736,7 @@ function suggestBox(repo, { areas = [], shown = [], who = "", count = TOP_TASKS_
  * Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first.
  * `move` ({ prop, name }) also puts it in that sprint, in the same commit.
  */
-async function claimSuggested(repo, path, who, button, move = null) {
+async function claimSuggested(repo, path, who, button, move = null, waitDays = 7) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
     `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to ${savedOn(repo)}.`, "Claim")) return;
   button.disabled = true;
@@ -2123,13 +2744,15 @@ async function claimSuggested(repo, path, who, button, move = null) {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const taken = String(now.assignee ?? "").trim();
-    const next = taken ? null : claimTask(text, who, move ? [[move.prop, `[[${move.name}]]`]] : []);
+    const eligible = suggestTasks([returnFromWaiting({ path, props: now }, waitDays)]).length > 0;
+    const extra = move ? [[move.prop, `[[${move.name}]]`]] : [];
+    const next = eligible ? claimTask(text, who, [...extra, ...clearWaitingDate(now), ...assignmentEdits(who)]) : null;
     // What was just read or written is known, so the list needn't read the task again.
     const known = baseCache("baseProps", repo);
     if (!next) {
       known[sha] = now;
       treeChanged(repo, path, sha);
-      toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} has no properties to change.`, "error");
+      toast(taken ? `${shownName(path)} is already taken by ${taken}.` : `${shownName(path)} is no longer available to claim.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": c" : "C"}laimed by ${who}${move ? `, moved into ${move.name}` : ""} from ${APP_NAME}`);
@@ -2144,6 +2767,16 @@ async function claimSuggested(repo, path, who, button, move = null) {
   if (!refreshInboxBox(repo)) button.disabled = false;
 }
 
+async function unclaimSuggested(repo, path, who, login, button) {
+  if (!await confirmDialog(`Unclaim ${shownName(path)}?`,
+    "This clears its assignee and returns it to To Do.", "Unclaim")) return;
+  return changeTask(repo, path, "status", "To Do", button, {
+    said: `unclaimed by ${who}`,
+    also: () => [["assignee", ""]],
+    allow: (props) => claimedTasks([{ path, props }], who, login).some((task) => !task.agent),
+  });
+}
+
 /** Draws the open page again (its top tasks box re-sorts), keeping the scroll. False when no page of `repo` with one is open. */
 function refreshInboxBox(repo) {
   if (!(app.file?.repo === repo && app.file.dom?.preview.isConnected && app.file.dom.preview.querySelector(".suggest"))) return false;
@@ -2154,36 +2787,39 @@ function refreshInboxBox(repo) {
 }
 
 /**
- * Sets one property of a task from a top tasks box: one commit that changes only that line. `said` (e.g.
+ * Updates a task from a top tasks box in one commit. `said` (e.g.
  * "pushed to Sprint 2") is what the commit and the message say instead of "<key> set to <value>".
  */
-async function changeTask(repo, path, key, value, picker, said = "") {
+async function changeTask(repo, path, key, value, picker, { said = "", also = () => [], allow = null } = {}) {
   picker.disabled = true;
+  let saved = false;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));
     const now = noteProps(text);
     const known = baseCache("baseProps", repo);
-    const next = setProps(text, [[key, value]]);
-    if (!next) {
+    const changed = allow && !allow(now);
+    const next = !changed && setProps(text, [[key, value], ...also(now)]);
+    if (!next || next === toLf(text)) {
       known[sha] = now;
       treeChanged(repo, path, sha);
-      toast(`${shownName(path)} has no properties to change.`, "error");
-    } else if (next === toLf(text)) {
-      known[sha] = now;
-      treeChanged(repo, path, sha);
+      if (changed) toast(`${shownName(path)} changed since this box was drawn.`, "error");
+      else if (!next) toast(`${shownName(path)} has no properties to change.`, "error");
     } else {
       const id = String(now.id ?? "").trim();
       const res = await gh.writeText(repo, fullPath(repo, path), next, sha, `${id ? id + ": " : ""}${said || `${key} set to ${value}`} from ${APP_NAME}`);
       wroteCommit(repo, res);
       known[res.sha] = noteProps(next);
       treeChanged(repo, path, res.sha);
+      checkInboxDot(repo);
       toast(said ? `${shownName(path)}: ${said}` : key === "status" && value === WAITING ? `${shownName(path)}: not now, it's on the waiting list`
         : `${shownName(path)}: ${key} is now ${value}`, "ok");
     }
+    saved = !!next;
   } catch (e) {
     toast(`Not changed: ${e.message}`, "error");
   }
   if (!refreshInboxBox(repo)) picker.disabled = false;
+  return saved;
 }
 
 /** Icons, external links and images: what the sanitized HTML still needs. */
@@ -2274,8 +2910,7 @@ function loadMermaid() {
 const diagramSvgs = new Map(); // theme + source -> SVG, so the preview doesn't redraw while typing
 let mermaidTheme = "", diagramCount = 0;
 
-function diagramSvg(src) {
-  const theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
+function diagramSvg(src, theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default") {
   const key = `${theme}\n${src}`;
   if (!diagramSvgs.has(key)) {
     diagramSvgs.set(key, loadMermaid().then(async (mermaid) => {
@@ -2295,6 +2930,7 @@ function fillDiagrams(root) {
   for (const el of root.querySelectorAll(".mermaid-diagram")) {
     const src = el.querySelector("code")?.textContent;
     if (!src) continue;
+    el.dataset.diagramSource = src;
     diagramSvg(src).then((svg) => {
       el.innerHTML = svg;
       el.classList.add("drawn");
@@ -2384,14 +3020,24 @@ function embeddedPart(text, heading) {
   const nav = findNavBlock(src);
   if (nav) src = src.slice(0, nav.from) + src.slice(nav.to);
   if (!heading) return src;
-  const lines = src.split("\n");
   const want = norm(heading);
-  const start = lines.findIndex((l) => /^#{1,6}\s/.test(l) && norm(l.replace(/^#+\s*/, "")) === want);
-  if (start < 0) return null;
-  const level = /^#+/.exec(lines[start])[0].length;
-  let end = lines.findIndex((l, i) => i > start && /^#{1,6}\s/.test(l) && /^#+/.exec(l)[0].length <= level);
-  if (end < 0) end = lines.length;
-  return lines.slice(start + 1, end).join("\n");
+  const headings = [];
+  for (const token of md.parse(src, {})) {
+    if (token.level !== 0) continue;
+    if (token.type === "heading_open") {
+      const [line, after] = token.map;
+      headings.push({ name: token.attrGet("data-heading"), level: Number(token.tag[1]), line, after });
+    } else if (token.type === "fence") {
+      const kind = fenceLanguage(token.info);
+      if (Object.hasOwn(NOTE_SECTIONS, kind)) headings.push({ name: NOTE_SECTIONS[kind], level: 2, line: token.map[0], content: token.content });
+    }
+  }
+  const at = headings.findIndex(({ name }) => norm(name) === want);
+  if (at < 0) return null;
+  const { content, level, after } = headings[at];
+  if (content !== undefined) return content;
+  const end = headings.slice(at + 1).find((next) => next.level <= level)?.line;
+  return src.split("\n").slice(after, end).join("\n");
 }
 
 function fillEmbeds(root, repo, fromPath) {
@@ -2487,12 +3133,13 @@ async function baseNotes(repo, tree, paths) {
 
 /** Whether each task can be started now (`taskState`), from its whole text: cached by blob sha, like the bases' properties. */
 async function taskStates(repo, tree, paths) {
-  const cache = baseCache("taskState", repo);
+  store.remove(`taskState:${repo.id}`);
+  const cache = baseCache("taskState2", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskState(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("taskState", repo, (sha) => live.has(sha));
+    keepBaseCache("taskState2", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
 }
@@ -2570,6 +3217,135 @@ function fillBases(root, repo, fromPath = "") {
     if (p?.tagName === "P" && p.childNodes.length === 1) p.replaceWith(view);
     else el.replaceWith(view);
   }
+}
+
+/** A board shares the task and sprint property caches with the rest of the note. */
+function fillBoards(root, f) {
+  const blocks = root.querySelectorAll(".board-block");
+  const setup = taskSetupOf(f.repo);
+  const tree = app.trees.get(f.repo.id);
+  if (!blocks.length || !setup || !tree) return;
+  const tasks = taskNotes(f.repo, setup);
+  const resolve = (target, from) => tree.index.resolve(target, from);
+  for (const [index, el] of [...blocks].entries()) {
+    const options = boardOptions(el.querySelector("code").textContent);
+    const sprintList = options.sprint ? sprintNotes(f.repo, setup).notes : [];
+    if (!tasks.notes || !sprintList) {
+      fill(el, h("p", { class: "board-muted", role: "status" }, "Loading board…"));
+      continue;
+    }
+    const sprint = options.sprint ? pickSprint(sprints(sprintList, isoDate()), options.sprint, (target) => resolve(target, f.path)) : null;
+    const identity = f.myBoards?.get(index) ?? null;
+    const columns = boardColumns(tasks.notes, options, setup, { sprint, resolve, identity });
+    el.replaceWith(taskBoard(f, columns, setup, options, index, identity));
+  }
+}
+
+function taskBoard(f, columns, setup, options, index, identity) {
+  const writable = canWrite(f.repo);
+  const editableFields = setup.fields.filter((field) => field.on && ["priority", "assignee"].includes(field.key));
+  const login = loginFor(f.repo);
+  const mine = login ? h("input", { type: "checkbox", checked: !!identity }) : null;
+  mine?.addEventListener("change", async () => {
+    if (!f.myBoards) f.myBoards = new Map();
+    if (mine.checked) {
+      const people = await loadPeople(f.repo).catch(() => []);
+      if (!mine.isConnected || !mine.checked) return;
+      const name = people.find((person) => person.login.toLowerCase() === login.toLowerCase())?.name ?? login;
+      f.myBoards.set(index, { name, login });
+    } else f.myBoards.delete(index);
+    redrawNote();
+    f.dom.preview.querySelectorAll(".task-board")[index]?.querySelector(".board-mine input")?.focus({ preventScroll: true });
+  });
+  const key = fieldProp(setup, "status");
+  let dragged = null;
+  const move = async (card, status, picker) => {
+    if (picker.disabled || status.toLowerCase() === card.status.toLowerCase()) return;
+    await changeTask(f.repo, card.path, key, status, picker,
+      { allow: (current) => String(current[key] ?? "").trim() === card.status });
+    if (picker.isConnected) redrawNote();
+  };
+  const scroller = h("div", { class: "board-columns", tabindex: "0", "aria-label": "Status columns" });
+  for (const { status, cards } of columns) {
+    const column = h("section", { class: "board-column", "aria-label": status },
+      h("h3", {}, status, h("span", { class: "board-muted" }, String(cards.length))));
+    if (writable) {
+      column.addEventListener("dragover", (event) => {
+        if (!dragged || dragged.card.status.toLowerCase() === status.toLowerCase()) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      });
+      column.addEventListener("drop", (event) => {
+        if (!dragged) return;
+        event.preventDefault();
+        const { card, picker } = dragged;
+        dragged = null;
+        move(card, status, picker);
+      });
+    }
+    for (const card of cards) {
+      const title = shownName(card.path);
+      const picker = writable ? h("select", { "aria-label": "Status of " + (card.id || title) },
+        columns.map((target) => h("option", { value: target.status, selected: target.status === status }, target.status))) : null;
+      picker?.addEventListener("change", () => move(card, picker.value, picker));
+      const tile = h("article", { class: "board-card" },
+        h("a", { href: hrefFor(f.repo, card.path) }, card.id && h("span", { class: "board-muted" }, card.id), title),
+        h("div", { class: "board-card-meta" }, [card.priority, card.assignee, ...card.area].filter(Boolean).join(" · ")),
+        writable && editableFields.length ? h("div", { class: "board-card-actions" }, picker,
+          h("button", { class: "icon-btn board-edit", type: "button", title: "Edit card",
+            "aria-label": "Edit card " + (card.id || title), onclick: () => editBoardCard(f, card, editableFields) }, icon("edit"))) : picker);
+      if (writable) {
+        tile.draggable = true;
+        tile.addEventListener("dragstart", (event) => {
+          if (picker.disabled) { event.preventDefault(); return; }
+          dragged = { card, picker };
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", card.path);
+        });
+        tile.addEventListener("dragend", () => { dragged = null; });
+      }
+      column.append(tile);
+    }
+    scroller.append(column);
+  }
+  return h("section", { class: "task-board", "aria-label": "Task board" },
+    !options.columns.length && h("p", { class: "board-muted" }, "Columns use the statuses from Task fields."),
+    mine && h("label", { class: "board-mine" }, mine, "Assigned to me"), scroller);
+}
+
+/** Keep both fields in one card action; each field saves independently. */
+function editBoardCard(f, card, fields) {
+  const controls = [];
+  let pending = null;
+  const rows = fields.map((field) => {
+    let current = card[field.key];
+    const list = field.key === "assignee" ? assigneeList(f.repo, "board-assignee-options") : null;
+    const control = list
+      ? h("input", { type: "text", class: "input", list: list.id, value: current, autocomplete: "off", spellcheck: "false" })
+      : h("select", { class: "input" }, [...new Set(["", ...field.values, current])]
+        .map((value) => h("option", { value, selected: value === current }, value || "—")));
+    control.id = "board-edit-" + field.key;
+    controls.push(control);
+    control.addEventListener("change", () => {
+      const value = fieldValue(field, control.value);
+      if (pending || value === current) return;
+      controls.forEach((input) => { input.disabled = true; });
+      pending = changeTask(f.repo, card.path, field.prop, value, control, {
+        said: list ? "assignee updated" : "",
+        also: () => list ? assignmentEdits(value) : [],
+        allow: (props) => shownValue(props[field.prop]).trim() === current,
+      }).then((saved) => {
+        if (saved) current = value;
+        control.value = current;
+        controls.forEach((input) => { input.disabled = false; });
+        pending = null;
+        if (app.file === f) redrawNote();
+      });
+    });
+    return h("label", { class: "field" }, h("span", {}, field.label), control, list);
+  });
+  modal({ title: shownName(card.path), body: rows,
+    buttons: [{ label: "Done", kind: "primary", onclick: async () => { await pending; } }] });
 }
 
 /** A base's views as tabs over one table. The last tab chosen is remembered per base. */
@@ -2865,7 +3641,9 @@ function renderTable() {
 async function save() {
   const f = app.file;
   if (!(f?.dirty || uploadable(f)) || app.saving || viewOnly(f.kind)) return;
-  const text = toLf(f.text);
+  if (f.imageUpload) return toast("Wait for the upload to finish.", "info");
+  const before = f.text;
+  const text = toLf(before);
   app.saving = true;
   renderHeader();
   try {
@@ -2874,9 +3652,9 @@ async function save() {
     if (app.file !== f) return;
     f.sha = res.sha;
     f.saved = text;
-    f.text = text;
-    f.dirty = false;
-    store.remove(draftKey(f));
+    if (f.text === before) f.text = text;
+    updateDirty();
+    flushDraft();
     treeChanged(f.repo, f.path, res.sha);
     updateLinkWarning();
     if (res.waiting) toast("Saved on this device. It goes to GitHub when the connection is back.", "ok", 5000);
@@ -3000,8 +3778,8 @@ async function startingText(repo, tree, p) {
 }
 
 /**
- * A new note in a project's tasks folder gets the ```subtasks, ```relations and ```commits blocks (a new sprint
- * note, the ```sprint block), unless its template already places any; and the fields that are on (only once a setup is saved).
+ * A new task gets its box blocks, the writing sections if its body is blank, and the fields that are on
+ * once a setup is saved. A sprint gets the ```sprint block.
  * With Reviewer on, its reviewer is who asked for it (Requested by), else whoever makes it. With sprints on, it goes on the next sprint, if there is one, so the current sprint's plan stays as agreed;
  * a sprint the template already sets stays, and Add subtask then gives it its parent's.
  */
@@ -3009,8 +3787,7 @@ async function asNewTask(repo, tree, p, text) {
   const setup = await loadTaskSetup(repo);
   // A new sprint note shows its sprint box where the block is.
   if (!isSetupTask(setup, p.path)) return isSprintNote(setup, p.path) ? withBlocks(text, SPRINT_BLOCKS) : text;
-  // Its subtasks, relations and commits show where these blocks are, unless its template placed its own.
-  text = withBlocks(text, TASK_BLOCKS);
+  text = withTaskLayout(text);
   if (!setup.configured) return text;
   const out = withReviewer(setup, withProps(text, newTaskProps(setup), { keep: true }), store.get("user")?.login);
   const sprint = sprintField(setup) ? await suggestSprints(repo, tree).catch(() => null) : null;
@@ -3174,6 +3951,7 @@ function inviteLink(r) {
   if (r.home && r.home !== "README.md") p.set("home", r.home);
   if (r.notes) p.set("notes", r.notes);
   if (r.template) p.set("template", r.template);
+  if (r.attachments) p.set("attachments", r.attachments);
   return `${location.origin}${location.pathname}#/join?${p}`;
 }
 
@@ -3190,7 +3968,7 @@ function joinRepo(params) {
     vault: params.get("vault") === "1",
     inbox: path("inbox"), inboxes: path("inboxes"),
     home: path("home") || "README.md",
-    notes: path("notes"), template: path("template"),
+    notes: path("notes"), template: path("template"), attachments: path("attachments"),
   };
 }
 
@@ -3733,7 +4511,10 @@ async function addLocalVault() {
     choice("local-keep", "browser", "In this browser", "No folder: lost if the browser's data is cleared, so download a copy now and then."));
   const start = h("div", { class: "choices" },
     choice("local-start", "empty", "Empty", "One note to start from.", true),
-    choice("local-start", "example", "The example notes", "A note for every feature, to try them out. Needs the connection this once."));
+    choice("local-start", "example", "An example vault", "Try a set of notes you can edit and keep. Needs the connection this once."));
+  const examplePicker = h("select", { class: "input", "aria-label": "Example vault" },
+    EXAMPLE_VAULTS.map((example) => h("option", { value: example.key }, example.label)));
+  const selectedExample = () => EXAMPLE_VAULTS.find((example) => example.key === examplePicker.value);
   const pickLocation = h("button", { class: "btn small", type: "button", onclick: async () => {
     const handle = await pickFolder();
     if (handle) { location = handle; sync(); }
@@ -3750,7 +4531,7 @@ async function addLocalVault() {
   const openedField = h("div", { class: "field" }, h("span", {}, "Folder"), h("div", { class: "pick-line" }, pickOpened, openedText),
     h("small", { class: "hint" }, "Nothing is added to it. An empty folder starts with no notes."));
   const keepField = h("div", { class: "field" }, h("span", {}, "Where it's kept"), keep);
-  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start);
+  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start, examplePicker);
   const fine = h("p", { class: "fine" }, folderOk
     ? "The browser shows the app only the folder's name, not its whole path on the disk."
     : noFolderText("a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy)."));
@@ -3762,6 +4543,8 @@ async function addLocalVault() {
     locationField.hidden = !inFolder;
     openedField.hidden = !opening;
     startField.hidden = opening;
+    examplePicker.hidden = value(start) !== "example";
+    if (!opening && !named) name.value = examplePicker.hidden ? "My notes" : selectedExample().name;
     fill(locationText, picked(location, "No location picked yet"));
     fill(openedText, picked(opened, "No folder picked yet"));
     fill(where, location ? `The vault is made as a new folder, ${cleanName(name.value) || "My notes"}, inside ${location.name}.` : "The vault is made as a new folder with its name, inside the location you pick.");
@@ -3770,6 +4553,8 @@ async function addLocalVault() {
   // A name typed while creating doesn't stick to a folder opened afterwards: the folder names it, unless typed again.
   mode.addEventListener("change", () => { named = false; sync(); });
   keep.addEventListener("change", sync);
+  start.addEventListener("change", sync);
+  examplePicker.addEventListener("change", sync);
   sync();
   return modal({
     title: "Add a vault on this device",
@@ -3782,40 +4567,49 @@ async function addLocalVault() {
         const opening = folderOk && value(mode) === "open";
         const kind = opening || (folderOk && value(keep) === "folder") ? "folder" : "browser";
         const label = name.value.trim() || opened?.name || "My notes";
-        const example = !opening && value(start) === "example";
+        const example = !opening && value(start) === "example" ? selectedExample() : null;
+        const place = location;
+        const folderName = !opening && kind === "folder" ? cleanName(label) : "";
+        if (!opening && kind === "folder" && (!place || !folderName)) {
+          problem.textContent = place ? "The name needs letters or numbers, to name its folder." : "Pick a location first: the vault's folder is made inside it.";
+          return false;
+        }
+        let starter;
+        if (example) {
+          problem.textContent = "Getting the example notes…";
+          try { starter = await fetchExample(example); }
+          catch (e) { problem.textContent = e.message; return false; }
+        }
         let handle = null;
         if (opening) {
           if (!opened) { problem.textContent = "Pick the vault's folder first."; return false; }
           handle = opened;
         } else if (kind === "folder") {
-          if (!location) { problem.textContent = "Pick a location first: the vault's folder is made inside it."; return false; }
-          const folderName = cleanName(label);
-          if (!folderName) { problem.textContent = "The name needs letters or numbers, to name its folder."; return false; }
           try {
             let there = null;
-            try { there = await location.getDirectoryHandle(folderName); } catch { /* not there yet: made below */ }
+            try { there = await place.getDirectoryHandle(folderName); } catch { /* not there yet: made below */ }
             if (there) {
               for await (const [entry] of there.entries()) {
-                if (!entry.startsWith(".")) {
-                  problem.textContent = `${location.name} already has a folder ${folderName} with files in it. Open it instead (Open a folder as a vault), or pick another name.`;
+                if (!entry.startsWith(".") || starter?.files.some((file) => file.path.split("/")[0] === entry)) {
+                  problem.textContent = `${place.name} already has a folder ${folderName} with files in it. Open it instead (Open a folder as a vault), or pick another name.`;
                   return false;
                 }
               }
             }
-            handle = there || await location.getDirectoryHandle(folderName, { create: true });
+            handle = there || await place.getDirectoryHandle(folderName, { create: true });
           } catch (e) {
             problem.textContent = `The folder couldn't be made in ${location.name}: ${e?.message || e}`;
             return false;
           }
         }
-        problem.textContent = example ? "Getting the example notes…" : "Setting it up…";
+        problem.textContent = "Setting it up…";
         try {
-          const seed = opening ? [] : example ? await fetchExample() : emptyVault(label, kind);
+          const seed = opening ? [] : starter?.files ?? emptyVault(label, kind);
           let id = `local-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vault"}`;
           while (app.repos.some((x) => x.id === id)) id += "-2";
           const r = {
-            id, local: kind, label, owner: "", repo: "", branch: "", folder: "",
-            home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...(example ? EXAMPLE_SETTINGS : {}),
+            id, local: kind, owner: "", repo: "", branch: "", folder: "",
+            home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...starter?.settings, label,
           };
           const seeded = await local.create(r, { handle, seed });
           if (opening || !seeded) Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
@@ -3939,7 +4733,7 @@ function showSettings(adding = false, tokenOwner = "") {
   const others = ownerTokens();
   const ownerInput = h("input", { class: "input", list: "repo-owners", autocomplete: "off", spellcheck: "false", autocapitalize: "off",
     placeholder: "The owner: your-name or your-organization", value: tokenOwner, "aria-label": "Owner" });
-  const repoOwners = [...new Set(app.repos.map((r) => r.owner))].filter((o) => !others[o.toLowerCase()]);
+  const repoOwners = [...new Set(app.repos.filter((r) => !isLocal(r)).map((r) => r.owner))].filter((o) => o && !others[o.toLowerCase()]);
   const makeLink = h("a", { class: "btn", target: "_blank", rel: "noopener" }, icon("key"), "Make it on GitHub");
   const syncLink = () => {
     const o = ownerInput.value.trim();
@@ -3955,7 +4749,7 @@ function showSettings(adding = false, tokenOwner = "") {
     const o = ownerInput.value.trim();
     if (!o) return ownerInput.focus();
     if (!ownerTokenInput.value.trim()) return ownerTokenInput.focus();
-    const check = app.repos.find((r) => r.owner.toLowerCase() === o.toLowerCase()) || null;
+    const check = app.repos.find((r) => !isLocal(r) && r.owner.toLowerCase() === o.toLowerCase()) || null;
     if (await saveOwnerToken(o, ownerTokenInput.value.trim(), ownerOut, check)) { toast(`Token for ${o} saved on this device`, "ok"); showSettings(); }
   };
   ownerTokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveOther(); });
@@ -4013,6 +4807,7 @@ function showSettings(adding = false, tokenOwner = "") {
       field("Inboxes folder", "inboxes", r.inboxes, "A folder with one inbox per person, e.g. Notes/Inboxes. The Inbox button opens the note whose github property is your GitHub login."),
       field("New notes folder", "notes", r.notes, "e.g. Notes. New note then asks only for a title and puts the note here. Empty: you pick the folder and kind each time."),
       field("Note template", "template", r.template, "A note new notes start from, e.g. Templates/Note.md; {{title}} and {{date}} are filled in. Empty: a new note starts with its title."),
+      field("Attachments folder", "attachments", r.attachments, "Where added images go inside this vault, e.g. Attachments. Empty: next to the note."),
       h("label", { class: "check-line full" }, h("input", { type: "checkbox", name: "vault", checked: !!r.vault }),
         h("span", {}, "Vault rules: the generated navigation box (between %% nav: … %% and %% /nav %%) is folded and can't be edited, and links that lead to no page are warned about")),
       h("div", { class: "full card-actions" },
@@ -4048,13 +4843,13 @@ function showSettings(adding = false, tokenOwner = "") {
         ids.add(old.id);
         return {
           ...old, label: v("label") || old.label, inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
-          notes: cleanDir(v("notes")), template: cleanDir(v("template")), vault: card.querySelector("[name=vault]").checked,
+          notes: cleanDir(v("notes")), template: cleanDir(v("template")), attachments: cleanDir(v("attachments")), vault: card.querySelector("[name=vault]").checked,
         };
       }
       const r = {
         label: v("label"), owner: v("owner"), repo: v("repo"), branch: v("branch") || "main",
         folder: cleanDir(v("folder")), inbox: cleanDir(v("inbox")), inboxes: cleanDir(v("inboxes")), home: cleanDir(v("home")),
-        notes: cleanDir(v("notes")), template: cleanDir(v("template")),
+        notes: cleanDir(v("notes")), template: cleanDir(v("template")), attachments: cleanDir(v("attachments")),
         vault: card.querySelector("[name=vault]").checked,
       };
       let id = card.dataset.id || r.repo.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "repo";
@@ -4103,10 +4898,6 @@ function showSettings(adding = false, tokenOwner = "") {
   const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(store.prefix + "draft:"));
   let drafts = [];
   try { drafts = draftKeys(); } catch { /* storage blocked */ }
-  const pickVersion = (dev) => {
-    store.set("version", dev ? "dev" : "main");
-    if (dev !== DEV_BUILD) location.assign(versionHref(dev));
-  };
   const copies = h("ul", { class: "checks copies" });
   const copyRepos = app.repos.filter((r) => !isLocal(r));
   for (const r of copyRepos) {
@@ -4146,18 +4937,11 @@ function showSettings(adding = false, tokenOwner = "") {
   }
   const device = h("section", { class: "card" },
     h("h2", {}, icon("history"), "This device"),
+    overviewSettings(),
     waitingBox,
     copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
       h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),
       copies) : null,
-    h("div", { class: "field" },
-      h("span", {}, "App version"),
-      h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
-        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => pickVersion(false) }, "Released"),
-        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => pickVersion(true) }, "In development")),
-      h("small", { class: "hint" }, DEV_BUILD
-        ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
-        : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
     h("p", {}, drafts.length ? `${drafts.length} unsaved ${drafts.length === 1 ? "draft is" : "drafts are"} kept in this browser.` : "No unsaved drafts are kept in this browser."),
     drafts.length ? h("button", { class: "btn small danger", onclick: async () => {
       if (!(await confirmDialog("Discard every unsaved draft?", "Changes you never saved will be gone.", "Discard all", true))) return;
@@ -4169,7 +4953,10 @@ function showSettings(adding = false, tokenOwner = "") {
     h("div", { class: "page-head" },
       h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
-    github, ownersCard, repos, device));
+    github, ownersCard, repos, device,
+    h("section", { class: "card" },
+      h("h2", {}, "Support Commonplace.md"),
+      h("a", { class: "btn", href: "https://ko-fi.com/jansnieg", target: "_blank", rel: "noopener noreferrer" }, "Support on Ko-fi"))));
   // #/settings?token=<owner> opens straight to adding a token for that owner.
   if (tokenOwner) { ownersCard.scrollIntoView({ block: "start" }); ownerTokenInput.focus(); }
 }
@@ -4178,33 +4965,7 @@ function showSettings(adding = false, tokenOwner = "") {
 // Start
 // ================================================================
 
-/**
- * Which version this device follows. The released version sends a device that picked the development one on
- * to it, once per try: if the development version doesn't open (the device comes back here), it stays.
- * Resolves to false when the page is leaving.
- */
-function followVersion() {
-  let session = null;
-  try { session = sessionStorage; } catch { /* storage blocked: no sending on */ }
-  if (DEV_BUILD) {
-    session?.removeItem(TO_DEV);
-    if (store.get("version") !== "dev") store.set("version", "dev");
-    document.body.classList.add("dev-build");
-    return true;
-  }
-  if (store.get("version") !== "dev" || !session) return true;
-  if (session.getItem(TO_DEV)) {
-    session.removeItem(TO_DEV);
-    setTimeout(() => toast("The version in development didn't open, so this is the released one. Settings › This device picks the version.", "error"), 0);
-    return true;
-  }
-  session.setItem(TO_DEV, "1");
-  location.replace(versionHref(true));
-  return false;
-}
-
 function start() {
-  if (!followVersion()) return;
   fillIcons(document.body);
   renderWho();
   renderRepoPicker();
@@ -4230,6 +4991,24 @@ function start() {
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
+  $("#export-pdf-btn").addEventListener("click", async () => {
+    closeMenu();
+    const f = app.file;
+    if (f?.kind !== "md" || !f.dom?.preview) return;
+    const button = $("#export-pdf-btn");
+    button.disabled = true;
+    try {
+      // Flush the current editor into the preview; no save or remote write is needed.
+      renderPreview();
+      await printNote({ preview: f.dom.preview, title: shownName(f.path), isCurrent: () => app.file === f, drawDiagram: src => diagramSvg(src, "default") });
+    } catch (error) { toast(error.message, "error"); }
+    finally { button.disabled = false; }
+  });
+  addEventListener("beforeprint", () => {
+    const f = app.file;
+    if (!document.getElementById("print-note") && f?.kind === "md" && f.dom?.preview) createPrintView(f.dom.preview, shownName(f.path));
+  });
+  addEventListener("afterprint", clearPrintView);
   $("#side-new").addEventListener("click", () => { closeSideOnPhone(); newNote(); });
   $("#reload-btn").addEventListener("click", reloadFromGitHub);
   $("#nudge-reload").addEventListener("click", reloadFromGitHub);
@@ -4261,7 +5040,7 @@ function start() {
   addEventListener("pagehide", flushDraft);
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushDraft(); else checkForNewer(); });
   setInterval(checkForNewer, CHECK_EVERY);
-  addEventListener("beforeunload", (e) => { if (app.file?.dirty) e.preventDefault(); });
+  addEventListener("beforeunload", (e) => { if (app.file?.dirty || app.file?.imageUpload || hasCaptureDraft(app.file)) e.preventDefault(); });
   matchMedia("(min-width: 1180px)").addEventListener("change", () => applyMode());
   // Diagrams are drawn in the scheme's colours, so a scheme change redraws them.
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if ($(".mermaid-diagram")) renderPreview(); });

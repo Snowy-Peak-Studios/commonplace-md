@@ -18,7 +18,8 @@ Go through every criterion in the task. Tick the ones that are met, and know how
 
 ## 3. The task note
 
-- **All done**: set `status: Done`, and add to its notes: `**Done (<date>)**:` what was done, in a few plain lines, and the commit (with its repo, if the work was in another one). Done tasks keep their `assignee`.
+- **Review required by your person**: record the completed work, checks, commit and previous agent assignment; set the configured review state (Testing by default), assign the reviewer and hand it back for their final close/rework decision. Do not silently mark it Done.
+- **All done, no review pending**: set `status: Done`, and add to its notes: `**Done (<date>)**:` what was done, in a few plain lines, and the commit (with its repo, if the work was in another one). Done tasks keep their `assignee`.
 - **Part of it is left**: narrow the task to what was done (Done), and make a new To Do task from `Templates/Task.md` for exactly what's left, with the original's `requested_by`. Link the two to each other.
 
 ## 4. Keep the notes in step
@@ -35,7 +36,7 @@ Go through every criterion in the task. Tick the ones that are met, and know how
 - Never skip a hook (`--no-verify`). If one fails, fix the cause.
 - Push at once. If the push is refused, `git pull --rebase` and push again. Never force-push.
 
-**The commit's hash**: a commit can't hold its own hash. If the work was in another repo, write that repo's commit into the task before this commit. If it was in this repo, after the commit write `git log -1 --format=%h` into the task's Done line, then commit that as `<ID>: commit noted` and push.
+**The commit's hash**: a commit can't hold its own hash. If the work was in another repo, write that repo's commit into the task before this commit. If it was in this repo, after the commit write `git log -1 --format=%h` into the task's completion or review-handoff record, then commit that as `<ID>: commit noted` and push.
 
 ## 6. Report
 

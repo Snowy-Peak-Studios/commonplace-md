@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
+  LinkIndex, parseWikilink, findNavBlock, prepareForPreview, findWikilinks, imageAttachment, imageInsertion, defaultNote, fillTemplate, isoDate, titleProblem, splitFrontMatter,
   inboxCandidates, ownInboxPath, MARKER, parseMarker, markerText, reposToCheck, repoKey,
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
-  hasBlock, withBlocks, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink,
+  hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
 } from "../src/vault.js";
 
 const NOTE = [
@@ -147,10 +147,10 @@ test("suggested tasks: free ones in a Tasks folder, highest priority, then newes
   assert.ok(!isTaskPath("Tasks/Deeper/A.md") && !isTaskPath("MyTasks/A.md") && !isTaskPath("Tasks/a.csv"));
 });
 
-test("blocked tasks are never suggested, in any case, with or without sprints", async () => {
+test("blocked and testing tasks are never suggested, with or without sprints", async () => {
   const { suggestTasks, sprintSuggestions } = await import("../src/vault.js");
   const t = (path, status) => ({ path, props: { status, assignee: "", priority: "High", sprint: "[[Sprint 1]]" } });
-  const notes = [t("Tasks/Blocked.md", "Blocked"), t("Tasks/Shouting.md", " BLOCKED "), t("Tasks/Free.md", "To Do")];
+  const notes = [t("Tasks/Blocked.md", "Blocked"), t("Tasks/Shouting.md", " BLOCKED "), t("Tasks/Testing.md", " Testing "), t("Tasks/Free.md", "To Do")];
   assert.deepEqual(suggestTasks(notes).map((n) => n.path), ["Tasks/Free.md"]);
   assert.deepEqual(sprintSuggestions(notes, { now: "Sprints/Sprint 1.md", resolve: (x) => `Sprints/${x}.md` }).map((n) => n.path), ["Tasks/Free.md"]);
 });
@@ -206,6 +206,22 @@ test("setting a task's properties changes only those lines", async () => {
   assert.deepEqual(taskAreas([t("Tasks/a.md", "Notes"), t("Tasks/b.md", "notes"), t("Tasks/c.md", " Art "), t("Tasks/d.md", ""), t("Notes/x.md", "Other")]), ["Art", "Notes"]);
 });
 
+test("only dated, unassigned deferrals return after the inbox's waiting period", async () => {
+  const { waitingDays, waitingReady } = await import("../src/vault.js");
+  const task = { status: "Waiting", assignee: "", waiting_since: new Date("2026-11-10T00:00:00Z") };
+  assert.equal(waitingDays(undefined), 7);
+  assert.equal(waitingDays("3"), 3);
+  for (const value of [null, "", true, 0, -4, 1.5, "tomorrow"]) assert.equal(waitingDays(value), 7);
+  assert.equal(waitingReady(task, 7, "2026-11-16"), false);
+  assert.equal(waitingReady(task, 7, "2026-11-17"), true);
+  assert.equal(waitingReady({ ...task, waiting_since: "2026-11-10" }, 3, "2026-11-13"), true);
+  for (const waiting_since of [undefined, "", "soon", "2026-02-30", "2026-12-01"]) {
+    assert.equal(waitingReady({ ...task, waiting_since }, 7, "2026-11-17"), false);
+  }
+  assert.equal(waitingReady({ ...task, assignee: "Ann Example" }, 7, "2026-11-17"), false);
+  assert.equal(waitingReady({ ...task, status: "Blocked" }, 7, "2026-11-17"), false);
+});
+
 test("Not now: waiting tasks leave the suggestions and the claimed ones, and make the waiting list", async () => {
   const { suggestTasks, claimedTasks, waitingTasks } = await import("../src/vault.js");
   const t = (path, props) => ({ path, props });
@@ -247,10 +263,38 @@ test("a task's state: ready, needs a decision, or a placeholder", async () => {
 });
 
 
+test("images get dated safe names that resolve from the note and avoid collisions across the vault", () => {
+  const now = new Date("2026-11-17T12:03:04Z");
+  const image = { name: "My |[screenshot].PNG", type: "image/png", size: 128 };
+  const base = "My-screenshot-2026-11-17-12-03-04-deadbeef";
+  const used = ["Elsewhere/" + base.toUpperCase() + ".PNG"];
+  const upload = imageAttachment(image, "Notes/A note.md", "/Attachments/", used, now, "deadbeeff00d");
+  assert.equal(upload.path, "Attachments/" + base + "-2.png");
+  assert.equal(upload.link, `![[${base}-2.png]]`);
+  assert.equal(new LinkIndex([...used, upload.path]).resolve(upload.name, "Notes/A note.md"), upload.path);
+  assert.equal(imageAttachment({...image, name: ""}, "Notes/A note.md", "", [], now, "deadbeef").path,
+    "Notes/image-2026-11-17-12-03-04-deadbeef.png");
+  assert.equal(imageAttachment({...image, name: "Photo.JPEG", type: ""}, "Home.md", "", [], now, "deadbeef").path,
+    "Photo-2026-11-17-12-03-04-deadbeef.jpeg");
+  assert.throws(() => imageAttachment(image, "Home.md", "../elsewhere", []), /valid Attachments folder/);
+  assert.throws(() => imageAttachment({...image, size: 10 * 1024 * 1024 + 1}, "Home.md", "", []), /10 MiB/);
+  assert.throws(() => imageAttachment({...image, type: "text/plain"}, "Home.md", "", []), /Choose a PNG/);
+});
+
+test("an image inserts at the cursor or after the note's properties", () => {
+  const link = "![[picture.png]]";
+  const front = "---\nowner: Alex\n---";
+  const note = front + "\n\n# Note\n";
+  assert.deepEqual(imageInsertion(note, 5, link), { at: front.length + 1, insert: link + "\n" });
+  assert.deepEqual(imageInsertion(front, front.length, link), { at: front.length, insert: "\n" + link + "\n" });
+  assert.deepEqual(imageInsertion(note, note.length, link), { at: note.length, insert: link });
+  assert.deepEqual(imageInsertion("# Title", 0, link), { at: 0, insert: link + "\n\n" });
+});
+
 test("a vault's marker file round-trips its settings", () => {
   assert.equal(MARKER, ".commonplace.json");
   const r = { owner: "Org", repo: "Game", label: "The game", branch: "dev", folder: "Wiki", home: "Home.md",
-    inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", vault: true };
+    inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments", vault: true };
   const back = parseMarker(markerText(r), "Org", "Game");
   assert.deepEqual(back, r);
 });
@@ -258,7 +302,7 @@ test("a vault's marker file round-trips its settings", () => {
 test("a marker keeps only what an invite link can set, with defaults", () => {
   const r = parseMarker('{"folder": "/Wiki/", "token": "x", "vault": "yes", "home": 3}', "o", "notes");
   assert.deepEqual(r, { owner: "o", repo: "notes", label: "notes", branch: "", folder: "Wiki", home: "README.md",
-    inbox: "", inboxes: "", notes: "", template: "", vault: false });
+    inbox: "", inboxes: "", notes: "", template: "", attachments: "", vault: false });
   assert.equal(parseMarker("not json", "o", "r"), null);
   assert.equal(parseMarker("[1]", "o", "r"), null);
   assert.equal(parseMarker("null", "o", "r"), null);
@@ -282,7 +326,7 @@ test("a repo with no task setup keeps the fields it always had", () => {
   assert.equal(s.configured, false);
   assert.equal(s.folder, "Tasks");
   assert.deepEqual(s.fields.filter((f) => f.on).map((f) => f.key), ["status", "priority", "assignee", "area", "requested_by"]);
-  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Blocked", "Waiting", "Done"]);
+  assert.deepEqual(s.fields.find((f) => f.key === "status").values, ["To Do", "In Progress", "Testing", "Blocked", "Waiting", "Done"]);
 });
 
 test("a task setup starts from a new project's fields and changes what it names", () => {
@@ -642,6 +686,18 @@ test("a new task gets its blocks under its title, unless it already has any", ()
   assert.equal(withBlocks("# A\r\nB\r\n", SPRINT_BLOCKS), "# A\n\n```sprint\n```\n\nB\n", "LF");
 });
 
+test("blank tasks put commits below comments and keep custom templates' layouts", () => {
+  const base = "---\nid: T-1\n---\n\n# A task\n";
+  const draft = withTaskLayout(base);
+  assert.ok(draft.startsWith(base + "\n"));
+  assert.deepEqual([...draft.matchAll(/^```([a-z-]+)$/gm)].map((m) => m[1]),
+    ["subtasks", "relations", "description", "acceptance-criteria", "comments", "commits", "work-history"]);
+  const custom = base + "\n## Purpose\n\nCustom text.\n";
+  assert.equal(withTaskLayout(custom), withBlocks(custom, TASK_BLOCKS));
+  assert.equal(withTaskLayout(custom + "\n```commits\n```\n"), custom + "\n```commits\n```\n");
+  assert.equal(withTaskLayout(draft), draft);
+});
+
 test("a top tasks order: the four orders, a few other ways to say them, else none", () => {
   for (const o of ["priority-newest", "priority-oldest", "newest", "oldest"]) assert.equal(taskOrder(o), o);
   assert.equal(taskOrder("Priority"), "priority-newest");
@@ -726,6 +782,58 @@ test("mentions in a note: @login, not in code, an email or a path; with the head
   assert.deepEqual(findMentions("@start of the file").map((m) => m.login), ["start"]);
   assert.deepEqual(findMentions("~~~md\n@no\n~~~\n(@yes)").map((m) => m.login), ["yes"]);
   assert.equal(findMentions("x ".repeat(100) + "@long").at(0).text.length, 160);
+});
+
+test("section text contributes links and mentions while nested code stays code", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = [
+    "---", "owner: @outside", "---", "# Note", "````comments",
+    "@ann, check [[Home]] and `@inline`.", "- @bob, I replied.",
+    "```js", "@example [[Missing example]]", "```",
+    "@carol has more.", "````", "@after, too.",
+    "~~~markdown", "```comments", "@another-example", "```", "~~~",
+  ].join("\r\n");
+  assert.deepEqual(findWikilinks(note).map((l) => l.target), ["Home"]);
+  assert.deepEqual(findMentions(note).map((m) => [m.login, m.line, m.heading, m.answered]), [
+    ["ann", 6, "Comments", true], ["bob", 7, "Comments", false], ["carol", 11, "Comments", false], ["after", 13, "Note", false],
+  ]);
+});
+
+test("task decisions use the written criteria and leave comments and history out", async () => {
+  const { taskState, taskAnswer } = await import("../src/vault.js");
+  const note = "# A task\n\n**Answer:**\n\n```acceptance-criteria\n- [ ] Finished\n```\n\n```comments\nTBD in discussion.\n```\n\n```work-history\n- [ ] Decide on an old approach.\n```\n";
+  assert.equal(taskState(note).state, "ready");
+  assert.equal(taskState(note.replace("Finished", "Decide with the team")).state, "decision");
+  assert.equal(taskState(note.replace("- [ ] Finished\n", "")).state, "placeholder");
+  assert.equal(taskAnswer(note), "");
+  assert.equal(taskAnswer(note.replace("**Answer:**", "**Answer:** Use the first one.")), "Use the first one.");
+});
+
+test("posting appends a Markdown comment to the selected fence and suggests the previous login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const note = "# Plan\n\n```comments\nEarlier text.\n```\n\n~~~comments\n~~~\n";
+  const now = new Date("2026-11-17T11:22:30Z");
+  const posted = addComment(note, 2, 4, "@alice Please check.\n\nNext paragraph.", "Bob", now);
+  assert.equal(posted, note.replace("Earlier text.\n", "Earlier text.\n\n- **Bob** · 2026-11-17 11:22 UTC\n\n    @alice Please check.\n\n    Next paragraph.\n"));
+  const comment = blockContents(posted, "comments")[0];
+  assert.equal(commentReply(comment, "alice"), "@Bob ");
+  assert.equal(commentReply(comment, "bob"), "");
+  assert.equal(commentReply("Earlier text. @alice", "bob"), "");
+  assert.equal(commentReply("~~~md\n- **example** · 2026-11-17 11:22 UTC\n~~~", "bob"), "");
+  assert.deepEqual(findMentions(posted).map(({ login, heading }) => [login, heading]), [["alice", "Comments"]]);
+  assert.equal(addComment(note, 2, 7, "Wrong block", "bob", now), note);
+  assert.equal(addComment(note, 6, 7, "  ", "bob", now), note);
+});
+
+test("code in a multiline comment stays in the fence and a local post has no reply login", async () => {
+  const { findMentions } = await import("../src/vault.js");
+  const source = "   ```comments\n   ```\n\nAfter.\n";
+  const posted = addComment(source, 0, 1, "```js\n@not-a-mention\n```\n\n@alice Hello", "", new Date("2026-11-17T11:22Z"));
+  assert.match(posted, /\*\*Unknown user\*\*.*UTC/);
+  assert.match(posted, /^ {7}```js$/m);
+  assert.deepEqual(findMentions(posted).map(({ login }) => login), ["alice"]);
+  assert.equal(commentReply(posted, "bob"), "");
+  assert.ok(posted.endsWith("   ```\n\nAfter.\n"));
 });
 
 test("a mention with a reply right under it is answered: the next line starts with someone else's @login", async () => {
@@ -816,4 +924,114 @@ test("an item added to a new-tasks block goes just above its closing fence, or l
   assert.equal(addNewTask("```new-tasks\n- One", 1, "Two"), "```new-tasks\n- One\n- Two", "no closing fence: last");
   assert.equal(addNewTask(note, 5, "   "), note, "nothing to add");
   assert.equal(addNewTask(note, 99, "Two"), note, "no such line");
+});
+
+
+test("board uses configured properties and filters cards without including epics", () => {
+  const setup = taskSetup({ fields: { status: { prop: "stage", values: ["Ready", "Done"] } } });
+  const props = { stage: "ready", area: ["UI", "Core"], assignee: "Zoë (Codex)", sprint: "[[S1]]", type: "Bug" };
+  const notes = [
+    { path: "Tasks/Match.md", props: { ...props, id: "T-1", priority: "High" } },
+    { path: "Tasks/Epic.md", props: { ...props, type: "Epic" } },
+    { path: "Tasks/Other.md", props: { ...props, stage: "Done", sprint: "[[S2]]" } },
+  ];
+  const options = { columns: [], areas: [], assignee: "", sprint: "", types: [] };
+  assert.deepEqual(boardColumns(notes, options, setup).map(({ status, cards }) => [status, cards.length]),
+    [["Ready", 1], ["Done", 1]]);
+  const handle = { path: "Tasks/Handle.md", props: { stage: "Ready", assignee: "@zoe" } };
+  const identity = { name: "Zoë", login: "zoe" };
+  assert.deepEqual(boardColumns([...notes, handle], options, setup, { identity })[0].cards.map((card) => card.path),
+    ["Tasks/Match.md", "Tasks/Handle.md"]);
+  const filters = { columns: ["Done", "Ready"], areas: ["ui"], assignee: "Zoe", sprint: "current", types: ["bug"] };
+  const columns = boardColumns(notes, filters, setup, { sprint: { path: "S1.md" }, resolve: (name) => name + ".md" });
+  assert.deepEqual(columns[0], { status: "Done", cards: [] });
+  assert.deepEqual(columns[1].cards, [{ path: "Tasks/Match.md", id: "T-1", status: "ready", priority: "High",
+    area: ["UI", "Core"], assignee: "Zoë (Codex)" }]);
+});
+
+
+test("assignee suggestions merge vault users and GitHub collaborators without duplicates", () => {
+  assert.deepEqual(assigneeOptions([{ name: "Zoë", login: "zoe" }], [{ login: "Zoe" }, { login: "pat" }], "pat"), [
+    { label: "", value: "@pat" }, { label: "Zoë", value: "@zoe" },
+  ]);
+  assert.deepEqual(assigneeOptions([{ name: "Zoë", login: "zoe" }], []), [{ label: "Zoë", value: "@zoe" }]);
+  assert.ok(assigneeMatches("Zoe (Codex)", { name: "Zoë", login: "zoe" }));
+  assert.ok(assigneeMatches("@ZOE", { name: "Different name", login: "zoe" }));
+  assert.ok(assigneeMatches("Zoe", { name: "Different name", login: "zoe" }));
+  assert.equal(assigneeMatches("zoe@example.com", { name: "Zoë", login: "zoe" }), false);
+  assert.match(setProps("---\nassignee: Old name\n---\n", [["assignee", "@zoe"]]), /assignee: "@zoe"/);
+});
+
+
+test("an open task matches the inbox identity and a reassignment surfaces after Seen", () => {
+  const setup = taskSetup({ fields: { assignee: { prop: "person" }, status: { prop: "stage" } } });
+  const zoe = { name: "Zoë", login: "zoe" };
+  const pat = { name: "Pat", login: "pat" };
+  const task = (person, rest = {}) => ({ path: "Tasks/One.md", props: { id: "T-1", person, stage: "To Do", ...rest } });
+  assert.equal(assignmentTasks([task("Zoe (agent)")], setup, zoe).length, 1);
+  assert.equal(assignmentTasks([task("@zoe", { stage: "Done" }), task("@zoe", { type: "Epic" })], setup, zoe).length, 0);
+  assert.equal(assignmentTasks([task("zoe@example.com")], setup, { name: "zoe@example.com", login: "zoe" }).length, 0);
+  const before = assignmentTasks([task("@Zoe", { assignment_id: "first" })], setup, zoe);
+  const seen = withSeenAssignments([], before, before);
+  assert.equal(sortAssignments(before, seen).open.length, 0);
+  assert.equal(sortAssignments(before, seen).seen.length, 1);
+  const elsewhere = task("@pat", { assignment_id: "second" });
+  assert.equal(assignmentTasks([elsewhere], setup, zoe).length, 0);
+  assert.equal(sortAssignments(assignmentTasks([elsewhere], setup, pat), seen).open.length, 1);
+  const after = assignmentTasks([task("@Zoe", { assignment_id: "third" })], setup, zoe);
+  assert.equal(sortAssignments(after, seen).open.length, 1);
+});
+
+test("reviews honour custom fields/statuses, explicit reviewer, assignee fallback and identity", () => {
+  const setup = taskSetup({ fields: { status: { prop: "state", values: ["Open", "Verify", "Done"] }, reviewer: { prop: "check_by" }, assignee: { prop: "assigned" }, type: { prop: "kind" } } });
+  const n = (id, props) => ({ path: `Tasks/${id}.md`, props: { id, state: "Verify", ...props } });
+  const notes = [n("N-1", { check_by: "Ana Lee", assigned: "Other" }), n("N-2", { check_by: "Other", assigned: "Ana Lee" }),
+    n("N-3", { check_by: "", assigned: "Ana Lee (Agent)" }), n("N-4", { check_by: ["Other", "@ana"] }),
+    n("N-5", { check_by: "Ana Lee", state: "Done" }), n("N-6", { check_by: "Ana Lee", kind: "Epic" }),
+    n("N-7", { check_by: "ana@example.test" }), n("N-8", { check_by: "Ana Lee", state: "Open" })];
+  assert.deepEqual(reviewTasks(notes, setup, { name: "Ana Lee", login: "ana" }, ["Verify"]).map((t) => t.id), ["N-4", "N-3", "N-1"]);
+  assert.deepEqual(reviewTasks(notes, setup, { name: "Ana Lee" }), [], "default Testing does not treat every open state as review");
+  assert.deepEqual(reviewTasks(notes, setup, {} , ["Verify"]), [], "no implicit identity");
+  assert.equal(reviewTasks([n("N-9", { assigned: "ANA LEE" })], setup, { name: "Ana Lee" }, ["verify"])[0].status, "Verify");
+});
+
+test("a task waiting for review is not a personal work claim", async () => {
+  const { claimedTasks } = await import("../src/vault.js");
+  const task = { path: "Tasks/Review.md", props: { assignee: "Ana Lee", status: "Testing" } };
+  assert.deepEqual(claimedTasks([task], "Ana Lee"), []);
+  assert.equal(claimedTasks([{ ...task, props: { ...task.props, status: "In Progress" } }], "Ana Lee").length, 1);
+});
+
+test("multiline captures edit one closed block, preserving owner, neighbours and literal option text", async () => {
+  const { newTaskItems, replaceNewTasks } = await import("../src/vault.js");
+  const note = "Before\n```new-tasks\nowner: Ann\n- One\n* [ ] Two\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n";
+  const expected = "owner: Ann\n- One\n* [ ] Two";
+  const items = newTaskItems("- Changed\r\n\r\n2. Added\n- owner: A thought\n```");
+  assert.deepEqual(items, ["Changed", "Added", "owner: A thought", "```"]);
+  const result = replaceNewTasks(note, 1, 5, expected, items);
+  assert.equal(result, "Before\n```new-tasks\nowner: Ann\n- Changed\n- Added\n- owner: A thought\n- ```\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n");
+  assert.equal(replaceNewTasks(note, 1, 5, expected, []), "Before\n```new-tasks\nowner: Ann\n```\nAfter\n```new-tasks\nowner: Ben\n- Other\n```\n", "deleting every item keeps the block and its owner");
+  assert.equal(replaceNewTasks(note.replaceAll("\n", "\r\n"), 1, 5, expected, ["New"]), note.replace("- One\n* [ ] Two", "- New"));
+  assert.equal(replaceNewTasks(note, 1, 5, "stale content", ["New"]), null, "stale captures cannot overwrite changes");
+  assert.equal(replaceNewTasks(note, 1, 4, expected, ["New"]), null, "an unclosed block cannot consume following content");
+  assert.equal(replaceNewTasks(note, 1, 10, expected, ["New"]), null, "cannot replace another block");
+});
+
+test("capture attachments support other files, safe names, collisions and moving between notes", async () => {
+  const { captureAttachment, captureAttachmentText } = await import("../src/vault.js");
+  const now = new Date("2026-11-18T12:00:00Z");
+  const file = { name: "Report [final].PDF", type: "application/pdf", size: 64 };
+  const used = ["Elsewhere/Report-final-2026-11-18-12-00-00-deadbeef.pdf"];
+  const a = captureAttachment(file, "Notes/Inbox.md", "Attachments", used, now, "deadbeef");
+  assert.equal(a.path, "Attachments/Report-final-2026-11-18-12-00-00-deadbeef-2.pdf");
+  assert.match(a.link, /^\[\[[^|]+\|Report  final .PDF\]\]$/);
+  assert.equal(new LinkIndex([...used, a.path]).resolve(a.name, "Tasks/A new task.md"), a.path);
+  const picture = captureAttachment({ name: "paste.png", type: "image/png", size: 10 }, "Inbox.md", "Attachments", [], now, "imagekey");
+  assert.match(picture.link, /^!\[\[/);
+  assert.throws(() => captureAttachment({ ...file, size: 0 }, "Inbox.md", "", []), /empty/);
+  assert.throws(() => captureAttachment({ ...file, size: 11 * 1024 * 1024 }, "Inbox.md", "", []), /10 MiB/);
+  assert.throws(() => captureAttachment(file, "Inbox.md", "../outside", []), /valid Attachments/);
+  assert.deepEqual(captureAttachmentText("- First\n- Second", 3, a.link), { text: "- First " + a.link + "\n- Second", cursor: 8 + a.link.length });
+  assert.equal(captureAttachmentText("- First\n- Second", 13, a.link).text, "- First\n- Second " + a.link);
+  assert.equal(captureAttachmentText("", 0, picture.link).text, picture.link);
 });

@@ -2,7 +2,7 @@
 
 import {
   EditorState, EditorView, StateField, keymap, Decoration, ViewPlugin, WidgetType, MatchDecorator,
-  drawSelection, highlightActiveLine, defaultKeymap, history, historyKeymap, indentWithTab,
+  drawSelection, highlightActiveLine, placeholder, defaultKeymap, history, historyKeymap, indentWithTab,
   searchKeymap, highlightSelectionMatches, autocompletion, syntaxHighlighting, HighlightStyle, markdown, markdownLanguage,
   MergeView, tags as t, yamlFrontmatter, yamlLanguage, StreamLanguage, jsonLanguage, javascriptLanguage,
   typescriptLanguage, jsxLanguage, tsxLanguage, cssLanguage, htmlLanguage, xmlLanguage, pythonLanguage, shell, toml,
@@ -204,8 +204,26 @@ export function createEditor(parent, text, { onChange, resolve, isMarkdown = tru
         vault ? protectNavBox : [],
         isMarkdown && people && !readOnly ? mentionPicker(people) : [],
         readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
-        EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString()); }),
+        EditorView.updateListener.of((u) => { if (u.docChanged) onChange?.(u.state.doc.toString(), u.changes); }),
         extra,
+      ],
+    }),
+  });
+}
+
+/** The compact comment field uses the note editor's people picker. */
+export function createCommentEditor(parent, text, people) {
+  return new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: text,
+      selection: { anchor: text.length },
+      extensions: [
+        history(), EditorView.lineWrapping, theme,
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        EditorView.contentAttributes.of({ "aria-label": "Write a comment", spellcheck: "true", autocapitalize: "sentences" }),
+        placeholder("Write a comment…"),
+        mentionPicker(people),
       ],
     }),
   });

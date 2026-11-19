@@ -34,7 +34,7 @@ The sprint going on today, with its tasks by status: a ` ```sprint ` block with 
 sprint: current
 ```
 
-## What to start next
+## Tasks for today
 
 The same top tasks your [[Inbox]] shows, on this page: a ` ```top-tasks ` block. Everything it shows is written in it, one option per line:
 

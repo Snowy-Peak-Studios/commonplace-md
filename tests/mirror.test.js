@@ -183,6 +183,27 @@ test("a save goes to GitHub, then into the copy", async () => {
   await assert.rejects(m.writeText(gh, repo, "README.md", "x", null, "Edit"), (e) => unreachable(e));
 });
 
+test("an image upload keeps exact bytes in the mirror and reports an offline error without queuing a file", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n" });
+  const bytes = new Uint8Array([0, 100, 128, 255]);
+  const path = "Wiki/Attachments/test.png";
+  gh.writeBytes = async (r, receivedPath, received, message) => {
+    gh.check();
+    assert.equal(receivedPath, path);
+    assert.equal(message, "Add image");
+    assert.deepEqual(received, bytes);
+    return { sha: await blobSha(bytes), commit: "image-commit" };
+  };
+  const saved = await m.writeBytes(gh, repo, path, bytes, "Add image");
+  assert.equal(saved.commit, "image-commit");
+  assert.deepEqual(mem.files.get(path).bytes, bytes);
+  gh.online = false;
+  assert.deepEqual(new Uint8Array(await (await m.readBlob(gh, repo, saved.sha)).arrayBuffer()), bytes);
+  await assert.rejects(m.writeBytes(gh, repo, "Wiki/failed.png", bytes, "Add image"), (e) => unreachable(e));
+  assert.equal(m.state(repo).pending.size, 0);
+  assert.equal(mem.files.has("Wiki/failed.png"), false);
+});
+
 async function synced(start, local = {}) {
   const gh = await fakeGitHub(start);
   const mem = memoryFiles(local);
@@ -292,4 +313,23 @@ test("a clone's files are used as they are: nothing downloaded that's the same",
   assert.equal(m.state(repo).bases.get("Wiki/Home.md"), gh.files.get("Wiki/Home.md").sha);
   // Search inside notes looks in the copy once it's up to date.
   assert.deepEqual((await m.searchCode(gh, repo, "PULLED")).items, [{ path: "Wiki/B.md" }]);
+});
+
+test("read-only overview reads never sync, remove, keep or flush a source copy", async () => {
+  const { gh, mem, m } = await synced({ "Wiki/Home.md": "home\n", "Wiki/Old.md": "old\n" });
+  gh.online = false;
+  await m.writeText(gh, repo, "Wiki/Home.md", "waiting edit\n", gh.files.get("Wiki/Home.md").sha, "Edit");
+  gh.online = true;
+  gh.files.delete("Wiki/Old.md");
+  await gh.set("Wiki/New.md", "new\n");
+  m.sync = () => { throw Error("overview started sync"); };
+  m.flush = () => { throw Error("overview started an upload"); };
+  m.keep = () => { throw Error("overview wrote a copy"); };
+  const t = await m.tree(gh, repo, "main", { readOnly: true });
+  assert(t.tree.some(e => e.path === "Wiki/New.md"));
+  assert.equal((await m.readText(gh, repo, "Wiki/Home.md", { readOnly: true })).text, "waiting edit\n");
+  assert.equal((await m.readText(gh, repo, "Wiki/New.md", { readOnly: true })).text, "new\n");
+  assert(mem.files.has("Wiki/Old.md"), "read-only scan never removes source files");
+  assert(!mem.files.has("Wiki/New.md"), "read-only scan never downloads into the source");
+  assert.equal(gh.files.get("Wiki/Home.md").text, "home\n", "pending source edit is not uploaded");
 });

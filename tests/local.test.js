@@ -4,7 +4,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { blobSha } from "../src/github.js";
-import { LocalSource, withLocal, isLocal, zipFiles, crc32, EXAMPLE_FILES, emptyVault } from "../src/local.js";
+import { LocalSource, withLocal, isLocal, zipFiles, crc32, EXAMPLE_VAULTS, fetchExample, emptyVault } from "../src/local.js";
 
 const enc = (s) => new TextEncoder().encode(s);
 
@@ -121,13 +121,26 @@ test("an empty vault starts with one note saying it's only on this device", () =
   assert.match(text, /lost if the browser's data is cleared/);
 });
 
-test("EXAMPLE_FILES lists every file of example-vault/", () => {
-  const root = fileURLToPath(new URL("../example-vault/", import.meta.url));
-  const walk = (dir) => readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    return statSync(p).isDirectory() ? walk(p) : [relative(root, p).split("\\").join("/")];
-  });
-  const files = walk(root).sort();
-  assert.deepEqual([...EXAMPLE_FILES].sort(), files,
-    "A file was added to or removed from example-vault/: change EXAMPLE_FILES in src/local.js to match.");
+test("each example vault lists all of its files", () => {
+  for (const example of EXAMPLE_VAULTS) {
+    const root = fileURLToPath(new URL(`../${example.directory}/`, import.meta.url));
+    const walk = (dir) => readdirSync(dir).flatMap((name) => {
+      const p = join(dir, name);
+      return statSync(p).isDirectory() ? walk(p) : [relative(root, p).split("\\").join("/")];
+    });
+    assert.deepEqual([...example.files].sort(), walk(root).sort(), example.directory);
+  }
+});
+
+test("a starter fetch uses its marker and fails before returning an incomplete vault", async (t) => {
+  const example = EXAMPLE_VAULTS.find((item) => item.key === "small-team");
+  const base = new URL("https://example.test/examples/small-team/");
+  const marker = JSON.stringify({ home: "Home.md", inbox: "Notes/Team Inbox.md", template: "Templates/Note.md", vault: true });
+  const fetch = t.mock.method(globalThis, "fetch", (url) => new Response(url.pathname.endsWith(".commonplace.json") ? marker : "# A note"));
+  const seeded = await fetchExample(example, base);
+  assert.equal(seeded.files.length, example.files.length);
+  assert.equal(seeded.settings.inbox, "Notes/Team Inbox.md");
+  assert.ok(fetch.mock.calls.every(({ arguments: [url] }) => url.href.startsWith(base.href)));
+  fetch.mock.mockImplementation((url) => url.pathname.endsWith("Home.md") ? new Response("# Home") : new Response("", { status: 404 }));
+  await assert.rejects(fetchExample(example, base), /example notes didn't come/);
 });

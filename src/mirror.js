@@ -165,7 +165,7 @@ export class Mirror {
   }
 
   /** GitHub's tree with the copy's changes in it; with no connection, the copy's own tree (`offline: true`). */
-  async tree(github, r, ref) {
+  async tree(github, r, ref, { readOnly = false, current = () => true } = {}) {
     const files = await this.files(r);
     if (!files) return github.tree(r, ref);
     const st = this.state(r);
@@ -201,10 +201,11 @@ export class Mirror {
     st.remoteKnown = true;
     st.remoteBySha = new Map([...remote].map(([path, e]) => [e.sha, path]));
     st.changed = p.changed;
-    for (const [path, sha] of p.adopt) st.bases.set(path, sha);
+    if (!readOnly) for (const [path, sha] of p.adopt) st.bases.set(path, sha);
     const tree = data.tree.map((e) => (p.shas.has(e.path) ? { ...e, sha: p.shas.get(e.path) } : e));
     for (const path of p.changed) if (!remote.has(path)) tree.push({ path, type: "blob", sha: p.shas.get(path) });
-    st.syncing = this.sync(github, r, files, p, remote).catch(() => {}).then(() => this.flush(r)).catch(() => {});
+    // A combined overview must never start downloads, removals or queued uploads at its sources.
+    if (!readOnly && current()) st.syncing = this.sync(github, r, files, p, remote).catch(() => {}).then(() => this.flush(r)).catch(() => {});
     return { ...data, tree, changed: p.changed, syncedAt: st.syncedAt };
   }
 
@@ -293,7 +294,7 @@ export class Mirror {
     }
     try {
       const res = await github.readText(r, path);
-      this.keep(r, files, path, res.sha, enc(res.text)).catch(() => {});
+      if (!opts.readOnly) this.keep(r, files, path, res.sha, enc(res.text)).catch(() => {});
       return res;
     } catch (e) {
       if (!unreachable(e) || opts.fresh || !st.local.has(path)) throw e;
@@ -323,14 +324,14 @@ export class Mirror {
     return dec(await this.bytesBySha(github, r, sha));
   }
 
-  /** After a save on GitHub: the copy gets the same text, unless the file there changed again meanwhile. */
+  /** After a save on GitHub: the copy gets the same file, unless it changed locally meanwhile. */
   async written(r, path, text, sha) {
     const files = await this.files(r);
     if (!files) return;
     const st = this.state(r);
     const prefix = prefixOf(r);
     if (!path.startsWith(prefix) || hidden(path.slice(prefix.length))) return;
-    const bytes = enc(text);
+    const bytes = typeof text === "string" ? enc(text) : text;
     let now = null;
     try { now = await blobSha(await files.read(path)); } catch { /* not there yet */ }
     if (now != null && now !== st.local.get(path)) return; // changed on the disk since the app read it
@@ -386,6 +387,13 @@ export class Mirror {
       return { sha: await this.wait(r, files, path, text, sha, message), commit: null, parent: null, waiting: true };
     }
     await this.written(r, path, text, res.sha).catch(() => {});
+    return res;
+  }
+
+  /** Upload the attachment online first, then keep a local copy of its exact bytes. */
+  async writeBytes(github, r, path, bytes, message) {
+    const res = await github.writeBytes(r, path, bytes, message);
+    await this.written(r, path, bytes, res.sha).catch(() => {});
     return res;
   }
 

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commonplace.md</title>
+<p>The public development preview has closed. <a href="../">Open Commonplace.md</a>.</p>
+<script>
+const released = new URL("../", location.href);
+released.hash = location.hash;
+try { localStorage.removeItem("commonplace:version"); sessionStorage.removeItem("commonplace:to-dev"); } catch {}
+(async () => {
+  if ("serviceWorker" in navigator) { try { await navigator.serviceWorker.register("./sw.js"); } catch {} }
+  location.replace(released.href);
+})();
+</script>
+</html>

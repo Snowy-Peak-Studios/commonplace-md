@@ -1,7 +1,7 @@
 # Browser check
 
 `run.mjs` opens the app in Chrome (headless) against the example vault on GitHub (`example-vault/` in this repo's
-`dev` branch, where work happens). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
+`main` branch, which contains reviewed releases). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
 `template=Templates/Note.md`, the Inbox page, the Inboxes folder and the start page), and the script then checks:
 
 - reading: the start page, an embedded section, an image, callouts, properties, the Inbox button and shortcut;
@@ -38,9 +38,29 @@ Settings, all optional:
 |---|---|---|
 | `OWNER` | `Snowy-Peak-Studios` | The owner of the repo with the example vault |
 | `REPO` | `commonplace-md` | That repo |
-| `BRANCH` | `dev` | Its branch; `main` to check the released version, as on the live site |
+| `BRANCH` | `main` | Its branch; override `OWNER`, `REPO` and `BRANCH` when checking a private candidate |
 | `FOLDER` | `example-vault` | The vault's folder in it (empty for the whole repo) |
 | `BASE` | `http://localhost:8765/` | The app's address; use `http://127.0.0.1:8765/` if another server answers on `localhost:8765` |
 | `CHROME` | Chrome's usual path on Windows | Chrome's path |
 
 To check your own fork, push it and run with `OWNER=<you>`.
+
+## Isolated inbox overview check
+
+`node inbox-overview.mjs <screenshot directory>` uses fictional accounts and local fixtures. It intercepts every GitHub call and refuses all remote writes; it needs no token. `BASE` and `CHROME` have the same defaults as the main check. It covers exact branch/folder and local bindings, per-owner credentials, reviews and repeated captures, disabled/locked/missing/revoked sources, stale results, switching off during a read, private-host restrictions, setup save, keyboard source navigation, no-token local use, and desktop/phone light/dark layouts.
+
+## Expanded settings scrolling check
+
+`node settings-scroll.mjs <screenshot directory>` creates seven fictional local vaults with no token. It expands their Settings cards and selects every source in the inbox-overview setup. Real wheel scrolling and keyboard focus must reach the last fields while Cancel and Save stay visible, at desktop, phone and short-window sizes in light/dark. It also checks that entered values survive and the background stays still. No GitHub calls are made.
+
+## Inbox identity setup check
+
+`node inbox-overview-bindings.mjs <screenshot directory>` uses fictional local and remote vaults with every GitHub request intercepted. It verifies accent-equivalent names, exact mismatch diagnostics, explicit Check inbox/Use owner, absent owners, no initial source reads, per-owner credentials, access/module/folder failures, cancellation, source-write isolation and privately saved corrections. Desktop/phone light/dark screenshots include the fixed action footer.
+
+## AI work history
+
+`node ai-time.mjs <screenshots-folder>` uses fictional local and intercepted read-only GitHub vaults, with no real token. It checks custom task fields/folders/statuses, completed-only records, invalid/cancelled/epic exclusion, vault isolation, matching area/type estimates, unchanged manual estimates, one/no-sample states, explicit chart blocks, grouping choices, no writes and desktop/phone light/dark layouts.
+
+## PDF export check
+
+`node export-pdf.mjs <output-folder>` uses local fixtures without a token or remote requests. It intercepts the print dialog, exports real A4 PDFs in desktop/phone light/dark modes, and checks expanded folds, callouts, embedded content, lazy images, Mermaid diagrams, a multi-page table, task field values and history, control removal, cleanup and unsaved drafts. Render the PDFs for visual review. The final native print/share sheet on mobile still depends on the browser and operating system.

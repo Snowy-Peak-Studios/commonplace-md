@@ -16,7 +16,7 @@ The app is the same for everyone. What you pick is where your vault lives:
 ```mermaid
 flowchart LR
     q1{"Just you,<br/>on one device?"}
-    q1 -- Yes --> local["💻 A local vault<br/>on your device<br/>(coming soon)"]:::local
+    q1 -- Yes --> local["💻 A local vault<br/>on your device"]:::local
     q1 -- "No: a team,<br/>or several devices" --> q2{"Does the project<br/>have its own repo?"}
     q2 -- "Yes" --> project["📁 In the<br/>project's repo"]:::repo
     q2 -- "No, or keep<br/>them apart" --> own["🔒 In a repo<br/>of its own"]:::repo
@@ -24,10 +24,21 @@ flowchart LR
     classDef repo fill:#fef3c7,stroke:#d97706,color:#78350f
 ```
 
-- 🟩 **Just you, on one device**: a local vault, with no GitHub account, only the app (*coming soon*; until then, a repo of its own).
+- 🟩 **Just you, on one device**: a local vault, with no GitHub account, only the app.
 - 🟨 **A team, or several devices**: the vault in a GitHub repo, **the project's own** (next to the code) or **one of its own** (private, even for a public project).
 
 More on each, with what it costs: [the README](https://github.com/Snowy-Peak-Studios/commonplace-md#which-way-fits-you).
+
+## Try a starter vault
+
+Pick the one closest to what you do. Follow the [local vault steps](Add%20a%20vault.md#only-on-this-device), then select **An example vault** under **Start with**.
+
+- **Solo project · Trail Timer** follows one person building a small app with an agent.
+- **Small team · Pocket Garden** gives three people their own inboxes and a shared task board.
+- **Large team · Signal Station** shows a ten-person team planning a demo across epics and sprints.
+- **Personal notes · Kitchen Notebook** keeps recipes, meals and shopping in one place.
+
+Each opens on its Home page. Edit the notes to make it yours, or use **Download a copy** to keep a ZIP.
 
 ## Getting started
 
@@ -38,6 +49,7 @@ More on each, with what it costs: [the README](https://github.com/Snowy-Peak-Stu
 ## Every day
 
 - [Write and link notes](Write%20and%20link%20notes.md)
+- [Markdown and blocks](Markdown%20and%20blocks.md) shows what to write and how it looks in the app.
 - [Save, drafts and conflicts](Save%2C%20drafts%20and%20conflicts.md)
 - [Use your inbox](Use%20your%20inbox.md), and its top tasks to start
 

@@ -8,6 +8,63 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 export const toLf = (text) => text.replace(/\r\n?/g, "\n");
 export const isImagePath = (path) => IMAGE.test(path);
+const IMAGE_TYPES = new Map([
+  ["image/png", "png"], ["image/jpeg", "jpg"], ["image/gif", "gif"], ["image/webp", "webp"],
+  ["image/svg+xml", "svg"], ["image/bmp", "bmp"], ["image/avif", "avif"],
+]);
+export const IMAGE_ACCEPT = [...IMAGE_TYPES.keys(), ...[...IMAGE_TYPES.values(), "jpeg"].map((ext) => "." + ext)].join(",");
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/** Pick a safe, vault-wide unique basename so the inserted wikilink resolves from any note. */
+export function imageAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
+  const extension = IMAGE_TYPES.get(file.type) ?? ((!file.type || file.type === "application/octet-stream")
+    && isImagePath(file.name) ? file.name.split(".").at(-1).toLowerCase() : "");
+  if (!extension) throw new Error("Choose a PNG, JPEG, GIF, WebP, SVG, BMP or AVIF image.");
+  if (!file.size) throw new Error("This image is empty.");
+  if (file.size > MAX_IMAGE_BYTES) throw new Error("This image is over 10 MiB. Resize it before adding it.");
+  const directory = markerDir(settings) || notePath.split("/").slice(0, -1).join("/");
+  if (directory && directory.split("/").some((part) => !part || part.startsWith(".") || part.includes("\\") || /[<>:"|?*\x00-\x1f]/.test(part)
+    || /[. ]$/.test(part))) throw new Error("Choose a valid Attachments folder in Settings.");
+  const dot = file.name.lastIndexOf(".");
+  const stem = (dot > 0 ? file.name.slice(0, dot) : file.name).normalize("NFKD").replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60) || "image";
+  const date = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const base = `${stem}-${date}-${key.slice(0, 8)}`;
+  const used = new Set([...paths].map((path) => path.split("/").at(-1).toLowerCase()));
+  let name = `${base}.${extension}`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}-${n}.${extension}`;
+  return { name, path: directory ? `${directory}/${name}` : name, link: `![[${name}]]` };
+}
+
+/** A capture accepts images and other files, with a stable vault-wide name that survives moving its item. */
+export function captureAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
+  if (IMAGE_TYPES.has(file.type) || ((!file.type || file.type === "application/octet-stream") && isImagePath(file.name))) {
+    return imageAttachment(file, notePath, settings, paths, now, key);
+  }
+  if (!file.size) throw new Error("This file is empty.");
+  if (file.size > MAX_IMAGE_BYTES) throw new Error("This file is over 10 MiB. Choose a smaller file.");
+  const extension = /\.([a-z0-9]{1,16})$/i.exec(file.name)?.[1].toLowerCase() || "bin";
+  // Reuse the folder and safe-name rules, comparing the final extension for collision detection.
+  const converted = [...paths].map((path) => path.toLowerCase().endsWith("." + extension) ? path.slice(0, -extension.length) + "png" : path);
+  const stem = file.name.replace(/\.[^.]*$/, "") || "file";
+  const base = imageAttachment({ name: stem + ".png", type: "image/png", size: file.size }, notePath, settings, converted, now, key);
+  const name = base.name.replace(/\.png$/, "." + extension);
+  const path = base.path.replace(/\.png$/, "." + extension);
+  const label = (file.name || name).replace(/[\[\]|\r\n]/g, " ").trim();
+  return { name, path, link: `[[${name}|${label}]]` };
+}
+
+/** Append an attachment to the line containing the cursor, keeping every other capture item intact. */
+export function captureAttachmentText(text, at, link) {
+  text = toLf(text);
+  at = Math.max(0, Math.min(text.length, Number.isFinite(at) ? at : text.length));
+  const next = text.indexOf("\n", at);
+  const end = next < 0 ? text.length : next;
+  const start = text.lastIndexOf("\n", at - 1) + 1;
+  const insert = (text.slice(start, end).trim() ? " " : "") + link;
+  return { text: text.slice(0, end) + insert + text.slice(end), cursor: end + insert.length };
+}
+
 const blankOut = (s) => s.replace(/[^\n]/g, "");
 
 /** Splits `[[target#heading|alias]]` (the part inside the brackets). */
@@ -61,11 +118,59 @@ export function prepareForPreview(text) {
   return { source: src, frontMatter: fm ? fm[1] : null };
 }
 
+export const NOTE_SECTIONS = Object.freeze({
+  description: "Description",
+  "acceptance-criteria": "Acceptance Criteria",
+  comments: "Comments",
+  "work-history": "Work History",
+});
+
+export const fenceLanguage = (info) => info.trim().split(/\s+/, 1)[0].toLowerCase();
+
+/** Markdown prose and section boundaries, with their original line numbers. Code fences keep their contents out. */
+function* proseLines(lines) {
+  let section = "", sectionFence = "", codeFence = "";
+  for (const [line, text] of lines.entries()) {
+    const match = /^([ \t]*)(`{3,}|~{3,})(.*)$/.exec(text);
+    const standalone = match && /^ {0,3}$/.test(match[1]);
+    const marker = match?.[2] ?? "";
+    const info = match?.[3].trim() ?? "";
+    const closes = (fence) => fence && marker[0] === fence[0] && marker.length >= fence.length && !info;
+    if (standalone && closes(sectionFence)) {
+      section = sectionFence = codeFence = "";
+      yield { line, text: "", section, boundary: true };
+    } else if (codeFence) {
+      if (closes(codeFence)) codeFence = "";
+    } else if (marker && (marker[0] === "~" || !info.includes("`"))) {
+      const name = fenceLanguage(info);
+      if (!section && standalone && Object.hasOwn(NOTE_SECTIONS, name)) {
+        section = name;
+        sectionFence = marker;
+        yield { line, text: "", section, boundary: true };
+      } else {
+        codeFence = marker;
+      }
+    } else {
+      yield { line, text, section };
+    }
+  }
+}
+
+/** An embed belongs in the note body when the editor's cursor starts in its properties. */
+export function imageInsertion(text, at, link) {
+  const front = splitFrontMatter(text);
+  if (!front || at > front.length) {
+    const heading = (at === 0 || text[at - 1] === "\n") && /^#{1,6}[ \t]/.test(text.slice(at));
+    return { at, insert: heading ? link + "\n\n" : link };
+  }
+  const newline = text[front.length - 1] === "\n" ? "" : "\n";
+  return { at: front.length, insert: `${newline}${link}\n` };
+}
+
 /** Every `[[link]]` and `![[embed]]` outside code, as written. */
 export function findWikilinks(text) {
-  const src = prepareForPreview(text).source
-    .replace(/^(```|~~~)[\s\S]*?^\1/gm, "")
-    .replace(/`[^`\n]*`/g, "");
+  const lines = prepareForPreview(text).source.split("\n");
+  const src = [...proseLines(lines)].map((line) => line.text).join("\n").replace(/`[^`\n]*`/g, "");
   const out = [];
   for (const m of src.matchAll(/(!?)\[\[([^\]\n]+)\]\]/g)) out.push({ embed: m[1] === "!", raw: m[0], ...parseWikilink(m[2]) });
   return out;
@@ -196,6 +301,16 @@ export function withBlocks(text, names) {
   return `${src.slice(0, at)}${head ? "\n\n" : ""}${blocks}\n${rest ? `\n${rest}` : ""}`;
 }
 
+/** Blank tasks get the default layout. A custom template keeps its body and any boxes it placed. */
+export function withTaskLayout(text) {
+  const src = toLf(text);
+  const body = src.slice(splitFrontMatter(src)?.length ?? 0).trim();
+  if (body && !/^#[ \t]+[^\n]+$/.test(body)) return withBlocks(src, TASK_BLOCKS);
+  const order = ["subtasks", "relations", "description", "acceptance-criteria", "comments", "commits", "work-history"];
+  const blocks = order.map((name) => `\`\`\`${name}\n\`\`\``).join("\n\n");
+  return [src.trimEnd(), blocks].filter(Boolean).join("\n\n") + "\n";
+}
+
 /** A note template with `{{title}}` and `{{date}}` (YYYY-MM-DD) filled in; any other `{{...}}` stays as written. */
 export function fillTemplate(text, { title = "", date = "" } = {}) {
   const values = { title: title.trim(), date };
@@ -280,6 +395,63 @@ export function addNewTask(text, close, item) {
   return lines.join("\n");
 }
 
+/** Each non-empty line of a capture draft becomes one Markdown item. Owner-looking text stays an item. */
+export function newTaskItems(text) {
+  return toLf(String(text ?? "")).split("\n").map((line) => line.replace(ITEM_MARK, "").trim()).filter(Boolean);
+}
+
+/** Replace one unchanged, closed capture block; preserve its owner lines and everything outside it. */
+export function replaceNewTasks(text, start, close, expected, items) {
+  const lines = toLf(text).split("\n");
+  const open = /^ {0,3}(\x60{3,}|~{3,})new-tasks\s*$/i.exec(lines[start] ?? "");
+  const end = /^ {0,3}(\x60{3,}|~{3,})\s*$/.exec(lines[close] ?? "");
+  if (!open || !end || close <= start || end[1][0] !== open[1][0] || end[1].length < open[1].length
+    || lines.slice(start + 1, close).join("\n") !== expected) return null;
+  const owners = lines.slice(start + 1, close).filter((line) => /^\s*owner\s*:/i.test(line));
+  const body = [...owners, ...items.flatMap(newTaskItems).map((item) => "- " + item)];
+  lines.splice(start + 1, close - start - 1, ...body);
+  return lines.join("\n");
+}
+
+const COMMENT_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const UNKNOWN_COMMENTER = "Unknown user";
+const COMMENT_HEADER = /^\*\*([\w-]+|Unknown user)\*\* · (\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC)$/;
+
+/** The plain Markdown author and time of a posted comment. */
+export function commentHeader(text) {
+  const match = COMMENT_HEADER.exec(text);
+  if (!match) return null;
+  const author = match[1];
+  return { author, login: COMMENT_LOGIN.test(author) ? author : "", time: match[2] };
+}
+
+/** The last recorded author gets an editable @mention, except when replying to yourself. */
+export function commentReply(src, login) {
+  const lines = [...proseLines(toLf(src).split("\n"))].map(({ text }) => text);
+  const header = lines.findLast((line) => /^ {0,3}- /.test(line) && commentHeader(line.trimStart().slice(2)));
+  const previous = header ? commentHeader(header.trimStart().slice(2)).login : "";
+  return previous && previous.toLowerCase() !== login.toLowerCase() ? `@${previous} ` : "";
+}
+
+/** Insert one attributed comment into the rendered Comments fence, leaving the rest of the note alone. */
+export function addComment(text, start, close, body, login, now = new Date()) {
+  const lines = toLf(text).split("\n");
+  const message = toLf(body).trim();
+  const opening = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lines[start] ?? "");
+  const closing = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines[close] ?? "");
+  if (!message || close <= start || !opening || fenceLanguage(opening[2]) !== "comments"
+    || !closing || closing[1][0] !== opening[1][0] || closing[1].length < opening[1].length) return text;
+  const author = COMMENT_LOGIN.test(login) ? login : UNKNOWN_COMMENTER;
+  const time = now.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const indent = lines[start].match(/^ */)[0];
+  // Four spaces keep user-entered backticks inside the comment, while Markdown reads it as a list item's body.
+  const content = message.split("\n").map((line) => line.trim() ? `${indent}    ${line}` : "");
+  const entry = [`${indent}- **${author}** · ${time}`, "", ...content];
+  if (close > start + 1 && lines[close - 1].trim()) entry.unshift("");
+  lines.splice(close, 0, ...entry);
+  return lines.join("\n");
+}
+
 // ================================================================
 // Mentions: `@login` in a note, found for that person's inbox
 // ================================================================
@@ -296,6 +468,8 @@ const REPLY = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?@([A-Za-z0
 
 /** The property of an inbox that keeps the mentions its person marked as seen: one key per mention. */
 export const SEEN_MENTIONS = "seen_mentions";
+export const SEEN_ASSIGNMENTS = "seen_assignments";
+export const ASSIGNMENT_ID = "assignment_id";
 
 /** The seen list as written (a list, or one key), as is: a note's path can have commas and capitals. */
 const seenList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).trim()).filter(Boolean);
@@ -337,7 +511,8 @@ export function withSeenMentions(seen, add, found) {
 /**
  * Every mention in a note: [{ login, line, heading, text, answered }], `line` counting from 1 in the whole file,
  * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
- * fenced code and inline code don't count. One per login and line. `answered` when the very next line is a
+ * fenced code and inline code don't count. Named note sections hold prose, so mentions there count.
+ * One per login and line. `answered` when the very next line is a
  * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login.
  */
 export function findMentions(text) {
@@ -346,27 +521,22 @@ export function findMentions(text) {
   const skipped = fm ? src.slice(0, fm.length).split("\n").length - 1 : 0;
   const lines = (fm ? src.slice(fm.length) : src).split("\n");
   const out = [];
-  let fence = null, heading = "";
-  lines.forEach((line, i) => {
-    const f = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
-      return;
-    }
-    if (f) { fence = f[1]; return; }
-    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
-    if (h) heading = h[1];
-    const plain = line.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
+  let heading = "";
+  for (const { line, text: saidLine, section } of proseLines(lines)) {
+    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(saidLine);
+    if (h && !section) heading = h[1];
+    const plain = saidLine.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
     const seen = new Set();
     for (const m of plain.matchAll(MENTION)) {
       if (seen.has(m[2].toLowerCase())) continue;
       seen.add(m[2].toLowerCase());
-      const said = line.trim();
-      const reply = REPLY.exec(lines[i + 1] ?? "");
-      out.push({ login: m[2], line: skipped + i + 1, heading, text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
+      const said = saidLine.trim();
+      const reply = REPLY.exec(lines[line + 1] ?? "");
+      out.push({ login: m[2], line: skipped + line + 1, heading: section ? NOTE_SECTIONS[section] : heading,
+        text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
         answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });
     }
-  });
+  }
   return out;
 }
 
@@ -394,7 +564,7 @@ export const isTaskPath = (path) => /(^|\/)tasks\/[^/]+\.md$/i.test(path);
 const blank = (v) => v == null || (Array.isArray(v) ? v.every(blank) : String(v).trim() === "");
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 /** Statuses that aren't free to start: started, put off, blocked or over. */
-const NOT_FREE = /^(done|in progress|waiting|blocked|cancell?ed|won'?t do)$/i;
+const NOT_FREE = /^(done|in progress|testing|waiting|blocked|cancell?ed|won'?t do)$/i;
 
 /** A list property as lower-case strings: `[A, B]` or `"A, B"`. */
 export function listProp(v) {
@@ -456,19 +626,55 @@ export function splitAssignee(value) {
   return m && m[1] ? { name: m[1], agent: m[2].trim() } : { name: s, agent: null };
 }
 
+/** Compare a GitHub handle or an older assignee name, with or without its agent. */
+export function assigneeMatches(value, { name = "", login = "" }) {
+  const assignee = splitAssignee(value).name;
+  const handle = String(login).trim().replace(/^@/, "").toLowerCase();
+  const account = assignee.replace(/^@/, "").toLowerCase();
+  if (handle && account === handle) return true;
+  const named = foldName(assignee);
+  return !assignee.startsWith("@") && !!named && named === foldName(name);
+}
+
+/** Suggestions keep the GitHub handle as the value and use a vault name as its label when available. */
+export function assigneeOptions(people, collaborators, login = "") {
+  const options = new Map();
+  for (const person of [...people, ...collaborators, { login }]) {
+    const handle = String(person.login ?? "").trim();
+    if (handle && !options.has(handle.toLowerCase())) {
+      options.set(handle.toLowerCase(), { value: "@" + handle, label: person.name ?? "" });
+    }
+  }
+  return [...options.values()].sort((a, b) => (a.label || a.value).localeCompare(b.label || b.value));
+}
+
 /**
  * The tasks claimed by `owner` and not finished, from [{ path, props }], each with `agent` (null when the
  * person claimed it for themself, which means it waits for their agent). Those waiting come first, then by
  * priority and newest, like the free ones.
  */
-export function claimedTasks(notes, owner) {
-  const me = foldName(owner);
-  if (!me) return [];
+export function claimedTasks(notes, owner, login = "") {
+  if (!foldName(owner) && !login) return [];
   return notes
-    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
-      && foldName(splitAssignee(n.props.assignee).name) === me)
+    .filter((n) => isTaskPath(n.path) && !FINISHED.test(String(n.props.status ?? "").trim()) && !/^testing$/i.test(String(n.props.status ?? "").trim()) && !isWaiting(n)
+      && assigneeMatches(n.props.assignee, { name: owner, login }))
     .map((n) => ({ ...n, agent: splitAssignee(n.props.assignee).agent }))
     .sort((a, b) => (a.agent ? 1 : 0) - (b.agent ? 1 : 0) || rank(a) - rank(b) || idNum(b) - idNum(a) || a.path.localeCompare(b.path));
+}
+
+/** The number of days an inbox waits before suggesting a deferred task again. */
+export function waitingDays(value) {
+  const days = typeof value === "string" ? Number(value) : value;
+  return Number.isSafeInteger(days) && days > 0 ? days : 7;
+}
+
+/** Only an unassigned task with a deferral date comes back by itself. */
+export function waitingReady(props, days = 7, today = isoDate()) {
+  if (!isWaiting({ props }) || !blank(props.assignee)) return false;
+  const since = isoDay(props.waiting_since);
+  const start = new Date(`${since}T00:00:00Z`);
+  return Number.isFinite(start.getTime()) && start.toISOString().slice(0, 10) === since
+    && Date.parse(`${today}T00:00:00Z`) - start.getTime() >= waitingDays(days) * 86400000;
 }
 
 /** A task's open question: its `question` property, trimmed; "" when it has none. */
@@ -480,10 +686,9 @@ export const questionOf = (props) => (Array.isArray(props?.question) ? props.que
  * (`assignee`, with or without the agent), names matched like `claimedTasks`; everyone's when `owner` is
  * empty. Finished tasks don't count. Newest first.
  */
-export function questionTasks(notes, owner = "") {
-  const me = foldName(owner);
-  const people = (v) => (Array.isArray(v) ? v : [v]).map((x) => foldName(splitAssignee(x).name));
-  const theirs = (n) => !me || [n.props.requested_by, n.props.reviewer, n.props.assignee].some((v) => people(v).includes(me));
+export function questionTasks(notes, owner = "", login = "") {
+  const theirs = (n) => (!foldName(owner) && !login) || [n.props.requested_by, n.props.reviewer, n.props.assignee]
+    .some((v) => (Array.isArray(v) ? v : [v]).some((value) => assigneeMatches(value, { name: owner, login })));
   return notes
     .filter((n) => isTaskPath(n.path) && questionOf(n.props) && !FINISHED.test(String(n.props.status ?? "").trim()) && theirs(n))
     .map((n) => ({ ...n, question: questionOf(n.props) }))
@@ -498,16 +703,15 @@ export function questionTasks(notes, owner = "") {
 export function taskAnswer(text) {
   const src = toLf(text);
   const fm = splitFrontMatter(src);
-  const lines = (fm ? src.slice(fm.length) : src).split("\n");
-  const at = lines.findIndex((l) => /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(l));
+  const original = (fm ? src.slice(fm.length) : src).split("\n");
+  const lines = [...proseLines(original)];
+  const at = lines.findIndex(({ text, section }) => (!section || section === "description")
+    && /^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+(?:\S+\s+)?Answer:?\s*$)/i.test(text));
   if (at < 0) return "";
-  const first = lines[at].replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
-  const rest = [];
-  for (const l of lines.slice(at + 1)) {
-    if (/^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(l)) break;
-    rest.push(l);
-  }
-  return [first, ...rest].join("\n").trim();
+  const first = lines[at].text.replace(/^\s*(?:\*\*Answer:?\*\*:?|#{2,6}\s+.*)/i, "");
+  const end = lines.slice(at + 1).find(({ text, boundary }) => boundary
+    || /^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(text));
+  return [first, ...original.slice(lines[at].line + 1, end?.line)].join("\n").trim();
 }
 
 /** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */
@@ -530,13 +734,12 @@ export const PRIORITIES = ["High", "Medium", "Low"];
 /** An epic isn't worked on itself (its parts are), so it's never suggested or put on the waiting list. */
 const isEpic = (n) => String(n.props.type ?? "").trim().toLowerCase() === "epic";
 
-export function waitingTasks(notes, { areas = [], owner = "", order = "priority-newest" } = {}) {
+export function waitingTasks(notes, { areas = [], owner = "", login = "", order = "priority-newest" } = {}) {
   const want = listProp(areas);
-  const me = foldName(owner);
   return notes
     .filter((n) => isTaskPath(n.path) && isWaiting(n) && !isEpic(n) && (!want.length
       || want.includes(String(n.props.area ?? "").trim().toLowerCase())
-      || (me && foldName(splitAssignee(n.props.assignee).name) === me)))
+      || assigneeMatches(n.props.assignee, { name: owner, login })))
     .sort(byOrder(order));
 }
 
@@ -561,15 +764,19 @@ export function taskState(text) {
   // An open question (a `question` property) waits for its answer first.
   const question = String((fm && /^question:[ \t]*(.*?)[ \t]*$/m.exec(fm.raw)?.[1]) ?? "").replace(/^(["'])(.*)\1$/, "$2").trim();
   if (question) return { state: "decision", reason: `Waiting for an answer: ${clip(question)}` };
-  const plain = body.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
-  const title = /^#\s+(.*)$/m.exec(body)?.[1] ?? "";
+  const prose = [...proseLines(body.split("\n"))].filter(({ section }) => section !== "comments" && section !== "work-history");
+  const story = prose.map(({ text }) => text).join("\n");
+  const plain = story.replace(/`[^`\n]*`/g, "").replace(/"[^"\n]*"|“[^”\n]*”/g, "");
+  const title = /^#\s+(.*)$/m.exec(story)?.[1] ?? "";
   const tagged = !!fm && /^tags:.*\bplaceholder\b/im.test(fm.raw);
   const titled = /^(?:[A-Z]+-\d+\s+)?placeholder\b|(?:-\s*|\()placeholder\)?\s*$/i.test(title.trim());
   if (tagged || titled || /^\s*(?:[-*+]\s+)?(?:\*\*|_)?placeholder\b/im.test(plain)) {
     return { state: "placeholder", reason: "A placeholder: its title, tags or a line starting with Placeholder say so" };
   }
-  const criteria = body.split("\n").filter((l) => /^\s*[-*+]\s+\[[ xX]\]/.test(l));
-  if (/\*\*As\*\* someone who \.\.\./.test(body) || criteria.some((l) => /\]\s*\.\.\.\s*$/.test(l))) {
+  const hasCriteriaBlock = prose.some(({ section }) => section === "acceptance-criteria");
+  const criteria = prose.filter(({ text, section }) => (hasCriteriaBlock ? section === "acceptance-criteria" : !section)
+    && /^\s*[-*+]\s+\[[ xX]\]/.test(text)).map(({ text }) => text);
+  if (/\*\*As\*\* someone who \.\.\./.test(story) || criteria.some((l) => /\]\s*\.\.\.\s*$/.test(l))) {
     return { state: "placeholder", reason: "A placeholder: its story or criteria are still the template's \"...\"" };
   }
   if (!criteria.length) return { state: "placeholder", reason: "A placeholder: no acceptance criteria yet" };
@@ -625,7 +832,7 @@ export function parentTarget(text) {
 /** The file that marks a repo as holding a vault, with the settings an invite link would carry. */
 export const MARKER = ".commonplace.json";
 
-const MARKER_PATHS = ["folder", "home", "inbox", "inboxes", "notes", "template"];
+const MARKER_PATHS = ["folder", "home", "inbox", "inboxes", "notes", "template", "attachments"];
 const markerDir = (s) => (typeof s === "string" ? s.trim().replace(/^\/+|\/+$/g, "") : "");
 /** `owner/repo`, the same however it's spelled. */
 export const repoKey = (r) => `${r.owner}/${r.repo}`.toLowerCase();
@@ -675,7 +882,7 @@ export function reposToCheck(listing, { seen = {}, known = [], removed = [] } = 
  * with no setup has had all along; `optional` ones start off in a new setup, until a project turns them on.
  */
 export const TASK_FIELDS = [
-  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Blocked", "Waiting", "Done"], legacy: true },
+  { key: "status", label: "Status", kind: "choice", values: ["To Do", "In Progress", "Testing", "Blocked", "Waiting", "Done"], legacy: true },
   { key: "priority", label: "Priority", kind: "choice", values: ["High", "Medium", "Low"], legacy: true },
   { key: "assignee", label: "Assignee", kind: "person", legacy: true },
   { key: "area", label: "Area", kind: "text", legacy: true },
@@ -1141,4 +1348,80 @@ export function taskCommitLinks(value) {
     if (m) out.push({ short: m[3].slice(0, 7), url: m[1], repo: m[2].toLowerCase(), title: m[4].trim() });
   }
   return out.reverse();
+}
+
+
+/** Group cards using the same property names as the project's task fields. */
+export function boardColumns(notes, options, setup, { sprint = null, resolve, identity = null } = {}) {
+  const statuses = options.columns.length ? options.columns : setup.fields.find((field) => field.key === "status").values;
+  const columns = statuses.map((status) => ({ status, cards: [] }));
+  const byStatus = new Map(columns.map((column) => [column.status.toLowerCase(), column]));
+  const keys = Object.fromEntries(["status", "priority", "area", "assignee", "type", "sprint"]
+    .map((key) => [key, fieldProp(setup, key)]));
+  const areas = options.areas.map(foldName);
+  const types = options.types.map(foldName);
+  const who = options.assignee;
+  const term = (value) => String(value ?? "").trim();
+  for (const { path, props } of notes) {
+    const status = term(props[keys.status]);
+    const column = byStatus.get(status.toLowerCase());
+    const type = foldName(props[keys.type]);
+    if (!column || type === "epic" || (types.length && !types.includes(type))) continue;
+    const rawArea = props[keys.area];
+    const area = (Array.isArray(rawArea) ? rawArea : term(rawArea).split(",")).map(linkName).filter(Boolean);
+    const assignee = term(props[keys.assignee]);
+    if (areas.length && !area.some((value) => areas.includes(foldName(value)))) continue;
+    if (who && !assigneeMatches(assignee, { name: who, login: who })) continue;
+    if (identity && !assigneeMatches(assignee, identity)) continue;
+    if (options.sprint && (!sprint || resolve?.(linkTarget(props[keys.sprint]), path) !== sprint.path)) continue;
+    column.cards.push({ path, status, id: term(props.id), priority: term(props[keys.priority]), assignee, area });
+  }
+  return columns;
+}
+
+
+/** Tasks waiting for this person's review. A declared reviewer takes precedence over the assignee. */
+export function reviewTasks(notes, setup, identity, statuses = ["Testing"]) {
+  const status = fieldProp(setup, "status"), type = fieldProp(setup, "type");
+  const reviewer = fieldProp(setup, "reviewer"), assignee = fieldProp(setup, "assignee");
+  const waiting = new Set(statuses.map(foldName).filter(Boolean));
+  const matches = (value) => (Array.isArray(value) ? value : [value]).some((v) => {
+    const person = splitAssignee(v).name;
+    return !/^[^@\s]+@[^@\s]+$/.test(person) && assigneeMatches(person, identity);
+  });
+  return notes.filter(({ props }) => {
+    const declared = props[reviewer];
+    const hasReviewer = (Array.isArray(declared) ? declared : [declared]).some((v) => String(v ?? "").trim());
+    return waiting.has(foldName(props[status])) && !isDoneStatus(props[status], setup)
+      && foldName(props[type]) !== "epic" && matches(hasReviewer ? declared : props[assignee]);
+  }).sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path)).map(({ path, props }) => ({
+    path, id: props.id, status: String(props[status] ?? ""),
+  }));
+}
+
+/** The open tasks assigned to the person's GitHub login or vault name. */
+export function assignmentTasks(notes, setup, identity) {
+  const key = fieldProp(setup, "assignee");
+  const status = fieldProp(setup, "status");
+  const type = fieldProp(setup, "type");
+  return notes.filter(({ props }) => {
+    const assignee = splitAssignee(props[key]).name;
+    return !/^[^@\s]+@[^@\s]+$/.test(assignee) && assigneeMatches(assignee, identity)
+      && !isDoneStatus(props[status], setup) && foldName(props[type]) !== "epic";
+  }).sort((a, b) => idNum(b) - idNum(a) || a.path.localeCompare(b.path)).map(({ path, props }) => ({
+    path, id: props.id,
+    key: JSON.stringify([path, props[key], props[ASSIGNMENT_ID] ?? ""]),
+  }));
+}
+
+export function sortAssignments(tasks, seen) {
+  const known = new Set(seenList(seen));
+  const out = { open: [], seen: [] };
+  for (const task of tasks) (known.has(task.key) ? out.seen : out.open).push(task);
+  return out;
+}
+
+export function withSeenAssignments(seen, add, tasks) {
+  const known = new Set([...seenList(seen), ...add.map((task) => task.key)]);
+  return tasks.map((task) => task.key).filter((key) => known.has(key));
 }

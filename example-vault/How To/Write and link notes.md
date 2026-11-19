@@ -23,6 +23,16 @@ A new note: **New note** in the file list or the menu asks for a name and a fold
 
 A link to a page that doesn't exist is marked in red, in the editor and in the preview.
 
+## Add an image
+
+Open **Edit** and place the cursor where the picture belongs. Paste an image from the clipboard, drop an image onto the editor, or press **Add image** to choose a file on your device. The note gets an embed such as `![[screenshot-2026-11-17-12-00-00-abcd1234.png]]`. Press **Save** to keep the link.
+
+The file goes into **Attachments folder** in vault Settings, or next to the note if that setting is empty. GitHub saves the image in its own commit. To upload to GitHub, the app needs a connection and write access. You can also add images to a local vault. Images may be up to 10 MiB.
+
 ## What else a note can hold
 
 Callouts, checkboxes, folding lists, diagrams, tables and more: [the guide](../Guide.md) shows them all.
+
+## Save a page as PDF
+
+Open the note, then **More (⋯) › Export as PDF**. Choose **Save as PDF** in your browser's print dialog, or use its Print/share option on a phone. The exported copy uses light colours, opens folded sections, keeps tables and diagrams, and omits the app controls. It includes the current preview, including unsaved edits; exporting does not save the note. Cancel the dialog to return to your unchanged reading view.

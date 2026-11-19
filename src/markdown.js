@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -98,7 +98,7 @@ function taskRule(state) {
     if (!m) continue;
     first.content = first.content.slice(m[0].length);
     const box = new state.Token("html_inline", "", 0);
-    const line = inline.map ? inline.map[0] : -1;
+    const line = inline.map ? inline.map[0] + (state.env.lineOffset ?? 0) : -1;
     box.content = `<input type="checkbox" class="task" data-line="${line}"${m[1] === " " ? "" : " checked"}> `;
     inline.children.unshift(box);
     tokens[i - 2].attrJoin("class", "task-item");
@@ -129,6 +129,15 @@ export function createMarkdown() {
   md.core.ruler.after("inline", "headings", headingRule);
   md.core.ruler.push("mentions", mentionRule);
   md.renderer.rules.mention = (tokens, idx) => `<span class="mention" data-login="${esc(tokens[idx].meta.login)}">@${esc(tokens[idx].meta.login)}</span>`;
+
+  md.renderer.rules.list_item_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const inline = tokens[idx + 2];
+    if (env.inComments && token.level === 1 && inline?.type === "inline" && commentHeader(inline.content)) {
+      token.attrJoin("class", "posted-comment");
+    }
+    return self.renderToken(tokens, idx, options);
+  };
 
   const linkHtml = ({ target, heading, alias }, env) => {
     const path = target ? env.resolve(target) : env.fromPath;
@@ -175,7 +184,20 @@ export function createMarkdown() {
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const lang = token.info.trim().split(/\s+/)[0].toLowerCase();
+    const lang = fenceLanguage(token.info);
+    if (token.level === 0 && !env.inNoteSection && Object.hasOwn(NOTE_SECTIONS, lang)) {
+      const title = NOTE_SECTIONS[lang];
+      const lineOffset = (env.lineOffset ?? 0) + (token.map?.[0] ?? -1) + 1;
+      const inComments = lang === "comments";
+      const body = md.render(token.content, { ...env, lineOffset, inNoteSection: true, inComments });
+      const attrs = `class="note-section" data-section="${lang}" data-heading="${title}"`;
+      if (lang === "work-history") return `<details ${attrs}><summary>${title}</summary>\n${body}</details>\n`;
+      const lines = inComments && token.map ? ` data-start="${token.map[0]}" data-close="${token.map[1] - 1}"` : "";
+      return `<section ${attrs}${lines}><h2>${title}</h2>\n${body}</section>\n`;
+    }
+    if (lang === "board" && !env.depth) {
+      return '<div class="board-block"><pre><code>' + esc(token.content) + '</code></pre></div>\n';
+    }
     if (lang === "top-tasks") {
       const { areas, count, countSet, order, orderSet, sprint, owner, fields, fieldsSet } = topTasksOptions(token.content);
       return `<div class="top-tasks-block" data-areas="${esc(areas.join(", "))}" data-count="${count}"`
@@ -188,24 +210,28 @@ export function createMarkdown() {
     // has its own line and text (`data-line`, `data-item`).
     if (lang === "new-tasks") {
       const { owner, items, lines } = newTasksBlock(token.content);
-      const close = token.map ? token.map[1] - 1 : -1;
+      const offset = env.lineOffset ?? 0;
+      const close = token.map ? offset + token.map[1] - 1 : -1;
       const said = owner ? `For ${owner} · ${items.length} item${items.length === 1 ? "" : "s"} · Your agent turns them into tasks`
         : "No owner: line, so no agent sorts these";
-      const at = (i) => (token.map ? ` data-line="${token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
+      const at = (i) => (token.map ? ` data-line="${offset + token.map[0] + 1 + lines[i]}" data-item="${esc(items[i])}"` : "");
       const list = items.length ? items.map((item, i) => `<li${at(i)}><span class="newtasks-text">${md.renderInline(item, env)}</span></li>`).join("")
         : '<li class="muted">Nothing yet.</li>';
-      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-close="${close}">`
+      return `<section class="newtasks" aria-label="New tasks" data-owner="${esc(owner)}" data-start="${token.map ? offset + token.map[0] : -1}" data-close="${close}">`
         + `<div class="suggest-head"><span data-icon="todo"></span><strong>New tasks</strong><small class="muted">${esc(said)}</small></div>`
         + `<ul class="newtasks-list">${list}</ul></section>\n`;
     }
     // A ```needs-attention block: the app puts the questions and mentions box (or one of them) there.
     if (lang === "needs-attention") {
-      const { owner, login, show, showSet } = attentionOptions(token.content);
+      const { owner, login, show, showSet, reviewStatuses } = attentionOptions(token.content);
       return `<div class="attention-block" data-owner="${esc(owner)}" data-login="${esc(login)}" data-show="${show.join(",")}"`
+        + `${show.includes("reviews") ? ` data-review-statuses="${esc(JSON.stringify(reviewStatuses))}"` : ""}`
         + `${showSet ? "" : ' data-show-default="1"'}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     // A ```base block: a base view written in the page (what a .base file holds); the app draws its table there.
     // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
+    if (lang === "inbox-overview") return `<div class="inbox-overview-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
+    if (lang === "ai-work-time") return `<div class="ai-time-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     // A `task:` line shows another task's box, on any page.
@@ -293,28 +319,33 @@ export function appBlockOptions(src) {
 }
 
 /** What a ```needs-attention block can show, in the order the box lists them. */
-export const ATTENTION_SHOWS = ["questions", "mentions"];
+const DEFAULT_ATTENTION = ["questions", "mentions"];
+export const ATTENTION_SHOWS = ["reviews", ...DEFAULT_ATTENTION, "assignments"];
 
 /**
  * The options of a ```needs-attention block, one per line, all written in the block: `show: questions, mentions`
- * (or one of them; "both" and "all" mean both; left out or not known, both, with `showSet` false so the box can
+ * (plus "reviews" and "assignments"; "both" means questions and mentions, "all" shows every kind; omitted, both, with `showSet` false so the box can
  * say so), `owner: Your Name` (whose questions: the tasks they asked for, review or whose agent has them) and
  * `login: your-login` (whose mentions: `@` and that GitHub login; the `@` may be written too). Other lines are
- * ignored.
+ * ignored. `review-statuses` is a comma-separated list, defaulting to Testing.
  */
 export function attentionOptions(src) {
-  const out = { owner: "", login: "", show: [...ATTENTION_SHOWS], showSet: false };
+  const out = { owner: "", login: "", show: [...DEFAULT_ATTENTION], showSet: false, reviewStatuses: ["Testing"] };
   const unquote = (s) => s.trim().replace(/^["']|["']$/g, "").trim();
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(owner|login|show)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(owner|login|show|review-statuses)\s*:\s*(.*?)\s*$/i);
     if (!m) continue;
     const key = m[1].toLowerCase();
     if (key === "owner") out.owner = unquote(m[2]);
     else if (key === "login") out.login = unquote(m[2]).replace(/^@/, "");
-    else {
+    else if (key === "review-statuses") {
+      const values = m[2].trim().replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+      if (values.length) out.reviewStatuses = [...new Set(values)];
+    } else {
       const words = m[2].toLowerCase().replace(/^\[|\]$/g, "").split(/[\s,]+/).map(unquote).filter(Boolean);
-      const both = words.some((w) => w === "both" || w === "all");
-      const picked = both ? [...ATTENTION_SHOWS] : ATTENTION_SHOWS.filter((s) => words.some((w) => w === s || w + "s" === s));
+      const picked = words.includes("all") ? [...ATTENTION_SHOWS]
+        : ATTENTION_SHOWS.filter((kind) => words.some((word) => word === kind || word + "s" === kind
+          || (word === "both" && DEFAULT_ATTENTION.includes(kind))));
       if (picked.length) Object.assign(out, { show: picked, showSet: true });
     }
   }
@@ -324,5 +355,32 @@ export function attentionOptions(src) {
 /** Renders a whole note. Returns unsanitized HTML and the raw front matter. */
 export function renderNote(md, text, env) {
   const { source, frontMatter } = prepareForPreview(text);
-  return { html: md.render(source, env), frontMatter };
+  const history = [];
+  const body = md.parse(source, env).filter((token) => {
+    if (token.level !== 0 || token.type !== "fence" || fenceLanguage(token.info) !== "work-history") return true;
+    history.push(token);
+    return false;
+  });
+  return { html: md.renderer.render([...body, ...history], md.options, env), frontMatter };
+}
+
+
+/** A board's columns and optional filters, written one per line. */
+export function boardOptions(src) {
+  const fields = {};
+  for (const line of src.split(/\r?\n/)) {
+    const match = /^\s*(columns|areas|assignee|sprint|type)\s*:\s*(.*?)\s*$/i.exec(line);
+    if (match) fields[match[1].toLowerCase()] = match[2];
+  }
+  const list = (key) => {
+    const seen = new Set();
+    return (fields[key] ?? "").split(",").map((value) => value.trim()).filter((value) => {
+      const lower = value.toLowerCase();
+      if (!lower || seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+  };
+  return { columns: list("columns"), areas: list("areas"), assignee: fields.assignee ?? "",
+    sprint: fields.sprint ?? "", types: list("type") };
 }

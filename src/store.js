@@ -67,3 +67,39 @@ export function upgradeRepo(r) {
   if (r && r.vault && r.notes == null) return { ...r, notes: "Notes", template: r.template ?? "Templates/Note.md" };
   return r;
 }
+
+/** Missing, legacy or malformed overview preferences never enable cross-vault reading. */
+export function upgradeInboxOverview(value) {
+  const off = { version: 1, enabled: false, repo: "", path: "" };
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1) return off;
+  const repo = typeof value.repo === "string" ? value.repo : "";
+  const path = typeof value.path === "string" ? value.path : "";
+  const valid = !!repo && !!path && !/[\\:\x00-\x1f]/.test(path) && !path.startsWith("/")
+    && !path.split("/").some((s) => !s || s === "." || s === "..") && /\.md$/i.test(path);
+  return { version: 1, enabled: value.enabled === true && valid, repo: valid ? repo : "", path: valid ? path : "" };
+}
+
+export function migrateInboxOverview(storage) {
+  const key = PREFIX + "inboxOverview";
+  try {
+    const raw = storage.getItem(key);
+    if (raw == null) return false;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { /* malformed preferences become off */ }
+    const next = JSON.stringify(upgradeInboxOverview(parsed));
+    if (raw === next) return false;
+    storage.setItem(key, next);
+    return true;
+  } catch { return false; /* blocked storage leaves the overview off */ }
+}
+
+try { if (typeof localStorage !== "undefined") migrateInboxOverview(localStorage); } catch { /* no browser storage */ }
+
+/** The public development site is retired; keep notes, credentials and drafts untouched. */
+export function retireDevelopmentPreference(storage) {
+  for (const key of ["version", "to-dev"]) {
+    try { storage.removeItem(PREFIX + key); } catch { /* blocked storage must not stop startup */ }
+  }
+}
+try { if (typeof localStorage !== "undefined") retireDevelopmentPreference(localStorage); } catch { /* blocked */ }
+try { if (typeof sessionStorage !== "undefined") retireDevelopmentPreference(sessionStorage); } catch { /* blocked */ }

@@ -5,6 +5,7 @@
 // the app doesn't change, and `withLocal` sends a local vault's calls to it.
 
 import { GitHubError, blobSha } from "./github.js";
+import { MARKER, parseMarker } from "./vault.js";
 
 /** Whether a repo is a local vault: "folder" (a folder on the disk) or "browser" (kept in this browser). */
 export const isLocal = (r) => r?.local === "folder" || r?.local === "browser";
@@ -254,14 +255,21 @@ export class LocalSource {
    * Saves a file, refusing like GitHub does when it changed since it was read (`sha` no longer the file's),
    * or when it's there already and no `sha` was given. Then the app offers to merge, as for a GitHub save.
    */
-  async writeText(r, path, text, sha) {
+  writeText(r, path, text, sha) {
+    return this.writeFile(r, path, encode(text), sha);
+  }
+
+  writeBytes(r, path, bytes) {
+    return this.writeFile(r, path, bytes);
+  }
+
+  async writeFile(r, path, bytes, sha) {
     const files = await this.files(r);
     let current = null;
     try { current = await blobSha(await files.read(path)); } catch (e) { if (e.status !== 404) throw e; }
     if (current && current !== sha) {
       throw new GitHubError(409, sha ? `${path} changed on this device since it was opened.` : `${path} is there already.`);
     }
-    const bytes = encode(text);
     await files.write(path, bytes);
     const next = await blobSha(bytes);
     this.state(r).paths.set(next, path);
@@ -320,8 +328,8 @@ export class LocalSource {
   }
 }
 
-const ROUTED = new Set(["tree", "headSha", "repo", "branch", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
-const MIRRORED = new Set(["tree", "readText", "readBlob", "readBlobText", "writeText", "commitFiles", "searchCode"]);
+const ROUTED = new Set(["tree", "headSha", "repo", "branch", "readText", "readBlob", "readBlobText", "writeText", "writeBytes", "commitFiles", "searchCode"]);
+const MIRRORED = new Set(["tree", "readText", "readBlob", "readBlobText", "writeText", "writeBytes", "commitFiles", "searchCode"]);
 
 /**
  * The GitHub client, with every call about a local vault (its first argument) answered by `local` instead, and,
@@ -425,18 +433,98 @@ export const EXAMPLE_FILES = [
   ".claude/skills/start-task/SKILL.md", ".claude/skills/wrap-up-task/SKILL.md", "AGENTS.md", "Attachments/An example PDF.pdf",
   "Attachments/commonplace.svg", "Bases/Sprints.base", "Bases/Tasks.base", "CLAUDE.md", "Data/Pantry.tsv",
   "Data/Reading list.csv", "Data/settings.json", "Data/word_count.py", "Guide.md", "Home.md", "How To/Add a vault.md",
-  "How To/Connect to GitHub.md", "How To/How To.md", "How To/Invite someone.md", "How To/Run sprints.md",
+  "How To/Connect to GitHub.md", "How To/How To.md", "How To/Invite someone.md", "How To/Markdown and blocks.md",
+  "How To/Run sprints.md",
   "How To/Save, drafts and conflicts.md", "How To/Use it on a phone.md", "How To/Use your inbox.md",
   "How To/Work with tasks.md", "How To/Write and link notes.md", "Notes/Inbox.md", "Notes/Inboxes/Your name.md",
   "Other kinds of files.md", "Set up tasks.md", "Sprints/Sprint 1.md", "Sprints/Sprint 2.md", "Task Board.md",
   "Tasks/Add a reading list.md", "Tasks/Get set up.md", "Tasks/Invite a friend.md", "Tasks/Make a note template.md",
-  "Tasks/Try the app on a phone.md", "Tasks/Write the welcome note.md", "Templates/Note.md", "Templates/Task.md",
+  "Tasks/Review the example vault.md", "Tasks/Try the app on a phone.md", "Tasks/Write the welcome note.md", "Templates/Note.md", "Templates/Task.md",
 ];
 
 /** The example vault's settings, as its README suggests them. */
-export const EXAMPLE_SETTINGS = {
-  home: "Home.md", inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", vault: true,
+const EXAMPLE_SETTINGS = {
+  home: "Home.md", inbox: "Notes/Inbox.md", inboxes: "Notes/Inboxes", notes: "Notes", template: "Templates/Note.md", attachments: "Attachments", vault: true,
 };
+
+/** Starter vaults copied by the local vault dialog. Each starter folder can also be copied on its own. */
+export const EXAMPLE_VAULTS = [
+  { key: "feature-guide", label: "Feature guide · Commonplace.md", name: "My notes", directory: "example-vault", files: EXAMPLE_FILES, settings: EXAMPLE_SETTINGS },
+  {
+    key: "solo-project", label: "Solo project · Trail Timer", name: "Trail Timer", directory: "examples/solo-project",
+    files: [
+      ".commonplace.json",
+      "AGENTS.md",
+      "Home.md",
+      "Notes/Inbox.md",
+      "Notes/Run screen.md",
+      "Task Board.md",
+      "Tasks/Check silent mode.md",
+      "Tasks/Save an interval preset.md",
+      "Tasks/Sketch the run screen.md",
+      "Templates/Note.md",
+    ],
+  },
+  {
+    key: "small-team", label: "Small team · Pocket Garden", name: "Pocket Garden", directory: "examples/small-team",
+    files: [
+      ".commonplace.json",
+      "Home.md",
+      "Notes/Inboxes/Miro Finch.md",
+      "Notes/Inboxes/Neri Holt.md",
+      "Notes/Inboxes/Tavi Vale.md",
+      "Notes/Reminder rules.md",
+      "Notes/Team Inbox.md",
+      "Task Board.md",
+      "Tasks/Check the first reminder.md",
+      "Tasks/Design the garden list.md",
+      "Tasks/Save a care note.md",
+      "Templates/Note.md",
+    ],
+  },
+  {
+    key: "large-team", label: "Large team · Signal Station", name: "Signal Station", directory: "examples/large-team",
+    files: [
+      ".commonplace.json",
+      "Home.md",
+      "Notes/Demo brief.md",
+      "Notes/Inboxes/Aven Moss.md",
+      "Notes/Inboxes/Bren Alder.md",
+      "Notes/Inboxes/Kest Wren.md",
+      "Notes/Inboxes/Lio Beck.md",
+      "Notes/Inboxes/Mera Linn.md",
+      "Notes/Inboxes/Oren Pike.md",
+      "Notes/Inboxes/Ryn Vale.md",
+      "Notes/Inboxes/Sela Drift.md",
+      "Notes/Inboxes/Tess Flint.md",
+      "Notes/Inboxes/Vela Reed.md",
+      "Notes/Team Inbox.md",
+      "Sprints/Demo sprint.md",
+      "Sprints/Route sprint.md",
+      "Task Board.md",
+      "Tasks/Connect the station route.md",
+      "Tasks/Light the main route.md",
+      "Tasks/Make the station playable.md",
+      "Tasks/Package a clean build.md",
+      "Tasks/Place the radio cue.md",
+      "Tasks/Prepare the demo handoff.md",
+      "Tasks/Run the demo from a clean install.md",
+      "Templates/Note.md",
+    ],
+  },
+  {
+    key: "personal-notes", label: "Personal notes · Kitchen Notebook", name: "Kitchen Notebook", directory: "examples/personal-notes",
+    files: [
+      ".commonplace.json",
+      "Home.md",
+      "Notes/Pantry.md",
+      "Notes/This week's meals.md",
+      "Recipes/Apple oat jars.md",
+      "Recipes/Lemon chickpea bowls.md",
+      "Templates/Note.md",
+    ],
+  },
+];
 
 /** An empty vault's one note. */
 export function emptyVault(name, kept) {
@@ -446,9 +534,9 @@ export function emptyVault(name, kept) {
   return [{ path: "Home.md", bytes: encode(`# ${name}\n\nThis vault is only on this device: not on GitHub, not on your other devices. ${where}\n\nPress **New note** to start.\n`) }];
 }
 
-/** The example vault from the app's own site; files that don't come are left out. */
-export async function fetchExample(base = new URL("example-vault/", document.baseURI)) {
-  const got = await Promise.all(EXAMPLE_FILES.map(async (path) => {
+/** Fetches a starter before writing any notes. The feature guide keeps its existing best-effort fetch. */
+export async function fetchExample(example = EXAMPLE_VAULTS[0], base = new URL(`${example.directory}/`, document.baseURI)) {
+  const got = await Promise.all(example.files.map(async (path) => {
     try {
       const res = await fetch(new URL(path.split("/").map(encodeURIComponent).join("/"), base));
       return res.ok ? { path, bytes: new Uint8Array(await res.arrayBuffer()) } : null;
@@ -457,6 +545,11 @@ export async function fetchExample(base = new URL("example-vault/", document.bas
     }
   }));
   const files = got.filter(Boolean);
-  if (!files.some((f) => f.path === "Home.md")) throw new GitHubError(0, "The example notes didn't come. Check the connection, or start with an empty vault.");
-  return files;
+  if (!files.some((f) => f.path === "Home.md") || (!example.settings && files.length !== example.files.length)) {
+    throw new GitHubError(0, "The example notes didn't come. Check the connection and try again, or start with an empty vault.");
+  }
+  const marker = files.find((f) => f.path === MARKER);
+  const settings = example.settings ?? (marker && parseMarker(decode(marker.bytes), "", ""));
+  if (!settings) throw new GitHubError(0, "The example vault's settings could not be read.");
+  return { files, settings };
 }

@@ -39,7 +39,33 @@ A task shows three boxes where its note has their blocks:
 - **Relations**: tasks this one is blocked by, comes after or before, or is related to, both ways. **Add relation** links another.
 - **Commits**: the commits made for it, from its `commits` property.
 
-Move a block to move its box, or take it out and the box goes. A new task gets all three.
+Move a block to move its box, or take it out and the box goes. New tasks put Subtasks and Relations above the description, and Commits below Comments.
+
+## Task sections
+
+The [phone setup task](../Tasks/Try%20the%20app%20on%20a%20phone.md) uses four blocks. In **Edit**, write Markdown inside each pair of fences.
+
+~~~markdown
+```description
+Keep the inbox handy on my phone.
+```
+
+```acceptance-criteria
+- [ ] Add the app to the home screen
+```
+
+```comments
+Does the shortcut open my inbox?
+```
+
+```work-history
+- Tried it in the phone's browser.
+```
+~~~
+
+Tick a criterion in **Read**, then **Save**. Work History opens from the folded section at the bottom. Put a `comments` block on any note and use `@` followed by a teammate's GitHub login to mention them. The [Guide](../Guide.md#comments) has a Comments block on a regular note.
+
+Write in the Comments box and press **Post** to save a comment with its author and time. The box starts with an editable mention of the previous commenter when their login is known and differs from yours. Type `@` to pick a teammate with an inbox. If the note already has unsaved edits, the comment joins the draft. Press **Save** to post it with your changes. Open **Edit** to revise a saved comment.
 
 ## See them all
 
