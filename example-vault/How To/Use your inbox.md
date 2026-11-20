@@ -35,7 +35,7 @@ In Read mode it's a box with the items: **Add** puts a new one in, the pencil be
 
 A ` ```needs-attention ` block in your inbox, under the top tasks, shows what waits on you:
 
-- **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**.
+- **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*. Once you've written something under **Answer:**, it folds under *Answered, waiting for the agent*, until your agent acts on it.
 - **Mentions**: every place in the vault that says `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). Each row links to the heading it's under, with the line and when the note last changed, newest first.
 
 Everything it shows is written in the block, one line each:

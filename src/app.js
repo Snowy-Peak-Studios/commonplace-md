@@ -2524,11 +2524,13 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     allFound = found; allAssignments = assignments;
     const reviewPaths = new Set(reviews.map((t) => t.path));
     const questions = tasks.filter((t) => !reviewPaths.has(t.path));
+    // An answered question no longer waits on you: it folds away until the agent acts on the answer and clears it.
+    const asked = questions.filter((t) => !t.answer), answered = questions.filter((t) => t.answer);
     const ms = sortMentions(found, seenNow);
     const assigned = sortAssignments(assignments.filter((t) => !reviewPaths.has(t.path)), note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
     head.textContent = [
       askR ? `${reviews.length} for review · ${reviewStatuses.join(", ")}` : wantR ? "Add owner or login to show reviews" : "",
-      askQ ? `${questions.length} question${questions.length === 1 ? "" : "s"} for ${owner} · Answer on the task` : wantQ ? "No owner: line, so no questions" : "",
+      askQ ? `${asked.length} question${asked.length === 1 ? "" : "s"} for ${owner} · Answer on the task` + (answered.length ? `, ${answered.length} answered` : "") : wantQ ? "No owner: line, so no questions" : "",
       askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
       askA ? assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s") : "",
       showSet ? "" : "Questions and mentions (the block sets no show)",
@@ -2540,12 +2542,14 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
       h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path)?.question || "Test, then close or request changes on the task."));
     const rows = [
       reviews.length && show.length > 1 ? h("li", { class: "attention-section" }, h("strong", {}, "For review")) : null,
-      ...reviews.map(reviewRow), ...questions.filter((t) => !t.answer).map(questionRow), ...questions.filter((t) => t.answer).map(questionRow),
+      ...reviews.map(reviewRow), ...asked.map(questionRow),
       ...assigned.open.map((t) => assignmentRow(t)), ...ms.open.map((m) => mentionRow(m)),
     ].filter(Boolean);
+    if (!rows.length) rows.push(h("li", { class: "muted" }, "Nothing waits on you."));
+    if (answered.length) rows.push(h("li", { class: "attention-answered" }, h("details", {}, h("summary", { class: "muted", title: "Your answers are on these tasks. Each leaves the list once the agent acts on it." }, `Answered, waiting for the agent (${answered.length})`), h("ol", { class: "attention-list" }, answered.map(questionRow)))));
     const seenRows = [...assigned.seen.map((t) => assignmentRow(t, true)), ...ms.seen.map((m) => mentionRow(m, true))];
     if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), h("ol", { class: "attention-list" }, seenRows))));
-    list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
+    list.replaceChildren(...rows);
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
 }
