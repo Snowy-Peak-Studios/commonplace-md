@@ -5023,6 +5023,10 @@ function start() {
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
+  const versionTag = $("#version-tag");
+  versionTag.textContent = DEV_BUILD ? "dev" : "main";
+  versionTag.classList.toggle("dev", DEV_BUILD);
+  versionTag.title = DEV_BUILD ? "The version in development" : "The released version";
   const versionBtn = $("#version-btn");
   fill(versionBtn, icon(DEV_BUILD ? "back" : "code"), DEV_BUILD ? "Use the released version" : "Try the dev version");
   versionBtn.title = DEV_BUILD ? "The released version: reviewed and steady" : "The newest work, before it's released: things may break";
