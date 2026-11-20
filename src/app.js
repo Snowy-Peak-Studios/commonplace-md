@@ -1229,7 +1229,11 @@ function subpagesBox(f, depth, page = "") {
   const of = page ? tree.index.resolve(page, f.path) : f.path;
   if (!of) return h("nav", { class: "page-list", "aria-label": "Subpages" }, head, h("p", { class: "muted" }, `No page is called “${page}”, so this subpages block shows nothing.`));
   const setup = taskSetupOf(f.repo);
-  const pages = subpagesOf(entry.notes, of, { resolve: (t, from) => tree.index.resolve(t, from), skip: (p) => !!setup && isSetupTask(setup, p), depth });
+  // Tasks (the board lists them) and templates (their `parent` is for the notes made from them) are left out.
+  const template = cleanDir(f.repo.template || "");
+  const templates = template ? dirName(template) : "";
+  const isTemplate = (p) => p === template || (!!templates && p.startsWith(`${templates}/`));
+  const pages = subpagesOf(entry.notes, of, { resolve: (t, from) => tree.index.resolve(t, from), skip: (p) => isTemplate(p) || (!!setup && isSetupTask(setup, p)), depth });
   // A page's `description` property shows after its name, as a line of Markdown (code, links, bold).
   const props = new Map(entry.notes.map((n) => [n.path, n.props]));
   const about = (path) => {
