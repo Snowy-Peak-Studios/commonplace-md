@@ -1035,3 +1035,32 @@ test("capture attachments support other files, safe names, collisions and moving
   assert.equal(captureAttachmentText("- First\n- Second", 13, a.link).text, "- First\n- Second " + a.link);
   assert.equal(captureAttachmentText("", 0, picture.link).text, picture.link);
 });
+
+test("a mention in Comments is answered by the next dated comment that starts with @ someone else", async () => {
+  const { findMentions, sortMentions } = await import("../src/vault.js");
+  const note = [
+    "# Task", "", "```comments", "- @ann-lee please draw the set.", "",
+    "- **ann-lee** · 2026-11-18 19:22 UTC", "", "    @bob-k the first picture is up for your review: does this style work?",
+    "    Two square sizes, above.", "",
+    "- **bob-k** · 2026-11-18 19:31 UTC", "", "    @ann-lee yup, 2nd iteration, and we will be golden", "",
+    "- **ann-lee** · 2026-11-18 20:00 UTC", "", "    @bob-k the second one is up too.", "",
+    "- **ann-lee** · 2026-11-18 20:05 UTC", "", "    @bob-k and a third, no reply yet.", "```", "",
+    "@bob-k outside Comments, with a dated comment far below, stays open.",
+  ].join("\n");
+  const found = findMentions(note);
+  const state = found.map((m) => [m.login, m.line, m.answered]);
+  assert.deepEqual(state, [
+    ["ann-lee", 4, true], // ann-lee answers in the next comment, to @bob-k
+    ["bob-k", 8, true], // the saved reply format: header, blank line, indented "@ann-lee ..."
+    ["ann-lee", 13, true],
+    ["bob-k", 17, false], // the next comment starts with @bob-k again: a follow-up, not bob-k's reply
+    ["bob-k", 21, false], // the last comment: nothing after it
+    ["bob-k", 24, false], // outside Comments only the very next line counts
+  ]);
+  const ms = sortMentions(found.map((m) => ({ ...m, path: "Tasks/X.md" })));
+  assert.deepEqual(ms.answered.map((m) => m.line), [4, 8, 13]);
+  assert.deepEqual(ms.open.map((m) => m.line), [17, 21, 24]);
+  // A comment of words with no @ isn't a reply; the plain format (the reply on the very next line) still counts.
+  assert.equal(findMentions("```comments\n- **ann-lee** · 2026-11-18 19:22 UTC\n\n    @bob-k look\n\n- **bob-k** · 2026-11-18 19:31 UTC\n\n    Looks good.\n```")[0].answered, false);
+  assert.equal(findMentions("```comments\n- @bob-k look\n- @ann-lee done\n```").find((m) => m.login === "bob-k").answered, true);
+});

@@ -6,7 +6,7 @@
 // A save made while GitHub can't be reached waits in the copy and is uploaded, as its own commit, once it can.
 
 import { GitHubError, blobSha } from "./github.js";
-import { BrowserFiles, FolderFiles, folderOf, keepFolder, forgetFolder, idb } from "./local.js";
+import { BrowserFiles, FolderFiles, folderOf, folderPermission, keepFolder, forgetFolder, idb } from "./local.js";
 
 export const mirrorId = (r) => `mirror:${r.id}`;
 const prefixOf = (r) => (r.folder ? `${r.folder.replace(/\/+$/, "")}/` : "");
@@ -117,7 +117,8 @@ export class Mirror {
       const handle = await folderOf(mirrorId(r));
       if (handle) {
         st.folder = handle.name;
-        const ok = (await handle.queryPermission?.({ mode: "readwrite" })) ?? "granted";
+        // No answer from the browser counts as waiting for an OK: the vault still opens from GitHub.
+        const ok = await folderPermission(handle);
         if (ok === "granted") files = new FolderFiles(handle);
         else st.needsAllow = handle.name;
       } else files = new BrowserFiles(mirrorId(r));

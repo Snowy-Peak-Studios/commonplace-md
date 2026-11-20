@@ -397,6 +397,9 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   font-weight: 500;
 }
 .seg button .icon { width: 16px; height: 16px; }
+.version-pick { display: flex; width: fit-content; }
+/* The development version says so, beside the signed-in person at the foot of the sidebar. */
+.dev-build #who::after { content: "dev"; margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--warn); background: var(--warn-soft); }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--bg-raise); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
 
@@ -434,8 +437,9 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   text-align: left;
   font-size: 14px;
   color: var(--text);
+  white-space: nowrap;
 }
-.menu button .icon { width: 17px; height: 17px; color: var(--muted); }
+.menu button .icon { width: 17px; height: 17px; flex: none; color: var(--muted); }
 .menu button:hover { background: var(--bg-hover); }
 
 main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }
@@ -850,8 +854,8 @@ select.chip.pick:disabled { opacity: 0.6; cursor: progress; }
 .overview-kind-choices { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .attention-list .attention-seen-btn { margin-left: auto; }
 .attention .attention-all { margin-left: auto; }
-.preview .attention-list li.attention-seen > details { flex: 1 0 100%; }
-.attention-seen summary { cursor: pointer; padding: 4px 0; }
+.preview .attention-list li.attention-seen > details, .preview .attention-list li.attention-answered > details { flex: 1 0 100%; }
+.attention-seen summary, .attention-answered summary { cursor: pointer; padding: 4px 0; }
 .attention-list .attention-text { flex: 1 0 100%; color: var(--text-2); font-size: 13.5px; padding-bottom: 4px; overflow-wrap: anywhere; }
 .mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 550; text-decoration: none; }
 a.mention:hover { text-decoration: underline; }

@@ -509,20 +509,38 @@ export function withSeenMentions(seen, add, found) {
 }
 
 /**
+ * In a Comments block, the reply line of the dated comment after line `at` of `prose` (`proseLines`): the first
+ * line of words under the next `- **login** · date` header, when it starts with `@login`; else null.
+ */
+function nextCommentReply(prose, at) {
+  const inComments = (p) => p && !p.boundary && p.section === "comments";
+  for (let i = at + 1; inComments(prose[i]); i++) {
+    const { text } = prose[i];
+    if (!/^ {0,3}- /.test(text) || !commentHeader(text.trimStart().slice(2))) continue;
+    let j = i + 1;
+    while (inComments(prose[j]) && !prose[j].text.trim()) j++;
+    return inComments(prose[j]) ? REPLY.exec(prose[j].text) : null;
+  }
+  return null;
+}
+
+/**
  * Every mention in a note: [{ login, line, heading, text, answered }], `line` counting from 1 in the whole file,
  * `heading` the one above it ("" at the top), and `text` the line itself, cut short. The front matter,
  * fenced code and inline code don't count. Named note sections hold prose, so mentions there count.
  * One per login and line. `answered` when the very next line is a
- * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login.
+ * reply: it starts (after a list mark, checkbox or `>`) with `@` and someone else's login. In a Comments block,
+ * the first line of the next dated comment (`- **login** · date`, as Post comment writes it) counts the same.
  */
 export function findMentions(text) {
   const src = toLf(text);
   const fm = splitFrontMatter(src);
   const skipped = fm ? src.slice(0, fm.length).split("\n").length - 1 : 0;
   const lines = (fm ? src.slice(fm.length) : src).split("\n");
+  const prose = [...proseLines(lines)];
   const out = [];
   let heading = "";
-  for (const { line, text: saidLine, section } of proseLines(lines)) {
+  for (const [at, { line, text: saidLine, section }] of prose.entries()) {
     const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(saidLine);
     if (h && !section) heading = h[1];
     const plain = saidLine.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
@@ -531,7 +549,7 @@ export function findMentions(text) {
       if (seen.has(m[2].toLowerCase())) continue;
       seen.add(m[2].toLowerCase());
       const said = saidLine.trim();
-      const reply = REPLY.exec(lines[line + 1] ?? "");
+      const reply = REPLY.exec(lines[line + 1] ?? "") || (section === "comments" ? nextCommentReply(prose, at) : null);
       out.push({ login: m[2], line: skipped + line + 1, heading: section ? NOTE_SECTIONS[section] : heading,
         text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
         answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });

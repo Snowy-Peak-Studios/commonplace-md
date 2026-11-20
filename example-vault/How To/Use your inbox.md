@@ -35,7 +35,7 @@ In Read mode it's a box with the items: **Add** puts a new one in, the pencil be
 
 A ` ```needs-attention ` block in your inbox, under the top tasks, shows what waits on you:
 
-- **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*, or *Answered, waiting for the agent* once you've written something under **Answer:**.
+- **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*. Once you've written something under **Answer:**, it folds under *Answered, waiting for the agent*, until your agent acts on it.
 - **Mentions**: every place in the vault that says `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). Each row links to the heading it's under, with the line and when the note last changed, newest first.
 
 Everything it shows is written in the block, one line each:
@@ -50,7 +50,7 @@ login: your-github-login
 - `owner`: whose questions: the tasks they asked for, review, or whose agent has them.
 - `login`: whose mentions.
 
-It reads every note once for the mentions (then only the changed ones), so the first look in a big vault takes a moment. A question stays until your agent acts on the answer. A mention goes away when it's answered: a reply on the very next line, starting with `@` and the other person's login. Or press **Seen** (or **All seen**): it folds under *Seen*, kept in your inbox's `seen_mentions` property, so all your devices agree.
+It reads every note once for the mentions (then only the changed ones), so the first look in a big vault takes a moment. A question stays until your agent acts on the answer. A mention goes away when it's answered: a reply on the very next line, starting with `@` and the other person's login, or, in a Comments box, the next comment you post (it starts with `@` and their name for you). Or press **Seen** (or **All seen**): it folds under *Seen*, kept in your inbox's `seen_mentions` property, so all your devices agree.
 
 While something waits on you (a question with no answer, a mention with no reply that isn't seen), the **Inbox** button shows a red dot. [Add a reading list](../Tasks/Add%20a%20reading%20list.md) has a question and the [Guide](../Guide.md) a mention, so your [inbox](../Notes/Inbox.md) lists both.
 

@@ -1,7 +1,7 @@
 # Browser check
 
 `run.mjs` opens the app in Chrome (headless) against the example vault on GitHub (`example-vault/` in this repo's
-`main` branch, which contains reviewed releases). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
+`dev` branch, where work happens). A fresh device joins it through an invite link (with `vault=1`, `notes=Notes`,
 `template=Templates/Note.md`, the Inbox page, the Inboxes folder and the start page), and the script then checks:
 
 - reading: the start page, an embedded section, an image, callouts, properties, the Inbox button and shortcut;
@@ -38,7 +38,7 @@ Settings, all optional:
 |---|---|---|
 | `OWNER` | `Snowy-Peak-Studios` | The owner of the repo with the example vault |
 | `REPO` | `commonplace-md` | That repo |
-| `BRANCH` | `main` | Its branch; override `OWNER`, `REPO` and `BRANCH` when checking a private candidate |
+| `BRANCH` | `dev` | Its branch; `main` to check the released version, as on the live site |
 | `FOLDER` | `example-vault` | The vault's folder in it (empty for the whole repo) |
 | `BASE` | `http://localhost:8765/` | The app's address; use `http://127.0.0.1:8765/` if another server answers on `localhost:8765` |
 | `CHROME` | Chrome's usual path on Windows | Chrome's path |
@@ -64,3 +64,23 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## PDF export check
 
 `node export-pdf.mjs <output-folder>` uses local fixtures without a token or remote requests. It intercepts the print dialog, exports real A4 PDFs in desktop/phone light/dark modes, and checks expanded folds, callouts, embedded content, lazy images, Mermaid diagrams, a multi-page table, task field values and history, control removal, cleanup and unsaved drafts. Render the PDFs for visual review. The final native print/share sheet on mobile still depends on the browser and operating system.
+
+## Local folder load check
+
+`node local-load.mjs <screenshots-folder>` fills a folder in the browser's own private file system with notes and big files beside them, opens it as a local folder vault, and prints how long it took and how many bytes were read. It fails if opening reads the big files, makes any network call or shows a page error, and checks that a note and a big file still open from the list. `NOTES`, `BIG` and `BIG_MB` change the sizes; `BASE` and `CHROME` have the same defaults as the main check. No token is needed.
+
+## Answered questions check
+
+`node answered-questions.mjs <screenshots-folder>` makes a local browser vault with fictional people, an inbox and two tasks with questions. An answered question must fold under *Answered, waiting for the agent*, apart from what waits, and stay so after a reload; once both are answered nothing waits and the Inbox dot is off; a question the agent cleared leaves the list. Desktop/phone light/dark screenshots. No token or remote calls.
+
+## Comment reply check
+
+`node comment-reply.mjs <screenshots-folder>` makes a local browser vault with fictional people: a mention in a task's Comments and an unrelated one in another note. It replies with **Post** in the Comments box and checks the saved dated comment, that the answered mention leaves Needs attention while the other stays, and that the Inbox dot agrees, before and after a reload. No token or remote calls.
+
+## Stuck folder check
+
+`node local-stuck.mjs <screenshots-folder>` keeps a folder vault in the browser's own private file system and makes the browser never answer whether the page may open it, as Chrome has been seen to do for a folder kept from an earlier visit. Within a few seconds the app must ask to pick the folder again instead of staying on "Loading the files…", and picking it opens the vault. No token or network calls.
+
+## Version switch check
+
+`node version-switch.mjs <screenshots-folder>` serves this clone at both `/` and `/dev/` on a port of its own (`PORT`, default 8799), as GitHub Pages serves `main` and `dev`. On the released version the **⋯** menu's **Try the dev version** must open `dev/` at the same note and remember the choice; there **Use the released version** must come back. Desktop/phone light/dark screenshots of the menu; no token, page errors or network calls.

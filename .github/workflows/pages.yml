@@ -1,9 +1,12 @@
-# Only reviewed releases are published. Development previews run locally.
+# Serves the app on GitHub Pages: the released version (main) at the site's address, and the version in
+# development (dev) under dev/ beside it, both rebuilt when either branch moves. Settings › This device picks
+# which one a device opens. Needs Settings › Pages › Source: GitHub Actions, and the github-pages
+# environment allowing both branches to deploy. The files are served as they are: there's no build step.
 name: Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -17,20 +20,35 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'Snowy-Peak-Studios/commonplace-md' && github.ref == 'refs/heads/main'
+    # A private copy of the repo doesn't publish: Pages would make it public.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: https://snowy-peak-studios.github.io/commonplace-md/
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           path: site
-      - name: Prepare released site and retire the old preview
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: site/dev
+      - name: Name the version in development
         run: |
-          rm -rf site/.git site/.github
-          cp -R site/tools/retired-dev site/dev
+          rm -rf site/.git site/dev/.git site/.github site/dev/.github
+          python3 - <<'PY'
+          import json
+          path = "site/dev/manifest.webmanifest"
+          m = json.load(open(path, encoding="utf-8"))
+          m["name"] = m["name"] + " (dev)"
+          m["short_name"] = m["short_name"] + " dev"
+          with open(path, "w", encoding="utf-8", newline="") as f:
+              json.dump(m, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

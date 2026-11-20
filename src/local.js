@@ -16,7 +16,7 @@ export const canPickFolder = () => typeof globalThis.showDirectoryPicker === "fu
 /** Brave: built on Chrome, but it turns opening folders off by default (a flag turns it on). */
 export const isBrave = () => !!globalThis.navigator?.brave;
 
-/** Something a local vault needs before it opens: `need` is "permission" (one tap to allow the folder again) or "folder". */
+/** Something a local vault needs before it opens: `need` is "permission" (one tap to allow the folder again), "folder", or "stuck" (the browser gave no answer about the folder: pick it again). */
 export class LocalError extends GitHubError {
   constructor(need, message) {
     super(0, message);
@@ -63,6 +63,29 @@ export async function idb(name, mode, use) {
 export const folderOf = (id) => idb("handles", "readonly", (st) => st.get(id)).catch(() => null);
 export const keepFolder = (id, handle) => idb("handles", "readwrite", (st) => st.put(handle, id));
 export const forgetFolder = (id) => idb("handles", "readwrite", (st) => st.delete(id)).catch(() => {});
+
+/** How long to wait for the browser to say whether a kept folder may be opened. */
+export const PERMISSION_WAIT = 4000;
+
+/**
+ * Whether a kept folder may be opened: "granted", "prompt" or "denied" as the browser says, or "stuck" when it gives no
+ * answer in `wait` ms. Chrome has been seen never to answer for a folder kept from an earlier visit; picking the
+ * same folder again gives a new handle that works.
+ */
+export async function folderPermission(handle, wait = PERMISSION_WAIT) {
+  if (typeof handle?.queryPermission !== "function") return "granted";
+  let timer;
+  try {
+    return await Promise.race([
+      handle.queryPermission({ mode: "readwrite" }),
+      new Promise((resolve) => { timer = setTimeout(() => resolve("stuck"), wait); }),
+    ]);
+  } catch {
+    return "prompt";
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ---- where a vault's files are ----
 
@@ -165,10 +188,17 @@ const encode = (text) => new TextEncoder().encode(text);
 const decode = (bytes) => new TextDecoder("utf-8").decode(bytes);
 const SEARCHED = /\.(md|markdown|txt|csv|tsv|base|json|ya?ml|canvas)$/i;
 
+/** A sha that stands for a file in a local vault's tree, from "path|time|size": 40 hex digits, like git's. */
+export async function standInSha(key) {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", encode(`local ${key}`)));
+  return [...hash].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** The local vaults' files, with the calls the app makes on GitHub. */
 export class LocalSource {
   constructor() {
     this.vaults = new Map(); // repo id -> { paths: Map(sha -> path), shas: Map("path|mtime|size" -> sha) }
+    this.permissionWait = PERMISSION_WAIT;
   }
 
   state(r) {
@@ -180,8 +210,9 @@ export class LocalSource {
     if (r.local === "browser") return new BrowserFiles(r.id);
     const handle = await folderOf(r.id);
     if (!handle) throw new LocalError("folder", `This browser doesn't know ${r.label}'s folder any more. Pick it again.`);
-    const state = await handle.queryPermission?.({ mode: "readwrite" });
-    if (state && state !== "granted") throw new LocalError("permission", `The browser asks again for your OK to open the folder ${handle.name} each time it's opened.`);
+    const state = await folderPermission(handle, this.permissionWait);
+    if (state === "stuck") throw new LocalError("stuck", `The browser doesn't answer whether this page may open the folder ${handle.name}. Pick the same folder again to open it.`);
+    if (state !== "granted") throw new LocalError("permission", `The browser asks again for your OK to open the folder ${handle.name} each time it's opened.`);
     return new FolderFiles(handle);
   }
 
@@ -201,16 +232,21 @@ export class LocalSource {
     return r.local === "folder" ? (await folderOf(r.id))?.name || "" : "";
   }
 
-  /** Every file and its sha (git's, so a note's sha means the same as on GitHub), like GitHub's tree. */
+  /**
+   * Every file of the vault (under its folder, when it has one), like GitHub's tree. Listing reads no file: each sha is
+   * a stand-in made from the file's path, size and time, so a folder with big files (videos, a game's assets) opens
+   * at once. It changes whenever the file does; reading a note gives its real sha, as on GitHub.
+   */
   async tree(r) {
-    const all = await (await this.files(r)).list();
+    const prefix = r.folder ? `${r.folder.replace(/\/+$/, "")}/` : "";
+    const all = await (await this.files(r)).list(false, prefix);
     const st = this.state(r);
     st.paths = new Map();
     const tree = await Promise.all(all.map(async (f) => {
       const key = `${f.path}|${f.mtime}|${f.size}`;
       let sha = st.shas.get(key);
       if (!sha) {
-        sha = await blobSha(await f.bytes());
+        sha = await standInSha(key);
         st.shas.set(key, sha);
       }
       st.paths.set(sha, f.path);

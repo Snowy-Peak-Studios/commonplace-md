@@ -28,6 +28,23 @@ import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-t
 
 const APP_NAME = "Commonplace.md";
 
+// ---- which version: released (the main branch) or in development (the dev branch, served under dev/) ----
+
+/** This is the development version, served under dev/ beside the released one, on the same origin. */
+const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
+/** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
+const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
+/** The address of the released (`dev` false) or development version, at the same page. */
+const versionHref = (dev) =>
+  new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
+/** Set in this tab just before the released version sends it on to the development one. */
+const TO_DEV = "commonplace:to-dev";
+/** Opens the released or the development version at the same note; this device keeps opening that one. */
+function switchVersion(dev) {
+  store.set("version", dev ? "dev" : "main");
+  if (dev !== DEV_BUILD) location.assign(versionHref(dev));
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 
 function h(tag, attrs = {}, ...children) {
@@ -627,7 +644,7 @@ function renderHeader() {
   save.classList.toggle("busy", app.saving);
   const [ic, label] = app.saving ? ["spinner", "Saving"] : f?.dirty ? ["upload", "Save"] : uploadable(f) ? ["upload", "Upload"] : ["check", "Saved"];
   fill(save, icon(ic), h("span", { class: "label" }, label));
-  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${APP_NAME}` : app.pageTitle ? `${app.pageTitle} · ${APP_NAME}` : APP_NAME;
+  document.title = f ? `${f.dirty ? "• " : ""}${shownName(f.path)} · ${SHOWN_APP}` : app.pageTitle ? `${app.pageTitle} · ${SHOWN_APP}` : SHOWN_APP;
 }
 
 // ================================================================
@@ -1919,7 +1936,7 @@ const peopleLoads = new Map();
 const collaboratorLoads = new WeakMap();
 
 function loadCollaborators(repo) {
-  if (isLocal(repo) || !canWrite(repo) || !gh.tokenFor(repo.owner)) return Promise.resolve([]);
+  if (isLocal(repo) || !canWrite(repo) || !app.token) return Promise.resolve([]);
   if (!collaboratorLoads.has(gh)) collaboratorLoads.set(gh, new Map());
   const known = collaboratorLoads.get(gh);
   const key = (repo.owner + "/" + repo.repo).toLowerCase();
@@ -1970,15 +1987,14 @@ function fillMentions(root, repo) {
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
 async function noteMentions(repo, tree, paths) {
-  // Mentions in named sections now count, so older scans must be rebuilt.
-  store.remove(`mentions:${repo.id}`);
-  store.remove(`mentions2:${repo.id}`);
-  const cache = baseCache("mentions3", repo);
+  // Older scans missed mentions in named sections, then replies posted as dated comments: they're rebuilt.
+  for (const old of ["mentions", "mentions2", "mentions3"]) store.remove(`${old}:${repo.id}`);
+  const cache = baseCache("mentions4", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("mentions3", repo, (sha) => live.has(sha));
+    keepBaseCache("mentions4", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
 }
@@ -2265,7 +2281,7 @@ async function openOverviewSetup() {
         const props = noteProps(data.text);
         return { owner: props.owner, github: typeof props.github === "string" ? props.github : "" };
       } catch (e) {
-        if (e.need === "folder" || e.need === "permission") throw new Error("Open this source and allow its folder, then check the inbox again.");
+        if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw new Error("Open this source and allow its folder, then check the inbox again.");
         if (e.status === 404) throw new Error(`The inbox ${path} was not found or this account cannot read it. Check the path and source access.`);
         throw e;
       }
@@ -2366,7 +2382,7 @@ async function readOverviewSource(repo, source, options, files, current) {
     kept[key] = { login, disabled: marker.modules?.inboxes === false, tasks: marker.tasks ?? null, checkedAt: Date.now() };
     store.set("inboxOverviewSourceSettings", kept);
   } catch (e) {
-    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder.");
     const prior = settings?.[key];
     if ((offline || e.status === 0) && prior && prior.login === login) { marker = { modules: { inboxes: !prior.disabled }, tasks: prior.tasks }; offline = true; }
     else throw fail(e.status === 401 || e.status === 403 ? "access" : "setup", "The source's settings could not be checked. Open it online, then refresh.", e.status);
@@ -2376,7 +2392,7 @@ async function readOverviewSource(repo, source, options, files, current) {
   const setup = taskSetup(marker.tasks ?? null);
   let tree;
   try { tree = await loadTree(repo, true, { readOnly: true, current }); } catch (e) {
-    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder.");
     throw e;
   }
   check();
@@ -2391,7 +2407,7 @@ async function readOverviewSource(repo, source, options, files, current) {
     const worker = async () => { while (current() && !failed && next < missing.length) {
       const path = missing[next++];
       try { const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text }); }
-      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder."); throw e; }
+      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder."); throw e; }
     } };
     await Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
   } else {
@@ -2524,11 +2540,13 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     allFound = found; allAssignments = assignments;
     const reviewPaths = new Set(reviews.map((t) => t.path));
     const questions = tasks.filter((t) => !reviewPaths.has(t.path));
+    // An answered question no longer waits on you: it folds away until the agent acts on the answer and clears it.
+    const asked = questions.filter((t) => !t.answer), answered = questions.filter((t) => t.answer);
     const ms = sortMentions(found, seenNow);
     const assigned = sortAssignments(assignments.filter((t) => !reviewPaths.has(t.path)), note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
     head.textContent = [
       askR ? `${reviews.length} for review · ${reviewStatuses.join(", ")}` : wantR ? "Add owner or login to show reviews" : "",
-      askQ ? `${questions.length} question${questions.length === 1 ? "" : "s"} for ${owner} · Answer on the task` : wantQ ? "No owner: line, so no questions" : "",
+      askQ ? `${asked.length} question${asked.length === 1 ? "" : "s"} for ${owner} · Answer on the task` + (answered.length ? `, ${answered.length} answered` : "") : wantQ ? "No owner: line, so no questions" : "",
       askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
       askA ? assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s") : "",
       showSet ? "" : "Questions and mentions (the block sets no show)",
@@ -2540,12 +2558,14 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
       h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path)?.question || "Test, then close or request changes on the task."));
     const rows = [
       reviews.length && show.length > 1 ? h("li", { class: "attention-section" }, h("strong", {}, "For review")) : null,
-      ...reviews.map(reviewRow), ...questions.filter((t) => !t.answer).map(questionRow), ...questions.filter((t) => t.answer).map(questionRow),
+      ...reviews.map(reviewRow), ...asked.map(questionRow),
       ...assigned.open.map((t) => assignmentRow(t)), ...ms.open.map((m) => mentionRow(m)),
     ].filter(Boolean);
+    if (!rows.length) rows.push(h("li", { class: "muted" }, "Nothing waits on you."));
+    if (answered.length) rows.push(h("li", { class: "attention-answered" }, h("details", {}, h("summary", { class: "muted", title: "Your answers are on these tasks. Each leaves the list once the agent acts on it." }, `Answered, waiting for the agent (${answered.length})`), h("ol", { class: "attention-list" }, answered.map(questionRow)))));
     const seenRows = [...assigned.seen.map((t) => assignmentRow(t, true)), ...ms.seen.map((m) => mentionRow(m, true))];
     if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), h("ol", { class: "attention-list" }, seenRows))));
-    list.replaceChildren(...(rows.length ? rows : [h("li", { class: "muted" }, "Nothing waits on you.")]));
+    list.replaceChildren(...rows);
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
 }
@@ -4465,20 +4485,24 @@ function showLocalProblem(repo, e) {
   app.pageTitle = repo.label;
   renderHeader();
   const retry = () => { app.trees.delete(repo.id); route(); };
+  const pickAgain = (label, primary) => (canPickFolder() ? h("button", { class: `btn ${primary ? "primary" : "ghost"}`, onclick: async () => {
+    const handle = await pickFolder();
+    if (handle) { await local.create(repo, { handle }); retry(); }
+  } }, icon("folder"), label) : null);
   if (e.need === "permission") {
     return showMain(emptyState("folder", `Open ${repo.label}`,
-      `${e.message} Press Allow the folder, then Allow (or Allow on every visit, if the browser offers it).`,
+      `${e.message} Press Allow the folder, then Allow (or Allow on every visit, if the browser offers it). If nothing happens, pick the same folder again.`,
       h("button", { class: "btn primary", onclick: async () => {
         if (await local.allow(repo)) retry();
         else toast("The browser didn't allow the folder.", "error");
-      } }, icon("folder"), "Allow the folder")));
+      } }, icon("folder"), "Allow the folder"),
+      pickAgain("Pick the folder again", false)));
+  }
+  if (e.need === "stuck") {
+    return showMain(emptyState("folder", `Pick ${repo.label}'s folder again`, e.message, pickAgain("Pick the folder again", true)));
   }
   if (e.need === "folder") {
-    return showMain(emptyState("folder", `Pick ${repo.label}'s folder`, e.message,
-      canPickFolder() ? h("button", { class: "btn primary", onclick: async () => {
-        const handle = await pickFolder();
-        if (handle) { await local.create(repo, { handle }); retry(); }
-      } }, icon("folder"), "Pick the folder") : null));
+    return showMain(emptyState("folder", `Pick ${repo.label}'s folder`, e.message, pickAgain("Pick the folder", true)));
   }
   showProblem(`Couldn't open ${repo.label}`, e.message, e);
 }
@@ -4942,6 +4966,14 @@ function showSettings(adding = false, tokenOwner = "") {
     copyRepos.length ? h("div", { class: "field" }, h("span", {}, "Copies of the vaults"),
       h("small", { class: "hint" }, "Each vault on GitHub is kept on this device too, so it opens with no connection. GitHub keeps the main copy: dropping one here loses nothing."),
       copies) : null,
+    h("div", { class: "field" },
+      h("span", {}, "App version"),
+      h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
+        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => switchVersion(false) }, "Released"),
+        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => switchVersion(true) }, "In development")),
+      h("small", { class: "hint" }, DEV_BUILD
+        ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
+        : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
     h("p", {}, drafts.length ? `${drafts.length} unsaved ${drafts.length === 1 ? "draft is" : "drafts are"} kept in this browser.` : "No unsaved drafts are kept in this browser."),
     drafts.length ? h("button", { class: "btn small danger", onclick: async () => {
       if (!(await confirmDialog("Discard every unsaved draft?", "Changes you never saved will be gone.", "Discard all", true))) return;
@@ -4991,6 +5023,10 @@ function start() {
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
+  const versionBtn = $("#version-btn");
+  fill(versionBtn, icon(DEV_BUILD ? "back" : "code"), DEV_BUILD ? "Use the released version" : "Try the dev version");
+  versionBtn.title = DEV_BUILD ? "The released version: reviewed and steady" : "The newest work, before it's released: things may break";
+  versionBtn.addEventListener("click", () => { closeMenu(); switchVersion(!DEV_BUILD); });
   $("#export-pdf-btn").addEventListener("click", async () => {
     closeMenu();
     const f = app.file;
