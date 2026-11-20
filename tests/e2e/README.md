@@ -72,3 +72,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Answered questions check
 
 `node answered-questions.mjs <screenshots-folder>` makes a local browser vault with fictional people, an inbox and two tasks with questions. An answered question must fold under *Answered, waiting for the agent*, apart from what waits, and stay so after a reload; once both are answered nothing waits and the Inbox dot is off; a question the agent cleared leaves the list. Desktop/phone light/dark screenshots. No token or remote calls.
+
+## Comment reply check
+
+`node comment-reply.mjs <screenshots-folder>` makes a local browser vault with fictional people: a mention in a task's Comments and an unrelated one in another note. It replies with **Post** in the Comments box and checks the saved dated comment, that the answered mention leaves Needs attention while the other stays, and that the Inbox dot agrees, before and after a reload. No token or remote calls.

@@ -1970,15 +1970,14 @@ function fillMentions(root, repo) {
 
 /** Every mention in a note (`findMentions`), from its whole text: cached by blob sha, like `taskStates`. */
 async function noteMentions(repo, tree, paths) {
-  // Mentions in named sections now count, so older scans must be rebuilt.
-  store.remove(`mentions:${repo.id}`);
-  store.remove(`mentions2:${repo.id}`);
-  const cache = baseCache("mentions3", repo);
+  // Older scans missed mentions in named sections, then replies posted as dated comments: they're rebuilt.
+  for (const old of ["mentions", "mentions2", "mentions3"]) store.remove(`${old}:${repo.id}`);
+  const cache = baseCache("mentions4", repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
     for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = findMentions(text);
     const live = new Set(tree.files.values());
-    keepBaseCache("mentions3", repo, (sha) => live.has(sha));
+    keepBaseCache("mentions4", repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? []]));
 }
