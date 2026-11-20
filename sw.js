@@ -1,6 +1,6 @@
 // Caches the app's own files so it opens fast and survives a flaky connection.
 // Notes always come from api.github.com and are never cached here.
-const VERSION = "commonplace-v88";
+const VERSION = "commonplace-v89";
 // Caches are named after their scope, and each version clears only its own old ones, so the retired
 // dev/ preview's clean-up (tools/retired-dev/sw.js) never removes the released app's cache.
 const SCOPE = new URL(self.registration.scope).pathname;

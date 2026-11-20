@@ -43,16 +43,35 @@ test("a local vault is told apart from a GitHub repo", () => {
   assert.equal(isLocal(null), false);
 });
 
-test("the tree lists every file with git's sha, and the shas read the files back", async () => {
-  const { src } = source({ "Home.md": "hello\n", "Notes/A.md": "a" });
+test("the tree lists every file without reading any, and its shas read the files back", async () => {
+  const { src, mem } = source({ "Home.md": "hello\n", "Notes/A.md": "a", "Assets/clip.mp4": "big video" });
+  const listed = mem.list;
+  let read = 0;
+  mem.list = async (...args) => (await listed(...args)).map((f) => ({ ...f, bytes: async () => { read++; return f.bytes(); } }));
   const { tree, truncated } = await src.tree(vault);
   assert.equal(truncated, false);
+  assert.equal(read, 0, "listing reads no file");
   const home = tree.find((e) => e.path === "Home.md");
-  assert.deepEqual(home, { path: "Home.md", type: "blob", sha: "ce013625030ba8dba906f756967f9e9ca394464a" });
+  assert.equal(home.type, "blob");
+  assert.match(home.sha, /^[0-9a-f]{40}$/);
+  assert.equal(new Set(tree.map((e) => e.sha)).size, 3);
   assert.equal(await src.readBlobText(vault, home.sha), "hello\n");
   assert.equal(await (await src.readBlob(vault, home.sha)).text(), "hello\n");
+  // The same file keeps its sha; a changed file gets a new one. Reading a note gives git's sha, as on GitHub.
+  assert.equal((await src.tree(vault)).tree.find((e) => e.path === "Home.md").sha, home.sha);
+  await mem.write("Home.md", enc("hello again\n"));
+  assert.notEqual((await src.tree(vault)).tree.find((e) => e.path === "Home.md").sha, home.sha);
+  assert.equal((await src.readText(vault, "Home.md")).sha, await blobSha("hello again\n"));
   assert.deepEqual(await src.headSha(vault), { sha: null, etag: null });
   assert.equal((await src.repo(vault)).permissions.push, true);
+});
+
+test("a vault with a folder lists only the files under it", async () => {
+  const { src, mem } = source({ "Wiki/Home.md": "hello\n", "Game/level.pck": "big" });
+  const listed = mem.list;
+  mem.list = async (withDots, under = "") => (await listed()).filter((f) => f.path.startsWith(under));
+  const { tree } = await src.tree({ ...vault, folder: "Wiki" });
+  assert.deepEqual(tree.map((e) => e.path), ["Wiki/Home.md"]);
 });
 
 test("saving checks the file didn't change since it was read, like GitHub", async () => {

@@ -64,3 +64,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## PDF export check
 
 `node export-pdf.mjs <output-folder>` uses local fixtures without a token or remote requests. It intercepts the print dialog, exports real A4 PDFs in desktop/phone light/dark modes, and checks expanded folds, callouts, embedded content, lazy images, Mermaid diagrams, a multi-page table, task field values and history, control removal, cleanup and unsaved drafts. Render the PDFs for visual review. The final native print/share sheet on mobile still depends on the browser and operating system.
+
+## Local folder load check
+
+`node local-load.mjs <screenshots-folder>` fills a folder in the browser's own private file system with notes and big files beside them, opens it as a local folder vault, and prints how long it took and how many bytes were read. It fails if opening reads the big files, makes any network call or shows a page error, and checks that a note and a big file still open from the list. `NOTES`, `BIG` and `BIG_MB` change the sizes; `BASE` and `CHROME` have the same defaults as the main check. No token is needed.

@@ -165,6 +165,12 @@ const encode = (text) => new TextEncoder().encode(text);
 const decode = (bytes) => new TextDecoder("utf-8").decode(bytes);
 const SEARCHED = /\.(md|markdown|txt|csv|tsv|base|json|ya?ml|canvas)$/i;
 
+/** A sha that stands for a file in a local vault's tree, from "path|time|size": 40 hex digits, like git's. */
+export async function standInSha(key) {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", encode(`local ${key}`)));
+  return [...hash].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** The local vaults' files, with the calls the app makes on GitHub. */
 export class LocalSource {
   constructor() {
@@ -201,16 +207,21 @@ export class LocalSource {
     return r.local === "folder" ? (await folderOf(r.id))?.name || "" : "";
   }
 
-  /** Every file and its sha (git's, so a note's sha means the same as on GitHub), like GitHub's tree. */
+  /**
+   * Every file of the vault (under its folder, when it has one), like GitHub's tree. Listing reads no file: each sha is
+   * a stand-in made from the file's path, size and time, so a folder with big files (videos, a game's assets) opens
+   * at once. It changes whenever the file does; reading a note gives its real sha, as on GitHub.
+   */
   async tree(r) {
-    const all = await (await this.files(r)).list();
+    const prefix = r.folder ? `${r.folder.replace(/\/+$/, "")}/` : "";
+    const all = await (await this.files(r)).list(false, prefix);
     const st = this.state(r);
     st.paths = new Map();
     const tree = await Promise.all(all.map(async (f) => {
       const key = `${f.path}|${f.mtime}|${f.size}`;
       let sha = st.shas.get(key);
       if (!sha) {
-        sha = await blobSha(await f.bytes());
+        sha = await standInSha(key);
         st.shas.set(key, sha);
       }
       st.paths.set(sha, f.path);
