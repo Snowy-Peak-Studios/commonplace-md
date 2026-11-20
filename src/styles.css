@@ -437,8 +437,9 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   text-align: left;
   font-size: 14px;
   color: var(--text);
+  white-space: nowrap;
 }
-.menu button .icon { width: 17px; height: 17px; color: var(--muted); }
+.menu button .icon { width: 17px; height: 17px; flex: none; color: var(--muted); }
 .menu button:hover { background: var(--bg-hover); }
 
 main { flex: 1; overflow: auto; min-height: 0; scroll-padding-top: 16px; }

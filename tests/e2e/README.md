@@ -80,3 +80,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Stuck folder check
 
 `node local-stuck.mjs <screenshots-folder>` keeps a folder vault in the browser's own private file system and makes the browser never answer whether the page may open it, as Chrome has been seen to do for a folder kept from an earlier visit. Within a few seconds the app must ask to pick the folder again instead of staying on "Loading the files…", and picking it opens the vault. No token or network calls.
+
+## Version switch check
+
+`node version-switch.mjs <screenshots-folder>` serves this clone at both `/` and `/dev/` on a port of its own (`PORT`, default 8799), as GitHub Pages serves `main` and `dev`. On the released version the **⋯** menu's **Try the dev version** must open `dev/` at the same note and remember the choice; there **Use the released version** must come back. Desktop/phone light/dark screenshots of the menu; no token, page errors or network calls.

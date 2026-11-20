@@ -39,6 +39,11 @@ const versionHref = (dev) =>
   new URL(DEV_BUILD ? (dev ? "./" : "../") : (dev ? "dev/" : "./"), location.href).pathname + location.hash;
 /** Set in this tab just before the released version sends it on to the development one. */
 const TO_DEV = "commonplace:to-dev";
+/** Opens the released or the development version at the same note; this device keeps opening that one. */
+function switchVersion(dev) {
+  store.set("version", dev ? "dev" : "main");
+  if (dev !== DEV_BUILD) location.assign(versionHref(dev));
+}
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -4917,10 +4922,6 @@ function showSettings(adding = false, tokenOwner = "") {
   const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith(store.prefix + "draft:"));
   let drafts = [];
   try { drafts = draftKeys(); } catch { /* storage blocked */ }
-  const pickVersion = (dev) => {
-    store.set("version", dev ? "dev" : "main");
-    if (dev !== DEV_BUILD) location.assign(versionHref(dev));
-  };
   const copies = h("ul", { class: "checks copies" });
   const copyRepos = app.repos.filter((r) => !isLocal(r));
   for (const r of copyRepos) {
@@ -4968,8 +4969,8 @@ function showSettings(adding = false, tokenOwner = "") {
     h("div", { class: "field" },
       h("span", {}, "App version"),
       h("div", { class: "seg version-pick", role: "group", "aria-label": "App version" },
-        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => pickVersion(false) }, "Released"),
-        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => pickVersion(true) }, "In development")),
+        h("button", { type: "button", class: DEV_BUILD ? "" : "on", "aria-pressed": String(!DEV_BUILD), onclick: () => switchVersion(false) }, "Released"),
+        h("button", { type: "button", class: DEV_BUILD ? "on" : "", "aria-pressed": String(DEV_BUILD), onclick: () => switchVersion(true) }, "In development")),
       h("small", { class: "hint" }, DEV_BUILD
         ? "You're on the version in development: the newest work, not released yet, so things may break. This device opens it from now on, also from the usual address."
         : "You're on the released version. The version in development has the newest work before it's released, and things may break there.")),
@@ -5022,6 +5023,10 @@ function start() {
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
+  const versionBtn = $("#version-btn");
+  fill(versionBtn, icon(DEV_BUILD ? "back" : "code"), DEV_BUILD ? "Use the released version" : "Try the dev version");
+  versionBtn.title = DEV_BUILD ? "The released version: reviewed and steady" : "The newest work, before it's released: things may break";
+  versionBtn.addEventListener("click", () => { closeMenu(); switchVersion(!DEV_BUILD); });
   $("#export-pdf-btn").addEventListener("click", async () => {
     closeMenu();
     const f = app.file;

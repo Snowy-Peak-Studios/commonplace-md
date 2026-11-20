@@ -104,7 +104,7 @@ at https://snowy-peak-studios.github.io/commonplace-md/ (code: https://github.co
 
 Either:
 
-- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, served beside it at <https://snowy-peak-studios.github.io/commonplace-md/dev/>, and reaches `main` at the next release. **Settings › This device › App version** picks which one your device opens: *Released* or *In development* (the newest work, which may break). The choice is kept, so the usual address and the installed app open the one you picked; both use the same token and settings.
+- **A. Use the hosted app:** <https://snowy-peak-studios.github.io/commonplace-md/>. It's this repo's `main` branch, served by GitHub Pages: the latest release. Work in progress is on the `dev` branch, served beside it at <https://snowy-peak-studios.github.io/commonplace-md/dev/>, and reaches `main` at the next release. **Settings › This device › App version** picks which one your device opens: *Released* or *In development* (the newest work, which may break). The **⋯** menu at the top right has the same switch: **Try the dev version**, and there **Use the released version**. The choice is kept, so the usual address and the installed app open the one you picked; both use the same token and settings.
 - **B. Host your own copy:**
   1. Fork [github.com/Snowy-Peak-Studios/commonplace-md](https://github.com/Snowy-Peak-Studios/commonplace-md) (keep the name `commonplace-md`, or change the address below to match).
   2. In your fork: **Settings › Pages › Build and deployment**: Source *Deploy from a branch*, branch `main`, folder `/ (root)`. Save.
