@@ -397,6 +397,9 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
   font-weight: 500;
 }
 .seg button .icon { width: 16px; height: 16px; }
+.version-pick { display: flex; width: fit-content; }
+/* The development version says so, beside the signed-in person at the foot of the sidebar. */
+.dev-build #who::after { content: "dev"; margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--warn); background: var(--warn-soft); }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--bg-raise); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
 

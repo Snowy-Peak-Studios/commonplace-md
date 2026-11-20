@@ -94,12 +94,3 @@ export function migrateInboxOverview(storage) {
 }
 
 try { if (typeof localStorage !== "undefined") migrateInboxOverview(localStorage); } catch { /* no browser storage */ }
-
-/** The public development site is retired; keep notes, credentials and drafts untouched. */
-export function retireDevelopmentPreference(storage) {
-  for (const key of ["version", "to-dev"]) {
-    try { storage.removeItem(PREFIX + key); } catch { /* blocked storage must not stop startup */ }
-  }
-}
-try { if (typeof localStorage !== "undefined") retireDevelopmentPreference(localStorage); } catch { /* blocked */ }
-try { if (typeof sessionStorage !== "undefined") retireDevelopmentPreference(sessionStorage); } catch { /* blocked */ }

@@ -10,7 +10,7 @@ import { parseBase, candidatePaths, runView, noteProps } from "../../src/bases.j
 const BASE = process.env.BASE || "http://localhost:8765/";
 const OWNER = process.env.OWNER || "Snowy-Peak-Studios";
 const REPO = process.env.REPO || "commonplace-md";
-const BRANCH = process.env.BRANCH || "main";
+const BRANCH = process.env.BRANCH || "dev";
 const FOLDER = (process.env.FOLDER ?? "example-vault").replace(/^\/+|\/+$/g, "");
 const OUT = process.argv[2];
 const token = process.env.GH_TOKEN;
