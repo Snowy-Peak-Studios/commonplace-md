@@ -4,7 +4,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { blobSha } from "../src/github.js";
-import { LocalSource, withLocal, isLocal, zipFiles, crc32, EXAMPLE_VAULTS, fetchExample, emptyVault } from "../src/local.js";
+import { LocalSource, withLocal, isLocal, zipFiles, crc32, EXAMPLE_VAULTS, fetchExample, emptyVault, folderPermission } from "../src/local.js";
 
 const enc = (s) => new TextEncoder().encode(s);
 
@@ -162,4 +162,15 @@ test("a starter fetch uses its marker and fails before returning an incomplete v
   assert.ok(fetch.mock.calls.every(({ arguments: [url] }) => url.href.startsWith(base.href)));
   fetch.mock.mockImplementation((url) => url.pathname.endsWith("Home.md") ? new Response("# Home") : new Response("", { status: 404 }));
   await assert.rejects(fetchExample(example, base), /example notes didn't come/);
+});
+
+test("a kept folder the browser never answers about counts as stuck, not as waiting forever", async () => {
+  const never = { queryPermission: () => new Promise(() => {}) };
+  const started = Date.now();
+  assert.equal(await folderPermission(never, 30), "stuck");
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(await folderPermission({ queryPermission: async () => "granted" }, 30), "granted");
+  assert.equal(await folderPermission({ queryPermission: async () => "prompt" }, 30), "prompt");
+  assert.equal(await folderPermission({ queryPermission: async () => { throw new Error("gone"); } }, 30), "prompt");
+  assert.equal(await folderPermission({}, 30), "granted", "a browser without permissions to ask");
 });

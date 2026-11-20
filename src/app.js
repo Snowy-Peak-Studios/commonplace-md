@@ -2264,7 +2264,7 @@ async function openOverviewSetup() {
         const props = noteProps(data.text);
         return { owner: props.owner, github: typeof props.github === "string" ? props.github : "" };
       } catch (e) {
-        if (e.need === "folder" || e.need === "permission") throw new Error("Open this source and allow its folder, then check the inbox again.");
+        if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw new Error("Open this source and allow its folder, then check the inbox again.");
         if (e.status === 404) throw new Error(`The inbox ${path} was not found or this account cannot read it. Check the path and source access.`);
         throw e;
       }
@@ -2365,7 +2365,7 @@ async function readOverviewSource(repo, source, options, files, current) {
     kept[key] = { login, disabled: marker.modules?.inboxes === false, tasks: marker.tasks ?? null, checkedAt: Date.now() };
     store.set("inboxOverviewSourceSettings", kept);
   } catch (e) {
-    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder.");
     const prior = settings?.[key];
     if ((offline || e.status === 0) && prior && prior.login === login) { marker = { modules: { inboxes: !prior.disabled }, tasks: prior.tasks }; offline = true; }
     else throw fail(e.status === 401 || e.status === 403 ? "access" : "setup", "The source's settings could not be checked. Open it online, then refresh.", e.status);
@@ -2375,7 +2375,7 @@ async function readOverviewSource(repo, source, options, files, current) {
   const setup = taskSetup(marker.tasks ?? null);
   let tree;
   try { tree = await loadTree(repo, true, { readOnly: true, current }); } catch (e) {
-    if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder.");
+    if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder.");
     throw e;
   }
   check();
@@ -2390,7 +2390,7 @@ async function readOverviewSource(repo, source, options, files, current) {
     const worker = async () => { while (current() && !failed && next < missing.length) {
       const path = missing[next++];
       try { const data = await gh.readText(repo, fullPath(repo, path), { readOnly: true }); check(); files.set(path, { sha: tree.files.get(path), text: data.text }); }
-      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission") throw fail("permission", "Open this source and allow its folder."); throw e; }
+      catch (e) { failed = true; if (e.need === "folder" || e.need === "permission" || e.need === "stuck") throw fail("permission", "Open this source and allow its folder."); throw e; }
     } };
     await Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
   } else {
@@ -4468,20 +4468,24 @@ function showLocalProblem(repo, e) {
   app.pageTitle = repo.label;
   renderHeader();
   const retry = () => { app.trees.delete(repo.id); route(); };
+  const pickAgain = (label, primary) => (canPickFolder() ? h("button", { class: `btn ${primary ? "primary" : "ghost"}`, onclick: async () => {
+    const handle = await pickFolder();
+    if (handle) { await local.create(repo, { handle }); retry(); }
+  } }, icon("folder"), label) : null);
   if (e.need === "permission") {
     return showMain(emptyState("folder", `Open ${repo.label}`,
-      `${e.message} Press Allow the folder, then Allow (or Allow on every visit, if the browser offers it).`,
+      `${e.message} Press Allow the folder, then Allow (or Allow on every visit, if the browser offers it). If nothing happens, pick the same folder again.`,
       h("button", { class: "btn primary", onclick: async () => {
         if (await local.allow(repo)) retry();
         else toast("The browser didn't allow the folder.", "error");
-      } }, icon("folder"), "Allow the folder")));
+      } }, icon("folder"), "Allow the folder"),
+      pickAgain("Pick the folder again", false)));
+  }
+  if (e.need === "stuck") {
+    return showMain(emptyState("folder", `Pick ${repo.label}'s folder again`, e.message, pickAgain("Pick the folder again", true)));
   }
   if (e.need === "folder") {
-    return showMain(emptyState("folder", `Pick ${repo.label}'s folder`, e.message,
-      canPickFolder() ? h("button", { class: "btn primary", onclick: async () => {
-        const handle = await pickFolder();
-        if (handle) { await local.create(repo, { handle }); retry(); }
-      } }, icon("folder"), "Pick the folder") : null));
+    return showMain(emptyState("folder", `Pick ${repo.label}'s folder`, e.message, pickAgain("Pick the folder", true)));
   }
   showProblem(`Couldn't open ${repo.label}`, e.message, e);
 }

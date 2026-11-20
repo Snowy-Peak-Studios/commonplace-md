@@ -76,3 +76,7 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Comment reply check
 
 `node comment-reply.mjs <screenshots-folder>` makes a local browser vault with fictional people: a mention in a task's Comments and an unrelated one in another note. It replies with **Post** in the Comments box and checks the saved dated comment, that the answered mention leaves Needs attention while the other stays, and that the Inbox dot agrees, before and after a reload. No token or remote calls.
+
+## Stuck folder check
+
+`node local-stuck.mjs <screenshots-folder>` keeps a folder vault in the browser's own private file system and makes the browser never answer whether the page may open it, as Chrome has been seen to do for a folder kept from an earlier visit. Within a few seconds the app must ask to pick the folder again instead of staying on "Loading the files…", and picking it opens the vault. No token or network calls.
