@@ -1089,6 +1089,72 @@ export function withReviewer(setup, text, who = "") {
   return reviewer ? withProps(text, [[field.prop, reviewer]]) : text;
 }
 
+// ---- a page's contents and subpages ----
+
+/** The block names that list a page's headings (```toc) and the pages under it (```subpages). */
+export const PAGE_LIST_BLOCKS = ["toc", "subpages"];
+
+/**
+ * How deep a ```toc or ```subpages block goes, from its options (`depth:`): for toc, the smallest heading it
+ * shows, 2 (`##`) to 6, default 3; for subpages, how many levels of pages under this one, 1 to 3, default 1.
+ * Null when `depth` is not one of those.
+ */
+export function pageListDepth(kind, options) {
+  const [min, max, fallback] = kind === "toc" ? [2, 6, 3] : [1, 3, 1];
+  const raw = options?.depth;
+  if (raw == null || String(raw).trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+
+/**
+ * A page's table of contents from its headings in order (`{ name, level }`, level 1 to 6): the `##` to
+ * `depth` ones, nested under the heading above them. The page's title (`#`) is left out.
+ */
+export function tocTree(headings, depth = 3) {
+  const root = { level: 1, children: [] };
+  const stack = [root];
+  for (const { name, level } of headings) {
+    if (!(level >= 2 && level <= depth) || !String(name ?? "").trim()) continue;
+    while (stack.length > 1 && stack.at(-1).level >= level) stack.pop();
+    const node = { name, level, children: [] };
+    stack.at(-1).children.push(node);
+    stack.push(node);
+  }
+  return root.children;
+}
+
+/**
+ * The pages whose `parent` property leads to `path`, by name, each with its own subpages down to `depth`
+ * levels: `[{ path, children }]`. Pages with an `order` number come first, smallest first; the rest follow by
+ * name. `resolve(target, from)` finds a link's page; `skip(path)` leaves pages out (a project's tasks, which
+ * the board lists). A page shows once, even when parents loop.
+ */
+export function subpagesOf(notes, path, { resolve, skip = () => false, depth = 1 } = {}) {
+  const under = new Map();
+  const order = new Map();
+  for (const n of notes) {
+    if (skip(n.path)) continue;
+    const target = linkTarget(n.props?.parent);
+    const to = target ? resolve(target, n.path) : null;
+    if (!to || to === n.path) continue;
+    if (!under.has(to)) under.set(to, []);
+    under.get(to).push(n.path);
+    const o = n.props?.order;
+    if (!blank(o) && Number.isFinite(Number(o))) order.set(n.path, Number(o));
+  }
+  const name = (p) => p.split("/").pop().replace(/\.md$/i, "");
+  const rank = (p) => order.get(p) ?? Infinity;
+  const seen = new Set([path]);
+  const walk = (at, left) => {
+    const kids = (under.get(at) || []).filter((p) => !seen.has(p))
+      .sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) < rank(b) ? -1 : 1) || name(a).localeCompare(name(b)) || a.localeCompare(b));
+    kids.forEach((p) => seen.add(p));
+    return kids.map((p) => ({ path: p, children: left > 1 ? walk(p, left - 1) : [] }));
+  };
+  return walk(path, depth);
+}
+
 // ---- parent tasks and subtasks ----
 
 /** The property a field of the setup is kept in (its key when there's no setup): `fieldProp(setup, "part_of")`. */

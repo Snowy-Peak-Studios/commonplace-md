@@ -19,6 +19,8 @@ Block names are case insensitive. Put app blocks directly in the note; views ins
 | [board](#board) | Task cards in status columns |
 | [ai-work-time](#ai-work-time) | Recorded AI work time grouped as a chart |
 | [base](#base) | Tables with filters, formulas and views |
+| [toc](#toc) | The page's headings, as links |
+| [subpages](#subpages) | The pages under this one, from their `parent` property |
 | [mermaid](#mermaid) | A diagram written as text |
 | [description](#description), [acceptance-criteria](#acceptance-criteria), [comments](#comments), [work-history](#work-history) | Named sections containing Markdown |
 
@@ -197,6 +199,32 @@ group: area-type
 ```
 
 The only supported setting is `group`: `area-type` (default), `area` or `type`. Tasks need the corresponding grouping properties and valid AI time records. The block uses the project's task settings and stays inert in embedded pages.
+
+## toc
+
+Lists the page's headings, each a link to its place, nested as they are on the page. It follows the page as its headings change. The page's title (`#`) is left out.
+
+```toc
+depth: 3
+```
+
+`depth` is the smallest heading it shows: `2` for `##` only, up to `6`. Without it, `##` and `###` show. Only headings directly in the page are listed, not those inside callouts or embedded pages.
+
+## subpages
+
+Lists the pages whose `parent` property leads to this page, as links. A page's `description` property shows after its name, as one line of Markdown. It follows the pages as they change.
+
+```subpages
+depth: 2
+page: "[[Guides]]"
+```
+
+| Setting | Default | Use |
+| --- | --- | --- |
+| `depth` | `1` | How many levels of pages: `1` to `3`. Deeper pages nest under their parents. |
+| `page` | This page | Another page's name or link, to list its subpages instead. |
+
+Pages with an `order` number come first, smallest first; the rest follow by name. The project's tasks aren't listed; the task board shows them. A page shows once, even when parents loop. The block stays as its source in embedded pages.
 
 ## base
 

@@ -8,6 +8,7 @@ import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
+  pageListDepth, tocTree, subpagesOf,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
@@ -1103,6 +1104,7 @@ function renderPreview() {
   const previousBoards = [...f.dom.preview.querySelectorAll(".board-columns")].map((board) => board.scrollLeft);
   fillBoards(body, f);
   fillAiTime(body, f);
+  fillPageLists(body, f);
   if (previousBoards.some(Boolean)) {
     requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
       board.scrollLeft = previousBoards[i] ?? 0;
@@ -1182,6 +1184,66 @@ function fillAiTime(root, f) {
         : h("p", { class: "muted" }, "No completed AI tasks with valid work_time minutes and these grouping fields yet."),
       h("small", { class: "muted" }, "work_time is AI-only whole minutes. Missing or invalid values, cancelled tasks and epics are excluded. History does not predict a guaranteed finish time.")));
   }
+}
+
+/**
+ * A ```toc block lists the page's headings, each a link to its place; a ```subpages block lists the pages whose
+ * `parent` property leads to this page (not the project's tasks, which the board lists). Both follow the page as
+ * it changes, and stay as their source in embedded pages.
+ */
+function fillPageLists(root, f) {
+  for (const el of root.querySelectorAll(".page-list-block")) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    const kind = el.dataset.kind;
+    // An empty block shows its name as its source (see markdown.js), which is no option.
+    const source = el.querySelector("code").textContent;
+    let options;
+    try { options = source.trim() === kind ? {} : yamlLoad(source) || {}; } catch { options = null; }
+    const depth = options && typeof options === "object" ? pageListDepth(kind, options) : null;
+    if (depth == null) {
+      fill(el, h("p", { class: "muted" }, kind === "toc" ? "Check this toc block: depth is 2 to 6 (the smallest heading it shows)." : "Check this subpages block: depth is 1 to 3 (how many levels of pages)."));
+      continue;
+    }
+    el.replaceWith(kind === "toc" ? tocBox(root, f, depth) : subpagesBox(f, depth, linkTarget(options.page)));
+  }
+}
+
+function tocBox(root, f, depth) {
+  const headings = [...root.querySelectorAll(":scope > [data-heading]")].filter((x) => /^H[1-6]$/.test(x.tagName))
+    .map((x) => ({ name: x.dataset.heading, shown: x.textContent.trim() || x.dataset.heading, level: Number(x.tagName[1]) }));
+  const shown = new Map(headings.map((x) => [x.name, x.shown]));
+  const list = (nodes) => h("ul", {}, nodes.map((n) => h("li", {},
+    h("a", { class: "wikilink", href: hrefFor(f.repo, f.path, n.name), "data-path": f.path, "data-heading": n.name, "data-target": shownName(f.path) }, shown.get(n.name) || n.name),
+    n.children.length ? list(n.children) : null)));
+  const tree = tocTree(headings, depth);
+  return h("nav", { class: "page-list", "aria-label": "Contents" }, h("strong", {}, "Contents"),
+    tree.length ? list(tree) : h("p", { class: "muted" }, "No headings on this page yet. Add ## headings to list them here."));
+}
+
+/** `page:` (a name or a link) lists that page's subpages instead of this page's. */
+function subpagesBox(f, depth, page = "") {
+  const tree = app.trees.get(f.repo.id);
+  const entry = notesWithProps(f.repo, "pages", (p) => /\.md$/i.test(p));
+  const head = h("strong", {}, "Subpages");
+  if (!tree || !entry.notes) return h("nav", { class: "page-list", "aria-label": "Subpages" }, head, h("p", { class: "muted", role: "status" }, "Looking for subpages…"));
+  const of = page ? tree.index.resolve(page, f.path) : f.path;
+  if (!of) return h("nav", { class: "page-list", "aria-label": "Subpages" }, head, h("p", { class: "muted" }, `No page is called “${page}”, so this subpages block shows nothing.`));
+  const setup = taskSetupOf(f.repo);
+  const pages = subpagesOf(entry.notes, of, { resolve: (t, from) => tree.index.resolve(t, from), skip: (p) => !!setup && isSetupTask(setup, p), depth });
+  // A page's `description` property shows after its name, as a line of Markdown (code, links, bold).
+  const props = new Map(entry.notes.map((n) => [n.path, n.props]));
+  const about = (path) => {
+    const said = props.get(path)?.description;
+    if (typeof said !== "string" || !said.trim()) return null;
+    const span = h("span", { class: "page-list-about" });
+    span.innerHTML = sanitize(md.renderInline(said.trim(), linkEnv(f.repo, path)));
+    return [": ", span];
+  };
+  const list = (nodes) => h("ul", {}, nodes.map((n) => h("li", {},
+    h("a", { class: "wikilink", href: hrefFor(f.repo, n.path), "data-path": n.path, "data-heading": "", "data-target": shownName(n.path) }, shownName(n.path)),
+    about(n.path), n.children.length ? list(n.children) : null)));
+  return h("nav", { class: "page-list", "aria-label": "Subpages" }, head,
+    pages.length ? list(pages) : h("p", { class: "muted" }, `No pages have ${shownName(of)} as their parent yet. Add parent: "[[${shownName(of)}]]" to a page's properties to list it here.`));
 }
 
 /** How wide a table or base view may grow on a big screen. */

@@ -277,3 +277,33 @@ views:
 ```
 
 To use a shared file, write `![[Bases/Tasks.base]]`. The [Task Board](../Task%20Board.md) shows that full view with its tabs.
+
+## Contents and subpages
+
+### A table of contents
+
+A `toc` block lists the page's headings, each a link to its place, nested as they are on the page. `depth` is the smallest heading it shows: `2` for `##` only, up to `6`; without it, `##` and `###`. It follows the page as you change its headings.
+
+~~~markdown
+```toc
+depth: 2
+```
+~~~
+
+```toc
+depth: 2
+```
+
+### Subpages
+
+A `subpages` block lists the pages whose `parent` property leads to this page, with each page's `description` property after its name. Pages with an `order` number come first; the rest follow by name. `depth` shows the pages under those too, up to `3` levels. `page:` lists another page's subpages instead. Tasks aren't listed; the task board shows them.
+
+~~~markdown
+```subpages
+page: "[[How To]]"
+```
+~~~
+
+```subpages
+page: "[[How To]]"
+```

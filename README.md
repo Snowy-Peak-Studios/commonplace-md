@@ -10,6 +10,8 @@
 
 </div>
 
+**Contents:** [What it is](#what-it-is) · [A look inside](#a-look-inside) · [Quick start](#quick-start) · [Guides](#guides) · [License](#license)
+
 ## What it is
 
 **Commonplace.md** brings your wiki, notes and task board together as plain Markdown files you own. Keep them in a local vault on one device, or in your own GitHub repo for a team and multiple devices. It runs in your browser and can be installed as an app.
@@ -41,12 +43,16 @@
 
 ## Guides
 
+Every guide in `docs/`, in one place.
+
 | Looking for… | Read |
 | --- | --- |
+| Setting it up, on one device or with GitHub | [Getting started](docs/getting-started.md) |
 | How to use it and what it does | [Usage and features](docs/using-commonplace.md) · [Short how-to pages](example-vault/How%20To/How%20To.md) |
 | Every block, its options and examples | [Block reference](docs/blocks.md) |
 | Markdown, links and supported file features | [Markdown examples](docs/markdown-and-blocks.md) · [Markdown support](docs/markdown-support.md) |
 | Repo settings, task fields and sprints | [Settings reference](docs/settings.md) |
+| Screenshots of the board, tasks and phone layouts | [Gallery](docs/gallery.md) |
 | Starter vaults and the feature-guide files | [Example vaults](docs/example-vaults.md) |
 | Team access, invite links and inboxes | [Sharing and inboxes](docs/collaboration.md) |
 | Agent setup, rules and skills | [Working with AI agents](docs/ai-agents.md) |

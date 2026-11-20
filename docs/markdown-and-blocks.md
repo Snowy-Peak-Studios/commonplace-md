@@ -8,5 +8,6 @@ For every block's settings, defaults and copyable examples, see the [block refer
 - [Inbox blocks](../example-vault/How%20To/Markdown%20and%20blocks.md#inbox-blocks) covers top tasks, needs attention and new tasks.
 - [Task and sprint blocks](../example-vault/How%20To/Markdown%20and%20blocks.md#task-and-sprint-blocks) covers subtasks, relations, commits and sprints.
 - [Diagrams and views](../example-vault/How%20To/Markdown%20and%20blocks.md#diagrams-and-views) covers Mermaid and base tables.
+- [Contents and subpages](../example-vault/How%20To/Markdown%20and%20blocks.md#contents-and-subpages) covers a table of contents and a list of a page's subpages.
 
 The guide is part of the example vault. Open **How To → Markdown and blocks** in Commonplace.md to see the examples work with the vault's notes and tasks.

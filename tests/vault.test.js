@@ -8,6 +8,7 @@ import {
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
   isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
+  pageListDepth, tocTree, subpagesOf,
   hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
 } from "../src/vault.js";
 
@@ -1063,4 +1064,35 @@ test("a mention in Comments is answered by the next dated comment that starts wi
   // A comment of words with no @ isn't a reply; the plain format (the reply on the very next line) still counts.
   assert.equal(findMentions("```comments\n- **ann-lee** · 2026-11-18 19:22 UTC\n\n    @bob-k look\n\n- **bob-k** · 2026-11-18 19:31 UTC\n\n    Looks good.\n```")[0].answered, false);
   assert.equal(findMentions("```comments\n- @bob-k look\n- @ann-lee done\n```").find((m) => m.login === "bob-k").answered, true);
+});
+
+test("a page's contents nest its headings and its subpages follow their parent property", () => {
+  assert.equal(pageListDepth("toc", {}), 3);
+  assert.equal(pageListDepth("toc", { depth: 4 }), 4);
+  assert.equal(pageListDepth("toc", { depth: 1 }), null);
+  assert.equal(pageListDepth("subpages", null), 1);
+  assert.equal(pageListDepth("subpages", { depth: "2" }), 2);
+  assert.equal(pageListDepth("subpages", { depth: 4 }), null);
+  const heads = [{ name: "Title", level: 1 }, { name: "A", level: 2 }, { name: "A1", level: 3 }, { name: "A1x", level: 4 }, { name: "B", level: 2 }, { name: "B0", level: 4 }];
+  const names = (nodes) => nodes.map((n) => n.children.length ? [n.name, names(n.children)] : n.name);
+  assert.deepEqual(names(tocTree(heads)), [["A", ["A1"]], "B"]);
+  assert.deepEqual(names(tocTree(heads, 4)), [["A", [["A1", ["A1x"]]]], ["B", ["B0"]]]);
+  const index = new LinkIndex(["Home.md", "Wiki/Guides.md", "Wiki/Setup.md", "Wiki/Deep.md", "Tasks/C-1.md", "Loop.md"]);
+  const notes = [
+    { path: "Wiki/Setup.md", props: { parent: "[[Home]]" } },
+    { path: "Wiki/Guides.md", props: { parent: "[[Home]]" } },
+    { path: "Wiki/Deep.md", props: { parent: "[[Guides]]" } },
+    { path: "Tasks/C-1.md", props: { parent: "[[Home]]" } },
+    { path: "Loop.md", props: { parent: "[[Loop]]" } },
+    { path: "Home.md", props: { parent: "[[Deep]]" } },
+  ];
+  const opts = { resolve: (t, from) => index.resolve(t, from), skip: (p) => p.startsWith("Tasks/") };
+  const paths = (nodes) => nodes.map((n) => n.children.length ? [n.path, paths(n.children)] : n.path);
+  assert.deepEqual(paths(subpagesOf(notes, "Home.md", opts)), ["Wiki/Guides.md", "Wiki/Setup.md"]);
+  // Deeper levels nest, and Home, looped back to from Deep, isn't shown again.
+  assert.deepEqual(paths(subpagesOf(notes, "Home.md", { ...opts, depth: 3 })), [["Wiki/Guides.md", ["Wiki/Deep.md"]], "Wiki/Setup.md"]);
+  assert.deepEqual(subpagesOf(notes, "Loop.md", opts), []);
+  // An `order` number puts a page first; pages without one follow by name.
+  const ordered = notes.map((n) => n.path === "Wiki/Setup.md" ? { ...n, props: { ...n.props, order: 1 } } : n);
+  assert.deepEqual(paths(subpagesOf(ordered, "Home.md", opts)), ["Wiki/Setup.md", "Wiki/Guides.md"]);
 });

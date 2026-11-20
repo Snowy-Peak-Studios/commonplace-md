@@ -235,3 +235,9 @@ test("AI history charts require an explicit fence and preserve escaped source op
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script>/);
 });
+
+test("toc and subpages fences become placeholders for the app, with escaped source", () => {
+  assert.match(render("```toc\n```"), /<div class="page-list-block" data-kind="toc"><pre><code>toc<\/code>/);
+  assert.match(render("```Subpages\ndepth: 2\n```"), /data-kind="subpages"><pre><code>depth: 2/);
+  assert.doesNotMatch(render("```toc\ndepth: <script>\n```"), /<script>/);
+});

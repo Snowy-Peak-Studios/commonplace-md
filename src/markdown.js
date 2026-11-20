@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
@@ -232,6 +232,8 @@ export function createMarkdown() {
     // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
     if (lang === "inbox-overview") return `<div class="inbox-overview-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     if (lang === "ai-work-time") return `<div class="ai-time-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
+    // A ```toc or ```subpages block: the app lists the page's headings, or the pages with it as their parent.
+    if (PAGE_LIST_BLOCKS.includes(lang)) return `<div class="page-list-block" data-kind="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
     // A `task:` line shows another task's box, on any page.

@@ -1416,6 +1416,13 @@ select.input { padding-right: 8px; }
 .ai-time-estimate { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--border); overflow-wrap: anywhere; }
 .ai-time-note { display: block; margin-top: 5px; }
 .ai-time-chart { margin: 20px 0; overflow-wrap: anywhere; }
+
+/* A page's contents (```toc) and subpages (```subpages): a quiet box of links, nested lists indented. */
+.page-list { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); overflow-wrap: anywhere; }
+.preview .page-list ul { margin: 6px 0 0; padding-left: 1.2em; }
+.preview .page-list ul ul { margin-top: 2px; }
+.preview .page-list li { margin: 2px 0; }
+.page-list p { margin: 6px 0 0; font-size: 13.5px; }
 .preview .ai-time-groups { list-style: none; padding: 0; display: grid; gap: 16px; }
 .ai-time-groups li { display: grid; gap: 4px; }
 .ai-time-track { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; }
