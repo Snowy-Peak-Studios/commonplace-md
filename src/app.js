@@ -1189,8 +1189,8 @@ function fillOccupied(root, f) {
             r.repo ? h("span", { class: "muted" }, `${r.repo}: `) : null, r.path + (r.folder ? "/" : "")),
           h("span", { class: "occupied-tasks" }, ...r.tasks.flatMap((t, i) => [i ? h("span", { class: "muted" }, " and ") : null, taskRef(t)])))))
         : h("p", { class: "muted sprint-empty" }, onlyConflicts ? "No two tasks in progress plan to change the same asset."
-          : "No task in progress lists assets yet. A task's ```assets block lists them; it counts from Claim until the task is done."),
-      h("p", { class: "muted assets-hint" }, "From the ```assets blocks of claimed tasks that aren't done. A warning, not a lock: check with the other task before you change the same file.")));
+          : "No task in progress lists assets yet. A task's ```assets block lists them; it counts while the task is claimed and in progress."),
+      h("p", { class: "muted assets-hint" }, "From the ```assets blocks of claimed tasks in progress. A warning, not a lock: check with the other task before you change the same file.")));
   }
 }
 
