@@ -4,12 +4,22 @@
 
 ## The example vault
 
+### Two example folders
+
+The repo has two, for two different jobs. Both show up in the app's list of example vaults.
+
+| Folder | What it is | Pick it when |
+| --- | --- | --- |
+| [`example-vault/`](../example-vault/Home.md) | The **Feature guide**: one small vault where each file shows something the app can do. It also has the rules and skills for AI agents. | You want to see every feature, or copy the agent rules into your own notes repo |
+| [`examples/`](../examples/) | Four **starter vaults**, one for each kind of use: a solo project, a small team, a large team and personal notes. Each is a real-looking sample project to start from. | You want a vault that already looks like your own work, to edit and keep |
+
 ### Pick a starter vault
 
 Open Commonplace.md and choose **Add a vault on this device**. Under **Start with**, pick **An example vault** and choose the one closest to what you do. The app copies its notes into your new local vault. You can try, edit and keep it without a GitHub account.
 
 | If you want to… | Choose |
 | --- | --- |
+| See every feature in one place, with the AI agent rules | [Feature guide · Commonplace.md](../example-vault/Home.md) (`example-vault/`) |
 | Plan and build an app by yourself, with an optional AI agent | [Solo project · Trail Timer](../examples/solo-project/Home.md) |
 | Hand work between a few people with their own inboxes | [Small team · Pocket Garden](../examples/small-team/Home.md) |
 | Plan a demo across roles, epics and sprints | [Large team · Signal Station](../examples/large-team/Home.md) |

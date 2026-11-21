@@ -53,7 +53,7 @@ Every guide in `docs/`, in one place.
 | Markdown, links and supported file features | [Markdown examples](docs/markdown-and-blocks.md) · [Markdown support](docs/markdown-support.md) |
 | Repo settings, task fields and sprints | [Settings reference](docs/settings.md) |
 | Screenshots of the board, tasks and phone layouts | [Gallery](docs/gallery.md) |
-| Starter vaults and the feature-guide files | [Example vaults](docs/example-vaults.md) |
+| The two example folders: `example-vault/` shows every feature, `examples/` has starter vaults for kinds of use | [Example vaults](docs/example-vaults.md#two-example-folders) |
 | Team access, invite links and inboxes | [Sharing and inboxes](docs/collaboration.md) |
 | Agent setup, rules and skills | [Working with AI agents](docs/ai-agents.md) |
 | Tokens, local storage and network access | [Privacy and security](docs/privacy.md) |
