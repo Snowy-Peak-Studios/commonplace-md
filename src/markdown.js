@@ -4,10 +4,10 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
-export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS];
+export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS, ...ASSET_BLOCKS];
 
 /** Callout kinds and the icon each shows. */
 const CALLOUT_ICONS = {
@@ -240,8 +240,10 @@ export function createMarkdown() {
     // how much of the sprint's box it shows and whose tasks it also counts.
     if (APP_BLOCKS.includes(lang)) {
       const o = appBlockOptions(token.content);
-      const keys = lang === "sprint" ? ["task", "sprint", "show", "owner", "login"] : ["task", "sprint"];
-      const attrs = keys.map((k) => (o[k] ? ` data-${k}="${esc(o[k])}"` : "")).join("");
+      // An ```assets block's lines are paths, not options; an empty one says so, since its code shows the block's name.
+      const keys = lang === "sprint" ? ["task", "sprint", "show", "owner", "login"] : lang === "assets" ? [] : ["task", "sprint"];
+      const attrs = keys.map((k) => (o[k] ? ` data-${k}="${esc(o[k])}"` : "")).join("")
+        + (lang === "assets" && !token.content.trim() ? ' data-empty="1"' : "");
       return `<div class="app-block" data-block="${lang}"${attrs}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);

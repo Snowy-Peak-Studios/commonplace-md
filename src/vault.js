@@ -263,6 +263,33 @@ export function relativeLink(href, fromPath = "") {
 /** The blocks a task's page shows its boxes in, and a sprint's: the app adds no box a note doesn't ask for. */
 export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
 export const SPRINT_BLOCKS = ["sprint"];
+/** A task's ```assets block: the files and assets it expects to occupy. Not added to new tasks by itself. */
+export const ASSET_BLOCKS = ["assets"];
+
+/**
+ * The assets a task's ```assets block lists, one per line, from the repo's root: `Source/Game/Player.cpp`,
+ * `Content/Maps/` (a folder ends with `/`), with an optional note after ` # `. A leading `- ` or `* `, backticks,
+ * quotes, `./` and `/` are dropped, `\` becomes `/`, and an empty line or one starting with `#` is skipped. The
+ * same path twice (in any case) is listed once. [{ path, folder, note }].
+ */
+export function assetList(src) {
+  const out = [], seen = new Set();
+  for (const raw of toLf(String(src ?? "")).split("\n")) {
+    let line = raw.trim().replace(/^[-*+][ \t]+/, "");
+    if (!line || line.startsWith("#")) continue;
+    let note = "";
+    const at = line.search(/[ \t]#[ \t]/);
+    if (at >= 0) { note = line.slice(at).replace(/^[ \t]#[ \t]*/, "").trim(); line = line.slice(0, at).trim(); }
+    const path = line.replace(/^[`"']+|[`"']+$/g, "").replace(/\\/g, "/").replace(/^(?:\.\/)+/, "").replace(/^\/+/, "").replace(/\/{2,}/g, "/");
+    if (!path || path === "." || path.split("/").includes("..")) continue;
+    const folder = path.endsWith("/");
+    const clean = folder ? path.replace(/\/+$/, "") : path;
+    if (!clean || seen.has(clean.toLowerCase())) continue;
+    seen.add(clean.toLowerCase());
+    out.push({ path: clean, folder, note });
+  }
+  return out;
+}
 
 /** Whether the note has a fenced block of this name: ```name (or ~~~name) on a line of its own. */
 export function hasBlock(text, name) {

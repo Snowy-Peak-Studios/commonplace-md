@@ -15,6 +15,7 @@ Block names are case insensitive. Put app blocks directly in the note; views ins
 | [subtasks](#subtasks) | A task's children and progress |
 | [relations](#relations) | Links between tasks |
 | [commits](#commits) | A task's saved commit links |
+| [assets](#assets) | The files and assets a task expects to occupy |
 | [sprint](#sprint) | A sprint's progress and tasks |
 | [board](#board) | Task cards in status columns |
 | [ai-work-time](#ai-work-time) | Recorded AI work time grouped as a chart |
@@ -152,6 +153,18 @@ task: Get set up
 ```
 
 The only applicable option is `task`: a name, ID or wikilink. Default: the current task. Leave the block empty on its own task page. A task with this block shows commits here instead of repeating them in its properties box.
+
+## assets
+
+Lists the files and assets a task expects to occupy: the plan, written before the work by the person or the agent. One path per line, from the repo's root; a folder ends with `/`; a note can follow after ` # `. A line starting with `#` is a comment.
+
+```assets
+Source/Game/Player.cpp # movement
+Content/Maps/Level 1.umap
+Content/Characters/
+```
+
+On its task page it shows as *Occupied assets*: a file in the vault links to its page, and in a GitHub vault any other path links to the file on GitHub. What the task really changed is in its [commits](#commits). On a page that isn't a task the block stays as code. New tasks don't get this block by themselves: add it where it helps, for example for game engine assets two tasks shouldn't change at once.
 
 ## sprint
 

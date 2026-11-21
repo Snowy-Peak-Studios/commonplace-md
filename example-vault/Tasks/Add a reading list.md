@@ -24,6 +24,11 @@ question: "Books only, or articles too?"
 ```commits
 ```
 
+```assets
+Data/Reading list.csv # the list itself
+Templates/
+```
+
 As a reader, I want a list of books to read, so that I can pick the next one quickly.
 
 ## ❓ Question

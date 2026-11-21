@@ -1166,3 +1166,27 @@ test("Clear seen: seen items leave the fold but stay seen, and the lists keep on
   assert.deepEqual(keptCleared(null, [ka], [t.key]), []);
   assert.deepEqual(keptCleared(ka, [ka], null), [ka], "one key written as text");
 });
+
+test("an assets block lists one path per line from the repo's root, folders with a slash, notes after #", async () => {
+  const { assetList } = await import("../src/vault.js");
+  assert.deepEqual(assetList(""), []);
+  assert.deepEqual(assetList([
+    "# planned for the movement work",
+    "- Source/Game/Player.cpp # movement",
+    "* `Content/Maps/Level 1.umap`",
+    "./Content/Characters/",
+    "  /Docs\\Design.md  ",
+    "source/game/player.cpp",
+    "../outside.txt",
+    "",
+    "\"Config/Default Game.ini\"",
+  ].join("\n")), [
+    { path: "Source/Game/Player.cpp", folder: false, note: "movement" },
+    { path: "Content/Maps/Level 1.umap", folder: false, note: "" },
+    { path: "Content/Characters", folder: true, note: "" },
+    { path: "Docs/Design.md", folder: false, note: "" },
+    { path: "Config/Default Game.ini", folder: false, note: "" },
+  ], "comments, the same path in another case and paths leaving the repo are left out");
+  assert.deepEqual(assetList("Notes/C#/Intro.md"), [{ path: "Notes/C#/Intro.md", folder: false, note: "" }], "a # inside a path stays");
+  assert.deepEqual(assetList("a.md\r\nb.md\r\n"), [{ path: "a.md", folder: false, note: "" }, { path: "b.md", folder: false, note: "" }]);
+});

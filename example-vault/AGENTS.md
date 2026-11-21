@@ -84,6 +84,10 @@ Tasks that belong here can still be committed with their source cleanup in one s
 - Finish the task you claimed, or hand it back for required review, before you start another.
 - **Giving one up:** set it back to `status: To Do` and `assignee: ""`, add a line on how far it got, commit and push.
 
+### Occupied assets
+
+- When a task will change files or assets, list them in its ` ```assets ` block when you claim it: one path per line from the repo's root, a folder ending with `/`. It's the plan, so your person and other agents can see what the task will touch. Update it when the plan changes. What you really changed is in the task's commits, not here.
+
 ### Done
 
 - When your person requires review, finish the criteria and checks, record the work/commit and previous agent assignment, then hand the task to its reviewer in Testing (or the configured review state). They have the final close/rework decision. Do not claim a review handoff as approval.

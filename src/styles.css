@@ -1208,8 +1208,11 @@ select.input { padding-right: 8px; }
 @media (max-width: 860px) { .tf-grid { grid-template-columns: max-content minmax(0, 1fr); } }
 
 /* A task's subtasks: a bar of how many are done, and each with its status */
-.subtasks, .commits { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.subtasks, .commits, .assets { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
 .preview [data-section="comments"] + .commits { margin-top: 1.5rem; }
+.assets .st-list li > .icon { flex: none; width: 15px; height: 15px; color: var(--muted); }
+.assets .st-list li > a, .assets .st-list li > span:not(.st-status) { overflow-wrap: anywhere; font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+.assets-hint { margin: 8px 0 0; font-size: 12.5px; }
 .subtasks.none { padding: 0; border: none; background: none; margin: -6px 0 12px; }
 .st-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .st-title { font-weight: 650; }

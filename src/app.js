@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_CLEARED, shownSeen, clearAllSeen, keptCleared,
@@ -1136,6 +1136,7 @@ function renderPreview() {
     relations: isTask && (() => relationsBox(f, setup)),
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && ((d) => sprintBox(f, setup, null, d)),
+    assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "")),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
   fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
@@ -1294,7 +1295,7 @@ function fillAppBlocks(body, boxes, other = null) {
     const box = (el.dataset.task || el.dataset.sprint) && other ? other(el.dataset.block, el.dataset) : undefined;
     if (box !== undefined) { el.replaceWith(box ?? ""); continue; }
     const make = boxes[el.dataset.block];
-    if (make) el.replaceWith(make(el.dataset) ?? "");
+    if (make) el.replaceWith(make(el.dataset, el) ?? "");
   }
 }
 
@@ -1507,6 +1508,32 @@ function commitsBox(f, props, of = null) {
       h("a", { href: c.url, target: "_blank", rel: "noopener noreferrer", title: c.title || c.short },
         h("span", { class: "st-id" }, c.short), c.title || c.url),
       c.repo !== own ? h("span", { class: "st-status" }, c.repo.slice(c.repo.indexOf("/") + 1)) : null))));
+}
+
+/**
+ * A task's ```assets block as a box: the files and assets the task expects to occupy (planned, written by the person
+ * or the agent), each linked to the page in the vault, or to the file on GitHub, when it can be. What the task really
+ * changed is in its Commits.
+ */
+function assetsBox(f, src) {
+  const list = assetList(src);
+  const tree = app.trees.get(f.repo.id);
+  const folder = (f.repo.folder || "").replace(/\/+$/, "");
+  const inVault = (p) => (!folder ? p : p.startsWith(folder + "/") ? p.slice(folder.length + 1) : null);
+  const link = (a) => {
+    const v = inVault(a.path);
+    if (v != null && !a.folder && tree?.files.has(v)) return h("a", { href: hrefFor(f.repo, v) }, a.path);
+    if (!isLocal(f.repo)) return h("a", { href: githubFileUrl(f.repo, a.path), target: "_blank", rel: "noopener noreferrer", title: "Open it on GitHub" }, a.path + (a.folder ? "/" : ""));
+    return h("span", {}, a.path + (a.folder ? "/" : ""));
+  };
+  return h("section", { class: "assets", "aria-label": "Occupied assets" },
+    h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Occupied assets"),
+      h("span", { class: "st-count" }, list.length ? `${list.length} planned` : "None yet")),
+    list.length
+      ? h("ul", { class: "st-list" }, list.map((a) => h("li", {}, icon(a.folder ? "folder" : "file"), link(a),
+        a.note ? h("span", { class: "st-status" }, a.note) : null)))
+      : h("p", { class: "muted sprint-empty" }, "List the files and assets this task will use, one per line in its ```assets block, from the repo's root (a folder ends with /)."),
+    h("p", { class: "muted assets-hint" }, "Planned, before the work. What the task really changed is in its Commits."));
 }
 
 /** A new task under this one, in the tasks folder: linked to it, with its area and sprint, from the note template. */

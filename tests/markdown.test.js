@@ -158,6 +158,12 @@ test("a task's block options: task names another task by its ID, name or link; o
     '<div class="app-block" data-block="sprint" data-sprint="next"><pre><code>sprint: next\n</code></pre></div>\n');
 });
 
+test("an assets block becomes a placeholder holding its lines, with no options read, and says when it's empty", () => {
+  assert.equal(render("```assets\nSource/A.cpp\ntask: not an option\n```\n"),
+    '<div class="app-block" data-block="assets"><pre><code>Source/A.cpp\ntask: not an option\n</code></pre></div>\n');
+  assert.equal(render("```assets\n```\n"), '<div class="app-block" data-block="assets" data-empty="1"><pre><code>assets</code></pre></div>\n');
+});
+
 test("a sprint block's show, owner and login: progress only, and whose share it counts", () => {
   const none = { task: "", sprint: "", show: "", owner: "", login: "" };
   assert.deepEqual(appBlockOptions("sprint: current\nShow: Progress\nowner: 'Ana Lee'\nlogin: @ana-gh"),
