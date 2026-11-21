@@ -155,7 +155,7 @@ The only applicable option is `task`: a name, ID or wikilink. Default: the curre
 
 ## sprint
 
-Shows a sprint's goal, dates, progress and tasks grouped by status. On its own sprint page, leave the block empty:
+Shows a sprint's goal, dates, progress and tasks grouped by status. Under the tasks' bar, a second bar in another colour shows how much of the sprint's time is gone ("Day 6 of 14 · 9 days left"), so the two can be compared. On its own sprint page, leave the block empty:
 
 ```sprint
 ```
@@ -166,7 +166,7 @@ The optional `sprint` property selects `current`, `next`, a sprint name or a wik
 sprint: Sprint 1
 ```
 
-To show only how the sprint is going, for example above the top tasks in an inbox, add `show: progress`. It keeps the head, the goal and the progress bar and leaves out the task list. `owner` adds a line with that person's share of the sprint (tasks assigned to them or to their agent), and `login` also counts tasks assigned to their GitHub login:
+To show only how the sprint is going, for example above the top tasks in an inbox, add `show: progress`. It keeps the head, the goal and the two bars (tasks done and time gone) and leaves out the task list. `owner` adds a line with that person's share of the sprint (tasks assigned to them or to their agent), and `login` also counts tasks assigned to their GitHub login:
 
 ```sprint
 sprint: current

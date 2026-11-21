@@ -6,7 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
-  isoDay, addDays, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
+  isoDay, addDays, sprintTime, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
   pageListDepth, tocTree, subpagesOf,
   hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
@@ -1115,4 +1115,16 @@ test("a page's contents nest its headings and its subpages follow their parent p
   // An `order` number puts a page first; pages without one follow by name.
   const ordered = notes.map((n) => n.path === "Wiki/Setup.md" ? { ...n, props: { ...n.props, order: 1 } } : n);
   assert.deepEqual(paths(subpagesOf(ordered, "Home.md", opts)), ["Wiki/Setup.md", "Wiki/Guides.md"]);
+});
+
+test("a sprint's time: today's day in it, the days left with today, and the part gone by", () => {
+  assert.deepEqual(sprintTime("2026-11-16", "2026-11-29", "2026-11-16"), { days: 14, day: 1, left: 14, share: 0, startsIn: 0 });
+  assert.deepEqual(sprintTime("2026-11-16", "2026-11-29", "2026-11-21"), { days: 14, day: 6, left: 9, share: 5 / 14, startsIn: 0 });
+  assert.deepEqual(sprintTime("2026-11-16", "2026-11-29", "2026-11-29"), { days: 14, day: 14, left: 1, share: 13 / 14, startsIn: 0 });
+  assert.deepEqual(sprintTime("2026-11-16", "2026-11-29", "2026-12-05"), { days: 14, day: 14, left: 0, share: 1, startsIn: 0 }, "ended");
+  assert.deepEqual(sprintTime("2026-11-30", "2026-12-13", "2026-11-27"), { days: 14, day: 0, left: 14, share: 0, startsIn: 3 }, "not started");
+  assert.deepEqual(sprintTime("2027-03-27", "2027-03-29", "2027-03-28"), { days: 3, day: 2, left: 2, share: 1 / 3, startsIn: 0 }, "across a clock change");
+  assert.equal(sprintTime("", "2026-11-29", "2026-11-21"), null);
+  assert.equal(sprintTime("2026-11-16", "", "2026-11-21"), null);
+  assert.equal(sprintTime("2026-11-29", "2026-11-16", "2026-11-21"), null, "end before start");
 });

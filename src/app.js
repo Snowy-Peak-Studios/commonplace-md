@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
@@ -1637,6 +1637,17 @@ function sprintBox(f, setup, path = null, opts = {}) {
   const count = (x) => `${x.done} of ${x.total} task${x.total === 1 ? "" : "s"} done`
     + (x.points ? ` · ${x.points.done} of ${amount(x.points.total, x.points.unit)}` : "");
   const done = count(s);
+  // How much of the sprint's time is gone, in its own colour under the tasks' bar, so the two can be compared.
+  const t = sprintTime(me.start, me.end, isoDate());
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const timeText = !t ? null : t.startsIn ? `Starts in ${plural(t.startsIn, "day")}`
+    : t.left === 0 ? `Ended · ${plural(t.days, "day")}`
+    : `Day ${t.day} of ${t.days} · ${t.left === 1 ? "the last day" : `${t.left} days left`}`;
+  const time = t ? [
+    h("div", { class: "st-count sprint-time-text" }, timeText),
+    h("div", { class: "st-bar sprint-time", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(t.days),
+      "aria-valuenow": String(t.days - t.left), "aria-label": `Time: ${timeText}` }, h("span", { style: `width: ${Math.round(t.share * 100)}%` })),
+  ] : [];
   const who = opts.owner || "@" + opts.login;
   const mine = s.mine && s.total
     ? h("div", { class: "st-count sprint-mine" }, `${who}: `, s.mine.total ? count(s.mine) : "no tasks in this sprint") : null;
@@ -1655,9 +1666,10 @@ function sprintBox(f, setup, path = null, opts = {}) {
       h("div", { class: "st-count sprint-done" }, done),
       h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(s.total), "aria-valuenow": String(s.done),
         "aria-label": done }, h("span", { style: `width: ${Math.round((s.done / s.total) * 100)}%` })),
+      ...time,
       mine,
       ...tasksList,
-    ] : h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field."));
+    ] : [...time, h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field.")]);
 }
 
 /**

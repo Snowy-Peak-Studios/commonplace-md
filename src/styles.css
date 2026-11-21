@@ -1212,6 +1212,8 @@ select.input { padding-right: 8px; }
 .st-head .btn { margin-left: auto; }
 .st-bar { height: 6px; margin: 10px 0 6px; border-radius: 3px; background: var(--bg-soft); overflow: hidden; }
 .st-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+.st-bar.sprint-time { margin-top: 6px; }
+.st-bar.sprint-time > span { background: var(--accent); }
 /* The boxes sit in the note, where its blocks are: their lists don't take the note's list indent. */
 .st-list, .preview .st-list { list-style: none; margin: 0; padding: 0; }
 .st-list li, .preview .st-list li { display: flex; align-items: center; gap: 10px; margin: 0; padding: 6px 0; border-top: 1px solid var(--line); }

@@ -1315,6 +1315,21 @@ export function addDays(day, n) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * How far a sprint is in time on `today` (all `YYYY-MM-DD`, both days counted): `days` long, `day` is today's
+ * number in it, `left` the days still to go with today, and `share` the part of it gone by (0 on the first
+ * morning, 1 once it ended). Before it starts, `day` is 0 and `startsIn` says in how many days. Null without
+ * both dates, or when the end comes before the start.
+ */
+export function sprintTime(start, end, today) {
+  const at = (d) => Date.parse(`${d}T00:00:00Z`) / 86400000;
+  if (!start || !end || !today || at(end) < at(start)) return null;
+  const days = at(end) - at(start) + 1;
+  if (at(today) < at(start)) return { days, day: 0, left: days, share: 0, startsIn: at(start) - at(today) };
+  const day = Math.min(days + 1, at(today) - at(start) + 1);
+  return { days, day: Math.min(day, days), left: Math.max(0, days - day + 1), share: Math.min(1, (day - 1) / days), startsIn: 0 };
+}
+
 const noteName = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 
 /**
