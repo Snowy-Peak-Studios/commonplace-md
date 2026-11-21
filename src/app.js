@@ -5088,11 +5088,73 @@ function showSettings(adding = false, tokenOwner = "") {
 // Start
 // ================================================================
 
+/** The files sidebar's usual width and the narrowest it goes, in pixels (the widest is half the window, up to 600). */
+const SIDE_WIDTH = { usual: 280, min: 200 };
+
+/**
+ * The files sidebar on a computer: its width, changed by dragging its right edge (or the arrow keys on it, Home for
+ * the usual width; a double-click resets it), and whether it's hidden, both kept on this device. On a phone the
+ * files open over the note as before, and neither applies.
+ */
+function sideLayout() {
+  // Made here, not in index.html, so a page the service worker kept from an older version still works.
+  const handle = h("div", { id: "side-resize", role: "separator", "aria-orientation": "vertical", "aria-label": "Width of the files",
+    tabindex: "0", title: "Drag to change the width; double-click for the usual width" });
+  $("#side").append(handle);
+  const widest = () => Math.max(SIDE_WIDTH.min, Math.min(600, Math.round(innerWidth / 2)));
+  let width = Number(store.get("sideWidth", SIDE_WIDTH.usual)) || SIDE_WIDTH.usual;
+  const apply = (w, save = false) => {
+    width = Math.round(Math.min(widest(), Math.max(SIDE_WIDTH.min, w)));
+    document.documentElement.style.setProperty("--side-w", `${width}px`);
+    handle.setAttribute("aria-valuemin", String(SIDE_WIDTH.min));
+    handle.setAttribute("aria-valuemax", String(widest()));
+    handle.setAttribute("aria-valuenow", String(width));
+    if (save) {
+      store.set("sideWidth", width);
+      if (app.file?.kind === "md") fitWide(app.file);
+    }
+  };
+  apply(width);
+  if (store.get("sideClosed", false) && !isPhone()) document.body.classList.add("side-closed");
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const left = $("#side").getBoundingClientRect().left;
+    handle.setPointerCapture(e.pointerId);
+    document.body.classList.add("side-resizing");
+    const move = (ev) => apply(ev.clientX - left);
+    const end = (ev) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      document.body.classList.remove("side-resizing");
+      apply(ev.type === "pointerup" ? ev.clientX - left : width, true);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  });
+  handle.addEventListener("dblclick", () => apply(SIDE_WIDTH.usual, true));
+  handle.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 48 : 16;
+    const to = { ArrowLeft: width - step, ArrowRight: width + step, Home: SIDE_WIDTH.usual }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    apply(to, true);
+  });
+  // A smaller window keeps the sidebar within half of it; the width asked for comes back when there's room.
+  addEventListener("resize", debounce(() => apply(Number(store.get("sideWidth", SIDE_WIDTH.usual)) || SIDE_WIDTH.usual), 100));
+}
+
 function start() {
   fillIcons(document.body);
   renderWho();
   renderRepoPicker();
-  $("#menu-btn").addEventListener("click", () => document.body.classList.toggle(isPhone() ? "side-open" : "side-closed"));
+  sideLayout();
+  $("#menu-btn").addEventListener("click", () => {
+    document.body.classList.toggle(isPhone() ? "side-open" : "side-closed");
+    if (!isPhone()) store.set("sideClosed", document.body.classList.contains("side-closed"));
+  });
   $("#scrim").addEventListener("click", () => document.body.classList.remove("side-open"));
   $("#side-close").addEventListener("click", () => document.body.classList.remove("side-open"));
   $("#repo-select").addEventListener("change", (e) => {
@@ -5159,6 +5221,7 @@ function start() {
       e.preventDefault();
       if (isPhone()) document.body.classList.add("side-open");
       document.body.classList.remove("side-closed");
+      if (!isPhone()) store.set("sideClosed", false);
       $("#filter").focus();
       $("#filter").select();
     } else if (e.key === "Escape" && document.body.classList.contains("side-open")) {

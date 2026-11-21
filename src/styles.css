@@ -167,8 +167,15 @@ a.btn { text-decoration: none; color: var(--text); }
   min-height: 0;
   height: 100%;
   padding-top: env(safe-area-inset-top);
+  position: relative;
 }
 body.side-closed #side { display: none; }
+/* The sidebar's right edge: drag it (or use the arrow keys on it) to change the width. */
+#side-resize { position: absolute; top: 0; right: -4px; z-index: 5; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+#side-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background 0.12s; }
+#side-resize:hover::after, #side-resize:focus-visible::after, body.side-resizing #side-resize::after { background: var(--accent); }
+#side-resize:focus-visible { outline: none; }
+body.side-resizing { cursor: col-resize; user-select: none; }
 body.no-token #side, body.no-token .bar { display: none; }
 
 .side-head { display: flex; align-items: center; gap: 4px; padding: 10px 10px 4px; }
@@ -1371,6 +1378,7 @@ select.input { padding-right: 8px; }
   body.side-open #side { transform: none; }
   body.side-open #scrim { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(15, 12, 30, 0.4); }
   body.side-closed #side { display: flex; }
+  #side-resize { display: none; }
   .phone-only { display: inline-flex !important; }
   .bar { padding: 0 6px; padding-top: env(safe-area-inset-top); gap: 4px; }
   .bar .label { display: none; }

@@ -76,6 +76,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **New notes:** pick a name, kind and folder, or set a repo's New notes folder and Note template so a new note needs only a title.
 - **An app of its own:** installs on a computer or a phone, with its own window and icon ([how](getting-started.md#5-install-it-as-an-app-optional)). Works at phone width, and with no connection: notes saved offline go to GitHub when it's back.
 - **Look:** light and dark, following the device.
+- **The files sidebar:** on a computer, drag its right edge to make it wider or narrower (or focus the edge and use the arrow keys; a double-click or Home gives the usual width), and hide or show it with the panel button at the top left. This device remembers both. On a phone the files open over the note.
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, relations, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](settings.md#task-fields)).
