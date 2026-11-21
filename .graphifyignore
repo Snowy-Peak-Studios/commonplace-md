@@ -1,0 +1,6 @@
+# Third-party and sample content: not the app's own code
+vendor/
+example-vault/
+examples/
+roadmap/
+docs/
