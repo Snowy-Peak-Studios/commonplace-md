@@ -13,6 +13,7 @@ AI agents that can run git (Claude Code, Codex and others) can work in your vaul
 - picks a free task and **claims** it (status and assignee, committed and pushed) before it changes anything, so two agents never work on the same task;
 - keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
 - asks you on the task when it needs a decision, with a line under **Needs attention** in your inbox that links to it, and works on something else while it waits.
+- **uses fewer credits** on ordinary work: scripts and fixed commands first, searching instead of reading the whole vault, and bookkeeping handed to a subagent on a smaller model, if your agent has one.
 
 This is how the makers of Commonplace.md use it with their own agents: these are our rules and skills, made general. Change them to fit how you work.
 

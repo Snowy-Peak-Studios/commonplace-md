@@ -128,6 +128,15 @@ Then move on to another task while it waits.
 - When something changes, change the pages that describe it in the same commit: the task, the page about the topic, and the links and `parent` properties of any page you add, move or rename.
 - Facts come from the notes, the commits and your person's words. Where something isn't known, say so rather than guess.
 
+## Use fewer credits
+
+Ordinary, repeated work should cost as little as it can, without skipping the rules above or your person's decisions.
+
+- **Automation first.** When a script, a test, a template or a fixed command can do a job, use it, and keep the AI for what needs judgment: unclear wishes, design, writing, the unusual case.
+- **Read what the job needs.** After the session start, search first (`rg -n` or `grep -rn`), then read the lines around the match. Read a long page by its headings (`grep -n '^#' <page>`), then only the section you need. Read a page once per session, again only if it changed (`git log -1 -- <page>`). Keep long test logs in a file and report the counts and failures.
+- **Hand bookkeeping to a subagent.** Bookkeeping is the clerical work around a task, done by fixed rules: inbox lines turned into task notes, claim and Done edits, links and `parent` lines, the same small fix across many notes. If your agent can start a subagent on a smaller, cheaper model, give it a batch of these with a short, exact brief (the files, the values, the template, what done looks like), check its work by the diff (`git diff`), then commit and push yourself. Not for one small edit: that costs less to do yourself. Never hand it a decision, a question for your person, the privacy check before a public push, or a review. It saves because its reading stays out of the main conversation, which every later turn reads again.
+- **No subagents?** Do the bookkeeping as one batch at the end of the task, not spread over many turns.
+
 ## Skills
 
 Step-by-step ways of doing the jobs above, one per folder in `.agents/skills/<name>/SKILL.md`. Agents that know skills find them there (Claude Code through the pointers in `.claude/skills/`); any other agent reads the file and follows it.
