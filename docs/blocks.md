@@ -164,7 +164,7 @@ Content/Maps/Level 1.umap
 Content/Characters/
 ```
 
-On its task page it shows as *Occupied assets*: a file in the vault links to its page, and in a GitHub vault any other path links to the file on GitHub. What the task really changed is in its [commits](#commits). On a page that isn't a task the block stays as code. New tasks don't get this block by themselves: add it where it helps, for example for game engine assets two tasks shouldn't change at once.
+On its task page it shows as *Occupied assets*: a file in the vault links to its page, and in a GitHub vault any other path links to the file on GitHub. What the task really changed is in its [commits](#commits). When the paths are in another GitHub repo than the vault's, for example a vault of notes about an app whose code lives elsewhere, start the block with `repo: owner/name` (and `branch: dev` for a branch other than its default): the paths then link to that repo. On a page that isn't a task the block stays as code. New tasks don't get this block by themselves: add it where it helps, for example for game engine assets two tasks shouldn't change at once.
 
 ## sprint
 

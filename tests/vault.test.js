@@ -1168,7 +1168,7 @@ test("Resolve all: seen items leave the fold but stay seen, and the lists keep o
 });
 
 test("an assets block lists one path per line from the repo's root, folders with a slash, notes after #", async () => {
-  const { assetList } = await import("../src/vault.js");
+  const { assetList, assetOptions } = await import("../src/vault.js");
   assert.deepEqual(assetList(""), []);
   assert.deepEqual(assetList([
     "# planned for the movement work",
@@ -1189,4 +1189,10 @@ test("an assets block lists one path per line from the repo's root, folders with
   ], "comments, the same path in another case and paths leaving the repo are left out");
   assert.deepEqual(assetList("Notes/C#/Intro.md"), [{ path: "Notes/C#/Intro.md", folder: false, note: "" }], "a # inside a path stays");
   assert.deepEqual(assetList("a.md\r\nb.md\r\n"), [{ path: "a.md", folder: false, note: "" }, { path: "b.md", folder: false, note: "" }]);
+  // repo: and branch: lines name another GitHub repo for the paths; they aren't paths themselves.
+  const other = "repo: Example-Org/game\nbranch: dev\n- Source/A.cpp";
+  assert.deepEqual(assetList(other), [{ path: "Source/A.cpp", folder: false, note: "" }]);
+  assert.deepEqual(assetOptions(other), { repo: "Example-Org/game", branch: "dev" });
+  assert.deepEqual(assetOptions("Source/A.cpp"), { repo: "", branch: "" });
+  assert.deepEqual(assetOptions("Repo: `not a repo`\nBRANCH: 'feature/x'"), { repo: "", branch: "feature/x" }, "an odd repo is left out");
 });

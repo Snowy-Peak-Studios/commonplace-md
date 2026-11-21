@@ -270,13 +270,14 @@ export const ASSET_BLOCKS = ["assets"];
  * The assets a task's ```assets block lists, one per line, from the repo's root: `Source/Game/Player.cpp`,
  * `Content/Maps/` (a folder ends with `/`), with an optional note after ` # `. A leading `- ` or `* `, backticks,
  * quotes, `./` and `/` are dropped, `\` becomes `/`, and an empty line or one starting with `#` is skipped. The
- * same path twice (in any case) is listed once. [{ path, folder, note }].
+ * same path twice (in any case) is listed once. `repo:` and `branch:` lines are options (see `assetOptions`), not
+ * paths. [{ path, folder, note }].
  */
 export function assetList(src) {
   const out = [], seen = new Set();
   for (const raw of toLf(String(src ?? "")).split("\n")) {
     let line = raw.trim().replace(/^[-*+][ \t]+/, "");
-    if (!line || line.startsWith("#")) continue;
+    if (!line || line.startsWith("#") || ASSET_OPTION.test(line)) continue;
     let note = "";
     const at = line.search(/[ \t]#[ \t]/);
     if (at >= 0) { note = line.slice(at).replace(/^[ \t]#[ \t]*/, "").trim(); line = line.slice(0, at).trim(); }
@@ -287,6 +288,25 @@ export function assetList(src) {
     if (!clean || seen.has(clean.toLowerCase())) continue;
     seen.add(clean.toLowerCase());
     out.push({ path: clean, folder, note });
+  }
+  return out;
+}
+
+const ASSET_OPTION = /^(repo|branch)[ \t]*:/i;
+
+/**
+ * An ```assets block's options: `repo: owner/name` when its paths are in another GitHub repo than the vault's (a
+ * vault of notes about an app's code, say), and `branch: dev` for that repo's branch (left out: its default one).
+ * An odd `repo` is left out. { repo, branch }, each "" when not set.
+ */
+export function assetOptions(src) {
+  const out = { repo: "", branch: "" };
+  for (const raw of toLf(String(src ?? "")).split("\n")) {
+    const m = raw.trim().replace(/^[-*+][ \t]+/, "").match(/^(repo|branch)[ \t]*:[ \t]*(.*?)[ \t]*$/i);
+    if (!m) continue;
+    const v = m[2].replace(/^[`"']+|[`"']+$/g, "").trim();
+    if (m[1].toLowerCase() === "repo") out.repo = /^[\w.-]+\/[\w.-]+$/.test(v) ? v : "";
+    else out.branch = v;
   }
   return out;
 }

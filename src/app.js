@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
@@ -1517,10 +1517,15 @@ function commitsBox(f, props, of = null) {
  */
 function assetsBox(f, src) {
   const list = assetList(src);
+  // `repo: owner/name` puts the paths in another GitHub repo (and `branch:` on its branch; left out, its default, HEAD).
+  const opts = assetOptions(src);
+  const [owner, name] = opts.repo.split("/");
+  const elsewhere = !!opts.repo && opts.repo.toLowerCase() !== `${f.repo.owner}/${f.repo.repo}`.toLowerCase();
   const tree = app.trees.get(f.repo.id);
   const folder = (f.repo.folder || "").replace(/\/+$/, "");
   const inVault = (p) => (!folder ? p : p.startsWith(folder + "/") ? p.slice(folder.length + 1) : null);
   const link = (a) => {
+    if (elsewhere) return h("a", { href: githubFileUrl({ owner, repo: name, branch: opts.branch || "HEAD" }, a.path), target: "_blank", rel: "noopener noreferrer", title: `Open it in ${opts.repo} on GitHub` }, a.path + (a.folder ? "/" : ""));
     const v = inVault(a.path);
     if (v != null && !a.folder && tree?.files.has(v)) return h("a", { href: hrefFor(f.repo, v) }, a.path);
     if (!isLocal(f.repo)) return h("a", { href: githubFileUrl(f.repo, a.path), target: "_blank", rel: "noopener noreferrer", title: "Open it on GitHub" }, a.path + (a.folder ? "/" : ""));
@@ -1528,6 +1533,7 @@ function assetsBox(f, src) {
   };
   return h("section", { class: "assets", "aria-label": "Occupied assets" },
     h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Occupied assets"),
+      elsewhere ? h("span", { class: "st-of" }, `in ${opts.repo}${opts.branch ? ` (${opts.branch})` : ""}`) : null,
       h("span", { class: "st-count" }, list.length ? `${list.length} planned` : "None yet")),
     list.length
       ? h("ul", { class: "st-list" }, list.map((a) => h("li", {}, icon(a.folder ? "folder" : "file"), link(a),
