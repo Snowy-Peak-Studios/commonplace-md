@@ -323,17 +323,20 @@ export function taskAssets(text) {
 }
 
 /**
- * Whether a task occupies its assets now: it's claimed (it has an assignee) and it's in progress, and only then.
- * Testing, Blocked, Waiting, To Do and finished don't, so handing a task to review, finishing it, unclaiming it or
- * putting it off releases its assets. "In progress" is the status called In Progress (any case); a setup without one
- * uses its second status (the one after the first, like Doing). Epics never occupy.
+ * Whether a task occupies its assets now: it's in progress, or it's claimed (it has an assignee) and not handed to
+ * review, put off or finished. So a task claimed for an agent that hasn't started yet counts, and handing a task to
+ * Testing, putting it off (Waiting), finishing it or unclaiming it releases its assets. "In progress" is the status
+ * called In Progress (any case); a setup without one uses its second status (the one after the first, like Doing).
+ * Review is Testing, Review or In Review. Epics never occupy.
  */
 export function occupies(props, setup = null) {
   const status = String(props?.[fieldProp(setup, "status")] ?? "").trim().toLowerCase();
-  if (blank(props?.[fieldProp(setup, "assignee")]) || !status || isEpic({ props })) return false;
+  if (isEpic({ props })) return false;
   const values = (setup?.fields.find((f) => f.key === "status")?.values ?? []).map((v) => String(v).trim().toLowerCase());
   const working = !values.length || values.includes("in progress") ? "in progress" : values[1] ?? "in progress";
-  return status === working;
+  if (status === working) return true;
+  const claimed = !blank(props?.[fieldProp(setup, "assignee")]);
+  return claimed && !/^(testing|review|in review|waiting)$/.test(status) && !isDoneStatus(status, setup);
 }
 
 /** Two assets overlap: the same path (in any case, as on Windows), or one is a folder that holds the other. */

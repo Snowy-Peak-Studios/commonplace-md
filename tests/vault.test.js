@@ -1197,24 +1197,29 @@ test("an assets block lists one path per line from the repo's root, folders with
   assert.deepEqual(assetOptions("Repo: `not a repo`\nBRANCH: 'feature/x'"), { repo: "", branch: "feature/x" }, "an odd repo is left out");
 });
 
-test("occupied assets: claimed tasks in progress occupy their assets; overlaps by path, folder and repo; conflicts per task", async () => {
+test("occupied assets: tasks in progress or claimed occupy their assets; overlaps by path, folder and repo; conflicts per task", async () => {
   const { taskAssets, occupies, assetsOverlap, occupiedAssets, assetConflicts } = await import("../src/vault.js");
   const setup = taskSetup({});
   assert.equal(taskAssets("# No block\n"), null);
   assert.deepEqual(taskAssets("```assets\nrepo: Org/Game\n- Source/A.cpp\n```\n```assets\nother.md\n```"),
     { repo: "org/game", branch: "", items: [{ path: "Source/A.cpp", folder: false, note: "" }] }, "the first block counts");
-  // Who occupies: claimed and in progress, and nothing else; never an epic.
+  // Who occupies: in progress, or claimed and not in review, put off or finished; never an epic.
   const p = (status, assignee = "Ann (Claude)", more = {}) => ({ status, assignee, ...more });
   assert.equal(occupies(p("In Progress"), setup), true);
   assert.equal(occupies(p("in progress"), setup), true, "any case");
-  assert.equal(occupies(p("In Progress", ""), setup), false, "no assignee, no claim");
-  for (const s of ["Testing", "Blocked", "To Do", "Waiting", "Done", "Cancelled", ""]) assert.equal(occupies(p(s), setup), false, `${s} frees the assets`);
+  assert.equal(occupies(p("In Progress", ""), setup), true, "in progress counts even with no assignee");
+  assert.equal(occupies(p("To Do", "Ann"), setup), true, "claimed for an agent, not started yet");
+  assert.equal(occupies(p("Blocked", "Ann"), setup), true, "claimed and blocked still holds its files");
+  assert.equal(occupies(p("To Do", ""), setup), false, "free and not started");
+  for (const s of ["Testing", "Waiting", "Done", "Cancelled"]) assert.equal(occupies(p(s), setup), false, `${s} frees the assets`);
   assert.equal(occupies(p("In Progress"), null), true, "with no setup too");
   assert.equal(occupies(p("Testing"), null), false);
   assert.equal(occupies(p("In Progress", "Ann", { type: "Epic" }), setup), false);
   const custom = taskSetup({ fields: { status: { values: ["Backlog", "Doing", "Review", "Shipped"] } } });
-  assert.equal(occupies(p("Doing"), custom), true, "a setup without In Progress: its second status");
-  for (const s of ["Backlog", "Review", "Shipped"]) assert.equal(occupies(p(s), custom), false, s);
+  assert.equal(occupies(p("Doing", ""), custom), true, "a setup without In Progress: its second status");
+  assert.equal(occupies(p("Backlog", "Ann"), custom), true, "claimed in the backlog");
+  for (const s of ["Review", "Shipped"]) assert.equal(occupies(p(s), custom), false, s);
+  assert.equal(occupies(p("Backlog", ""), custom), false);
   // Overlaps: any case, a folder holds its files, a folder doesn't hold a sibling with the same start.
   const f = (path, folder = false) => ({ path, folder });
   assert.equal(assetsOverlap(f("Content/Maps/A.umap"), f("content/maps/a.umap")), true);

@@ -39,7 +39,7 @@ Use `group: area` or `group: type` for a broader chart. Only this vault is read.
 
 ## Occupied assets
 
-The files that tasks in progress plan to change, from each task's ` ```assets ` block, and where two tasks overlap. A task counts only while it's claimed and in progress; handing it to review, unclaiming it, putting it off or finishing it frees its files. Here [[Try the app on a phone]] holds the reading list, so claiming [[Add a reading list]] warns first. A warning, not a lock.
+The files that tasks in progress plan to change, from each task's ` ```assets ` block, and where two tasks overlap. A task counts while it's in progress or claimed; handing it to Testing, unclaiming it, putting it off or finishing it frees its files. Here [[Try the app on a phone]] holds the reading list, so claiming [[Add a reading list]] warns first. A warning, not a lock.
 
 ```occupied
 ```

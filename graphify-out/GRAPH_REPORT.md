@@ -1,17 +1,17 @@
 # Graph Report - NotesApp  (2026-11-21)
 
 ## Corpus Check
-- 47 files · ~127,023 words
+- 47 files · ~127,113 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: (none) 5, .css 2, .base 2)
 
 ## Summary
-- 1096 nodes · 3524 edges · 50 communities (44 shown, 6 thin omitted)
+- 1096 nodes · 3525 edges · 52 communities (46 shown, 6 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 76 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bd067295`
+- Built from commit: `7e75f0ab`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -26,6 +26,7 @@
 - vault.js
 - inbox-overview.js
 - vault.test.js
+- vault.js
 - markdown.js
 - icon
 - task_commits.py
@@ -45,7 +46,7 @@
 - puppeteer-core
 - sprintBox
 - ai-time.mjs
-- h
+- fill
 - capture-attachments.mjs
 - package.json
 - NavWidget
@@ -58,12 +59,13 @@
 - createEditor
 - icons.js
 - contentsUrl
-- start
+- applyMode
 - sw.js
 - log
 - answered-questions.mjs
 - mirror.js
 - mirror.js
+- startNextSprint
 - README.md
 
 ## God Nodes (most connected - your core abstractions)
@@ -93,7 +95,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (50 total, 6 thin omitted)
+## Communities (52 total, 6 thin omitted)
 
 ### Community 0 - "GitHub"
 Cohesion: 0.13
@@ -109,7 +111,7 @@ Nodes (48): claimedNotes, commitWrites, copied(), copyRepo, created, currentView
 
 ### Community 3 - "app.js"
 Cohesion: 0.04
-Nodes (57): app, assetLoads, ATTENTION_TITLES, baseCaches, baseCell(), baseLoads, baseTable(), BINARY (+49 more)
+Nodes (71): app, assetLoads, ATTENTION_TITLES, baseCaches, baseLoads, BINARY, blobUrls, cellText() (+63 more)
 
 ### Community 4 - "editor.js"
 Cohesion: 0.03
@@ -120,40 +122,44 @@ Cohesion: 0.08
 Nodes (52): baseView(), fillBases(), loadBase(), pageText(), arithmetic(), asTime(), BaseError, baseNameOf() (+44 more)
 
 ### Community 6 - "h"
-Cohesion: 0.09
-Nodes (57): aiTimeLabel(), addRelation(), aiEstimateField(), applyPreviewEdit(), assetsBox(), assignmentEdits(), attentionBox(), canWrite() (+49 more)
+Cohesion: 0.11
+Nodes (56): aiTimeLabel(), addRelation(), aiEstimateField(), assetsBox(), assignmentEdits(), attentionBox(), baseCell(), baseTable() (+48 more)
 
 ### Community 7 - "vault.js"
-Cohesion: 0.10
-Nodes (36): asNewTask(), embeddedPart(), linkMarks(), addComment(), addNewTask(), blankOut(), captureAttachmentText(), claimTask() (+28 more)
+Cohesion: 0.12
+Nodes (30): asNewTask(), embeddedPart(), addComment(), addNewTask(), captureAttachmentText(), claimTask(), commentHeader(), commentReply() (+22 more)
 
 ### Community 8 - "inbox-overview.js"
 Cohesion: 0.10
 Nodes (34): loadOverviewModule(), allowed(), list(), OVERVIEW_KINDS, overviewBlock(), overviewContents(), overviewEach(), overviewOptions() (+26 more)
 
 ### Community 9 - "vault.test.js"
-Cohesion: 0.07
-Nodes (52): addDays(), assetConflicts(), assetList(), assetOptions(), assetsOverlap(), blockContents(), captureAttachment(), cleanFolder() (+44 more)
+Cohesion: 0.08
+Nodes (27): addDays(), assetList(), assetOptions(), blockContents(), MARKER, markerText(), mergeMarker(), nextSprint() (+19 more)
+
+### Community 10 - "vault.js"
+Cohesion: 0.10
+Nodes (31): linkMarks(), assetConflicts(), assetsOverlap(), blankOut(), captureAttachment(), cleanFolder(), cleanValues(), dirOf() (+23 more)
 
 ### Community 11 - "markdown.js"
 Cohesion: 0.10
 Nodes (27): APP_BLOCKS, appBlockOptions(), ATTENTION_SHOWS, attentionOptions(), boardOptions(), CALLOUT_ICONS, calloutRule(), createMarkdown() (+19 more)
 
 ### Community 12 - "icon"
-Cohesion: 0.14
-Nodes (31): addRepo(), blobUrl(), checkDraft(), closeFile(), discoverVaults(), emptyState(), fileView(), guestSteps() (+23 more)
+Cohesion: 0.17
+Nodes (31): addRepo(), client(), closeFile(), connect(), discoverVaults(), editTaskFields(), emptyState(), formatSize() (+23 more)
 
 ### Community 13 - "task_commits.py"
 Cohesion: 0.08
 Nodes (23): Rules, Working on it, AI work history, Answered questions check, Browser check, Comment reply check, Expanded settings scrolling check, Inbox identity setup check (+15 more)
 
 ### Community 14 - "suggestBox"
-Cohesion: 0.15
-Nodes (26): fillTopTasks(), loadSuggestions(), returnFromWaiting(), suggestBox(), blank(), byOrder(), fieldValue(), isEpic() (+18 more)
+Cohesion: 0.14
+Nodes (27): fillTopTasks(), loadSuggestions(), returnFromWaiting(), suggestBox(), blank(), byOrder(), fieldValue(), isoDay() (+19 more)
 
 ### Community 15 - ".has"
-Cohesion: 0.24
-Nodes (13): markInboxSeen(), assigneeOptions(), keptResolved(), LinkIndex, mentionKey(), resolveAllSeen(), seenList(), shownSeen() (+5 more)
+Cohesion: 0.29
+Nodes (12): markInboxSeen(), assigneeOptions(), keptResolved(), mentionKey(), resolveAllSeen(), seenList(), shownSeen(), sortAssignments() (+4 more)
 
 ### Community 16 - "checkInboxDot"
 Cohesion: 0.21
@@ -164,8 +170,8 @@ Cohesion: 0.15
 Nodes (4): decode(), FolderFiles, LocalError, LocalSource
 
 ### Community 18 - "toast"
-Cohesion: 0.12
-Nodes (41): addImage(), addSubtask(), assigneeList(), changeTask(), claimSuggested(), cleanDir(), clearWaitingDate(), confirmDialog() (+33 more)
+Cohesion: 0.10
+Nodes (44): afterOutsideChange(), applyPreviewEdit(), checkDraft(), confirmDialog(), copyStatus(), copyText(), downloadCopy(), draftKey() (+36 more)
 
 ### Community 19 - "ref_node_assert"
 Cohesion: 0.22
@@ -185,7 +191,7 @@ Nodes (3): errors, remote, ./src/local.js
 
 ### Community 23 - "fieldProp"
 Cohesion: 0.16
-Nodes (29): aiMinutes(), aiTimeEstimate(), aiTimeGroups(), aiTimeSamples(), summary(), word(), overviewCaptures(), overviewRows() (+21 more)
+Nodes (28): aiMinutes(), aiTimeEstimate(), aiTimeGroups(), aiTimeSamples(), summary(), word(), overviewCaptures(), overviewRows() (+20 more)
 
 ### Community 24 - "inbox-overview.mjs"
 Cohesion: 0.16
@@ -204,16 +210,16 @@ Cohesion: 0.33
 Nodes (5): puppeteer-core, devDependencies, puppeteer-core, private, type
 
 ### Community 28 - "sprintBox"
-Cohesion: 0.30
-Nodes (12): amount(), downloadCopy(), fillBoards(), isSprintNote(), otherSprintBox(), sprintBox(), sprintField(), sprintNotes() (+4 more)
+Cohesion: 0.32
+Nodes (13): amount(), fillBoards(), isSprintNote(), otherSprintBox(), shortDay(), sprintBox(), sprintField(), sprintList() (+5 more)
 
 ### Community 29 - "ai-time.mjs"
 Cohesion: 0.18
 Nodes (5): docs, errors, marker, requests, writes
 
-### Community 30 - "h"
-Cohesion: 0.17
-Nodes (31): baseName(), client(), connect(), copyField(), dirName(), ensureSidebar(), fileRow(), fill() (+23 more)
+### Community 30 - "fill"
+Cohesion: 0.26
+Nodes (17): baseName(), blobUrl(), ensureSidebar(), fileRow(), fileView(), fill(), markActive(), openFile() (+9 more)
 
 ### Community 31 - "capture-attachments.mjs"
 Cohesion: 0.25
@@ -255,9 +261,9 @@ Nodes (5): baseExtensions(), createCommentEditor(), createEditor(), createMergeV
 Cohesion: 0.40
 Nodes (5): contentsUrl(), formPut, relPut, subPut, unrelPut
 
-### Community 43 - "start"
-Cohesion: 0.11
-Nodes (33): afterOutsideChange(), applyMode(), checkForNewer(), closeSideOnPhone(), columnName(), copyStatus(), debounce(), findOwnInbox() (+25 more)
+### Community 43 - "applyMode"
+Cohesion: 0.18
+Nodes (16): addImage(), applyMode(), assigneeList(), canWrite(), columnName(), isWide(), loadCollaborators(), loadPeople() (+8 more)
 
 ### Community 48 - "mirror.js"
 Cohesion: 0.14
@@ -266,6 +272,10 @@ Nodes (12): BrowserFiles, db(), done(), fileKey(), folderOf(), forgetFolder(), i
 ### Community 49 - "mirror.js"
 Cohesion: 0.33
 Nodes (7): keptAtOnce(), enc(), fakeGitHub(), memoryFiles(), mirrorWith(), repo, synced()
+
+### Community 50 - "startNextSprint"
+Cohesion: 0.29
+Nodes (15): addSubtask(), cleanDir(), dirName(), joinRepo(), loadTree(), modal(), newNote(), update() (+7 more)
 
 ### Community 51 - "README.md"
 Cohesion: 0.18
@@ -287,7 +297,7 @@ _Questions this graph is uniquely positioned to answer:_
   _2 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `GitHub` be split into smaller, more focused modules?**
   _Cohesion score 0.13306451612903225 - nodes in this community are weakly interconnected._
-- **Why does `toLf()` connect `vault.js` to `app.js`, `h`, `inbox-overview.js`, `vault.test.js`, `start`, `task_commits.py`, `toast`, `fieldProp`?**
+- **Why does `toLf()` connect `vault.js` to `app.js`, `h`, `inbox-overview.js`, `vault.test.js`, `vault.js`, `task_commits.py`, `toast`, `fieldProp`?**
   _High betweenness centrality (0.045) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `showSettings()` (e.g. with `goBack()` and `.folderName()`) actually correct?**
   _`showSettings()` has 2 INFERRED edges - model-reasoned connections that need verification._

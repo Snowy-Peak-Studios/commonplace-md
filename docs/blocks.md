@@ -179,7 +179,7 @@ show: conflicts
 | --- | --- |
 | `show` | `conflicts` lists only the assets more than one task occupies. Default: every occupied asset. |
 
-A task occupies its assets only while it's in progress: it has an assignee and its status is In Progress (in a project without that status, its second one, like Doing). Handing it to review (Testing), Blocked, unclaiming it, putting it off with **Not now** or finishing it frees them, and editing its block changes them: the list is worked out from the saved tasks each time. Paths in different repos (a `repo:` line) never overlap. The same warning shows on a task's *Occupied assets* box and in the **Claim** dialog. It's a warning, not a lock: nothing stops a save.
+A task occupies its assets while it's in progress (its status is In Progress, or in a project without that status its second one, like Doing), or while it's claimed (it has an assignee) and not in review (Testing), put off (Waiting) or finished. So a task claimed for an agent that hasn't started yet counts. Handing it to Testing, unclaiming it, putting it off with **Not now** or finishing it frees them, and editing its block changes them: the list is worked out from the saved tasks each time. Paths in different repos (a `repo:` line) never overlap. The same warning shows on a task's *Occupied assets* box and in the **Claim** dialog. It's a warning, not a lock: nothing stops a save.
 
 ## sprint
 
