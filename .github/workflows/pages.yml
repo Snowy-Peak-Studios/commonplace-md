@@ -18,15 +18,15 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Two jobs, as GitHub's own Pages workflow has: `build` puts the site together and uploads it, and `deploy` starts
+# only after that job is over. In one job, the deploy sometimes asked for the uploaded site a moment before GitHub
+# listed it, and failed with "No artifacts named github-pages were found"; the job between them gives it that time.
 jobs:
-  deploy:
+  build:
     # A private copy of the repo doesn't publish: Pages would make it public.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,5 +69,22 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url || steps.again.outputs.page_url }}
+    steps:
+      # If GitHub still doesn't list the uploaded site, wait a little and ask once more before failing.
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Wait before trying again
+        if: ${{ steps.deployment.outcome == 'failure' }}
+        run: sleep 20
+      - id: again
+        if: ${{ steps.deployment.outcome == 'failure' }}
         uses: actions/deploy-pages@v4
