@@ -1139,32 +1139,32 @@ test("a file's GitHub address keeps the slashes and encodes each part of the bra
   assert.equal(githubFileUrl({ ...repo, branch: "" }, "/a.md"), "https://github.com/Ann/notes/blob/main/a.md", "no branch: main; no empty parts");
 });
 
-test("Clear seen: seen items leave the fold but stay seen, and the lists keep only what still exists", async () => {
-  const { mentionKey, sortMentions, SEEN_MENTIONS, SEEN_ASSIGNMENTS, SEEN_CLEARED, shownSeen, clearAllSeen, keptCleared } = await import("../src/vault.js");
+test("Resolve all: seen items leave the fold but stay seen, and the lists keep only what still exists", async () => {
+  const { mentionKey, sortMentions, SEEN_MENTIONS, SEEN_ASSIGNMENTS, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved } = await import("../src/vault.js");
   const a = { path: "Notes/A.md", login: "ann", text: "@ann one", answered: false };
   const b = { path: "Notes/B.md", login: "ann", text: "@ann two", answered: false };
   const t = { path: "Tasks/T.md", key: JSON.stringify(["Tasks/T.md", "@ann", ""]) };
   const ka = mentionKey(a.path, a), kb = mentionKey(b.path, b);
   const props = { [SEEN_MENTIONS]: [ka, kb, "Gone.md#00000000"], [SEEN_ASSIGNMENTS]: [t.key, "[\"Old.md\",\"@ann\",\"\"]"] };
-  const entries = Object.fromEntries(clearAllSeen(props, { found: [a, b], tasks: [t] }));
+  const entries = Object.fromEntries(resolveAllSeen(props, { found: [a, b], tasks: [t] }));
   assert.deepEqual(entries[SEEN_MENTIONS], [ka, kb], "a gone mention drops out");
   assert.deepEqual(entries[SEEN_ASSIGNMENTS], [t.key], "a gone assignment drops out");
-  assert.deepEqual(entries[SEEN_CLEARED], [ka, kb, t.key]);
-  // Cleared items are still seen (never new again) but no longer shown under Seen.
+  assert.deepEqual(entries[SEEN_RESOLVED], [ka, kb, t.key]);
+  // Resolved items are still seen (never new again) but no longer shown under Seen.
   const ms = sortMentions([a, b], entries[SEEN_MENTIONS]);
   assert.deepEqual(ms.open, []);
-  assert.deepEqual(shownSeen({ mentions: ms.seen, assignments: [t] }, entries[SEEN_CLEARED]), { mentions: [], assignments: [] });
-  // A mention seen later still shows under Seen until the next Clear seen.
+  assert.deepEqual(shownSeen({ mentions: ms.seen, assignments: [t] }, entries[SEEN_RESOLVED]), { mentions: [], assignments: [] });
+  // A mention seen later still shows under Seen until the next Resolve all.
   const c = { path: "Notes/C.md", login: "ann", text: "@ann three", answered: false };
-  assert.deepEqual(shownSeen({ mentions: [a, c] }, entries[SEEN_CLEARED]).mentions, [c]);
+  assert.deepEqual(shownSeen({ mentions: [a, c] }, entries[SEEN_RESOLVED]).mentions, [c]);
   // A kind the box didn't read is left as it was.
-  const onlyMentions = Object.fromEntries(clearAllSeen(props, { found: [a], tasks: null }));
+  const onlyMentions = Object.fromEntries(resolveAllSeen(props, { found: [a], tasks: null }));
   assert.equal(onlyMentions[SEEN_ASSIGNMENTS], undefined);
-  assert.deepEqual(onlyMentions[SEEN_CLEARED], [ka, t.key, "[\"Old.md\",\"@ann\",\"\"]"]);
-  // The cleared list follows the seen lists when they shrink.
-  assert.deepEqual(keptCleared([ka, kb, t.key], [kb], []), [kb]);
-  assert.deepEqual(keptCleared(null, [ka], [t.key]), []);
-  assert.deepEqual(keptCleared(ka, [ka], null), [ka], "one key written as text");
+  assert.deepEqual(onlyMentions[SEEN_RESOLVED], [ka, t.key, "[\"Old.md\",\"@ann\",\"\"]"]);
+  // The resolved list follows the seen lists when they shrink.
+  assert.deepEqual(keptResolved([ka, kb, t.key], [kb], []), [kb]);
+  assert.deepEqual(keptResolved(null, [ka], [t.key]), []);
+  assert.deepEqual(keptResolved(ka, [ka], null), [ka], "one key written as text");
 });
 
 test("an assets block lists one path per line from the repo's root, folders with a slash, notes after #", async () => {
