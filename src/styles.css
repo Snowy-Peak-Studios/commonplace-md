@@ -1461,3 +1461,17 @@ select.input { padding-right: 8px; }
 .title-menu { position: fixed; right: auto; top: 0; z-index: 60; min-width: 200px; }
 .title:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 @media (pointer: coarse) { .title { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }
+
+/* Occupied assets: the warning on a task's box and the ```occupied block's list. */
+.asset-warning { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 4px; padding: 6px 10px; border-radius: 8px; color: var(--warn); background: var(--warn-soft); font-size: 13px; }
+.asset-warning .icon { flex: none; width: 15px; height: 15px; margin-top: 1px; }
+.chip.asset-taken { gap: 4px; color: var(--warn); background: var(--warn-soft); }
+.chip.asset-taken .icon { width: 13px; height: 13px; }
+.chip.asset-taken a { color: inherit; font-weight: 600; }
+.occupied { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-raise); }
+.occupied-list li { flex-wrap: wrap; row-gap: 2px; }
+.occupied-path { display: inline-flex; gap: 6px; align-items: center; min-width: 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.occupied-path .icon { flex: none; width: 15px; height: 15px; color: var(--muted); }
+.occupied-list li.conflict .occupied-path, .occupied-list li.conflict .occupied-path .icon { color: var(--warn); }
+.occupied-tasks { margin-left: auto; text-align: right; font-size: 13.5px; }
+.occupied-task { text-decoration: none; }

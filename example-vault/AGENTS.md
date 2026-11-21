@@ -87,6 +87,7 @@ Tasks that belong here can still be committed with their source cleanup in one s
 ### Occupied assets
 
 - When a task will change files or assets, list them in its ` ```assets ` block when you claim it: one path per line from the repo's root, a folder ending with `/`. It's the plan, so your person and other agents can see what the task will touch. Update it when the plan changes. What you really changed is in the task's commits, not here.
+- **Before you claim**, look at the task's *Occupied assets* box (or the ` ```occupied ` block on the Task Board). A warning there means another task in progress plans to change the same file: tell your person and ask before you start, rather than working on it at the same time.
 
 ### Done
 

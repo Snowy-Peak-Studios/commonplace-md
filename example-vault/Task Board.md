@@ -37,6 +37,15 @@ group: area-type
 
 Use `group: area` or `group: type` for a broader chart. Only this vault is read. [[Set up tasks]] explains the records.
 
+## Occupied assets
+
+The files that tasks in progress plan to change, from each task's ` ```assets ` block, and where two tasks overlap. A task counts from **Claim** until it's done; unclaiming it or putting it off frees its files. Here [[Try the app on a phone]] holds the reading list, so claiming [[Add a reading list]] warns first. A warning, not a lock.
+
+```occupied
+```
+
+Write `show: conflicts` in the block to list only the files more than one task plans to change.
+
 ## Getting set up
 
 The epic [[Get set up]] and its subtasks, shown here by a ` ```subtasks ` block with a `task:` line (the task's ID, name or link). A task's ` ```subtasks `, ` ```relations ` and ` ```commits ` can show on any page this way; away from the task's own page they only read.

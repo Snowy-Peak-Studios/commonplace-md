@@ -16,6 +16,7 @@ Block names are case insensitive. Put app blocks directly in the note; views ins
 | [relations](#relations) | Links between tasks |
 | [commits](#commits) | A task's saved commit links |
 | [assets](#assets) | The files and assets a task expects to occupy |
+| [occupied](#occupied) | The assets tasks in progress occupy now, and overlaps |
 | [sprint](#sprint) | A sprint's progress and tasks |
 | [board](#board) | Task cards in status columns |
 | [ai-work-time](#ai-work-time) | Recorded AI work time grouped as a chart |
@@ -165,6 +166,20 @@ Content/Characters/
 ```
 
 On its task page it shows as *Occupied assets*: a file in the vault links to its page, and in a GitHub vault any other path links to the file on GitHub. What the task really changed is in its [commits](#commits). When the paths are in another GitHub repo than the vault's, for example a vault of notes about an app whose code lives elsewhere, start the block with `repo: owner/name` (and `branch: dev` for a branch other than its default): the paths then link to that repo. On a page that isn't a task the block stays as code. New tasks don't get this block by themselves: add it where it helps, for example for game engine assets two tasks shouldn't change at once.
+
+## occupied
+
+Lists the assets that tasks in progress occupy now, from their [assets](#assets) blocks, with the tasks on each. Where two or more tasks plan to change the same file (in any case), or a file inside a folder another task lists, the row shows a warning. Put it on a board or a home page.
+
+```occupied
+show: conflicts
+```
+
+| Option | Values and default |
+| --- | --- |
+| `show` | `conflicts` lists only the assets more than one task occupies. Default: every occupied asset. |
+
+A task occupies its assets from **Claim** until it's finished: it has an assignee and a status that isn't To Do (or the project's first status), Waiting, or a finished one (Done, Cancelled, or the project's last). Unclaiming it, putting it off with **Not now** or finishing it frees them, and editing its block changes them: the list is worked out from the saved tasks each time. Paths in different repos (a `repo:` line) never overlap. The same warning shows on a task's *Occupied assets* box and in the **Claim** dialog. It's a warning, not a lock: nothing stops a save.
 
 ## sprint
 

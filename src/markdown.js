@@ -232,6 +232,8 @@ export function createMarkdown() {
     // Its source stays the code's text, not an attribute, like a Mermaid diagram's.
     if (lang === "inbox-overview") return `<div class="inbox-overview-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     if (lang === "ai-work-time") return `<div class="ai-time-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
+    // A ```occupied block: the app lists the assets that tasks in progress occupy now, and where two tasks overlap.
+    if (lang === "occupied") return `<div class="occupied-block"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     // A ```toc or ```subpages block: the app lists the page's headings, or the pages with it as their parent.
     if (PAGE_LIST_BLOCKS.includes(lang)) return `<div class="page-list-block" data-kind="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;

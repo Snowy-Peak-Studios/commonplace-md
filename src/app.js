@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
@@ -1104,6 +1104,7 @@ function renderPreview() {
   const previousBoards = [...f.dom.preview.querySelectorAll(".board-columns")].map((board) => board.scrollLeft);
   fillBoards(body, f);
   fillAiTime(body, f);
+  fillOccupied(body, f);
   fillPageLists(body, f);
   if (previousBoards.some(Boolean)) {
     requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
@@ -1136,7 +1137,7 @@ function renderPreview() {
     relations: isTask && (() => relationsBox(f, setup)),
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && ((d) => sprintBox(f, setup, null, d)),
-    assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "")),
+    assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "", setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
   fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
@@ -1157,6 +1158,40 @@ function aiEstimateField(f, setup) {
     h("strong", {}, "AI time estimate: "), estimate.reason || `${aiTimeLabel(estimate.mean)} average`,
     estimate.count ? h("small", { class: "muted" }, ` · ${estimate.count} completed task${estimate.count === 1 ? "" : "s"} · observed ${aiTimeLabel(estimate.min)}–${aiTimeLabel(estimate.max)}${estimate.count === 1 ? " · provisional: one sample" : ""}`) : null,
     h("small", { class: "muted ai-time-note" }, "Recorded AI work only, never human time. A guide, not a promised finish time."));
+}
+
+/**
+ * Each ```occupied block becomes the list of assets that tasks in progress occupy now (from their ```assets blocks),
+ * with the tasks on each and a warning where two or more overlap. `show: conflicts` lists only those. It's worked
+ * out from the saved tasks each time, so finishing, unclaiming or editing a task updates it. Nothing is locked.
+ */
+function fillOccupied(root, f) {
+  const blocks = root.querySelectorAll(".occupied-block");
+  if (!blocks.length) return;
+  const setup = taskSetupOf(f.repo);
+  const all = setup ? taskAssetsOf(f.repo, setup).tasks : null;
+  for (const el of blocks) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    if (!setup || !all) { fill(el, h("p", { class: "muted", role: "status" }, "Looking for occupied assets…")); continue; }
+    const onlyConflicts = /^\s*show\s*:\s*conflicts\s*$/im.test(el.querySelector("code")?.textContent ?? "");
+    const rows = occupiedAssets(all, setup).filter((r) => !onlyConflicts || r.conflict);
+    const conflicts = rows.filter((r) => r.conflict).length;
+    const taskRef = (t) => h("a", { href: hrefFor(f.repo, t.path), class: "occupied-task" },
+      t.props.id ? h("span", { class: "st-id" }, String(t.props.id)) : null, shownName(t.path),
+      h("span", { class: "muted" }, ` · ${t.props.status ?? ""}${t.props.assignee ? `, ${t.props.assignee}` : ""}`));
+    el.replaceWith(h("section", { class: "occupied", "aria-label": "Occupied assets" },
+      h("div", { class: "st-head" }, h("span", { class: "st-title" }, onlyConflicts ? "Asset conflicts" : "Occupied assets"),
+        h("span", { class: "st-count" }, `${rows.length} ${rows.length === 1 ? "asset" : "assets"}`
+          + (conflicts && !onlyConflicts ? ` · ${conflicts} with more than one task` : ""))),
+      rows.length
+        ? h("ul", { class: "st-list occupied-list" }, rows.map((r) => h("li", { class: r.conflict ? "conflict" : null },
+          h("span", { class: "occupied-path" }, icon(r.conflict ? "warning" : r.folder ? "folder" : "file"),
+            r.repo ? h("span", { class: "muted" }, `${r.repo}: `) : null, r.path + (r.folder ? "/" : "")),
+          h("span", { class: "occupied-tasks" }, ...r.tasks.flatMap((t, i) => [i ? h("span", { class: "muted" }, " and ") : null, taskRef(t)])))))
+        : h("p", { class: "muted sprint-empty" }, onlyConflicts ? "No two tasks in progress plan to change the same asset."
+          : "No task in progress lists assets yet. A task's ```assets block lists them; it counts from Claim until the task is done."),
+      h("p", { class: "muted assets-hint" }, "From the ```assets blocks of claimed tasks that aren't done. A warning, not a lock: check with the other task before you change the same file.")));
+  }
 }
 
 function fillAiTime(root, f) {
@@ -1374,6 +1409,42 @@ function notesWithProps(repo, what, wanted) {
 const taskNotes = (repo, setup) => notesWithProps(repo, "tasks", (p) => isSetupTask(setup, p));
 const sprintNotes = (repo, setup) => notesWithProps(repo, "sprints", (p) => isSprintNote(setup, p));
 
+/**
+ * Every task with its planned assets (`taskAssets`, from its ```assets block): [{ path, props, assets }], read once
+ * per tree version (each note's assets cached by blob sha, like `taskStates`). `tasks` is null until they're in;
+ * the open note is drawn again then. Only this repo's tasks: another vault's never count.
+ */
+const assetLoads = new Map();
+function taskAssetsOf(repo, setup) {
+  const tree = app.trees.get(repo.id);
+  const notes = taskNotes(repo, setup).notes;
+  if (!tree || !notes) return { tasks: null };
+  const known = assetLoads.get(repo.id);
+  if (known?.version === tree.version && known.notes === notes) return known;
+  const entry = { version: tree.version, notes, tasks: known?.tasks ?? null };
+  entry.load = readTaskAssets(repo, tree, notes.map((n) => n.path))
+    .then((byPath) => { entry.tasks = notes.map((n) => ({ ...n, assets: ownRepoAssets(repo, byPath.get(n.path)) })); redrawNote(); },
+      () => { assetLoads.delete(repo.id); });
+  assetLoads.set(repo.id, entry);
+  return entry;
+}
+
+/** A `repo:` line naming the vault's own repo is the same project as no line at all: both become "". */
+const ownRepoAssets = (repo, assets) => (assets && repo.owner && assets.repo === `${repo.owner}/${repo.repo}`.toLowerCase()
+  ? { ...assets, repo: "" } : assets);
+
+/** Each task's planned assets (`taskAssets`), from its whole text: cached by blob sha, like `taskStates`. */
+async function readTaskAssets(repo, tree, paths) {
+  const cache = baseCache("taskAssets", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskAssets(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("taskAssets", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? null]));
+}
+
 /** The setup's sprint field, when sprints are on (or there's no setup, and the folder is `Sprints`). */
 function sprintField(setup) {
   const field = setup?.fields.find((f) => f.key === "sprint");
@@ -1515,8 +1586,19 @@ function commitsBox(f, props, of = null) {
  * or the agent), each linked to the page in the vault, or to the file on GitHub, when it can be. What the task really
  * changed is in its Commits.
  */
-function assetsBox(f, src) {
+function assetsBox(f, src, setup = null) {
   const list = assetList(src);
+  // Other tasks that occupy the same assets now, as a warning before anyone starts: from the saved tasks.
+  const all = setup ? taskAssetsOf(f.repo, setup).tasks : null;
+  const mine = ownRepoAssets(f.repo, { repo: assetOptions(src).repo.toLowerCase(), items: list });
+  const conflicts = all ? assetConflicts({ path: f.path, assets: mine }, all, setup) : [];
+  const taskRef = (t) => h("a", { href: hrefFor(f.repo, t.path), title: `${shownName(t.path)}: ${t.props.status ?? ""}, ${t.props.assignee ?? ""}` },
+    String(t.props.id ?? "").trim() || shownName(t.path));
+  const taken = (a) => {
+    const c = conflicts.find((x) => x.asset.path === a.path);
+    return c ? h("span", { class: "chip asset-taken", title: "Another task that's in progress plans to change this too" },
+      icon("warning"), "Also ", ...c.tasks.flatMap((t, i) => [i ? ", " : null, taskRef(t)])) : null;
+  };
   // `repo: owner/name` puts the paths in another GitHub repo (and `branch:` on its branch; left out, its default, HEAD).
   const opts = assetOptions(src);
   const [owner, name] = opts.repo.split("/");
@@ -1535,9 +1617,11 @@ function assetsBox(f, src) {
     h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Occupied assets"),
       elsewhere ? h("span", { class: "st-of" }, `in ${opts.repo}${opts.branch ? ` (${opts.branch})` : ""}`) : null,
       h("span", { class: "st-count" }, list.length ? `${list.length} planned` : "None yet")),
+    conflicts.length ? h("p", { class: "asset-warning", role: "note" }, icon("warning"),
+      `${conflicts.length} of these ${conflicts.length === 1 ? "is" : "are"} occupied by another task in progress. Check with it before you change ${conflicts.length === 1 ? "it" : "them"}.`) : null,
     list.length
       ? h("ul", { class: "st-list" }, list.map((a) => h("li", {}, icon(a.folder ? "folder" : "file"), link(a),
-        a.note ? h("span", { class: "st-status" }, a.note) : null)))
+        a.note ? h("span", { class: "st-status" }, a.note) : null, taken(a))))
       : h("p", { class: "muted sprint-empty" }, "List the files and assets this task will use, one per line in its ```assets block, from the repo's root (a folder ends with /)."),
     h("p", { class: "muted assets-hint" }, "Planned, before the work. What the task really changed is in its Commits."));
 }
@@ -2901,12 +2985,29 @@ function suggestBox(repo, { areas = [], shown = [], who = "", waitDays = 7, coun
 }
 
 /**
+ * What the Claim dialog adds when the task's planned assets are occupied by other tasks in progress: who has which,
+ * so the person (or their agent) can check before starting. A warning only: nothing is locked. "" when there's none.
+ */
+function claimWarning(repo, path) {
+  const setup = taskSetupOf(repo);
+  const all = setup ? taskAssetsOf(repo, setup).tasks : null;
+  const me = all?.find((t) => t.path === path);
+  const conflicts = me ? assetConflicts(me, all, setup) : [];
+  if (!conflicts.length) return "";
+  const said = (t) => `${String(t.props.id ?? "").trim() || shownName(t.path)} (${t.props.status ?? ""}, ${t.props.assignee ?? ""})`;
+  const lines = conflicts.slice(0, 3).map((c) => `${c.asset.path}${c.asset.folder ? "/" : ""}: ${c.tasks.map(said).join(", ")}`);
+  return ` Careful: other tasks in progress plan to change the same ${conflicts.length === 1 ? "asset" : "assets"}. ${lines.join("; ")}`
+    + `${conflicts.length > 3 ? `; and ${conflicts.length - 3} more` : ""}.`;
+}
+
+/**
  * Claims a task for `who`: one commit that sets its status and assignee, unless someone took it first.
  * `move` ({ prop, name }) also puts it in that sprint, in the same commit.
  */
 async function claimSuggested(repo, path, who, button, move = null, waitDays = 7) {
   if (!await confirmDialog(`Claim ${shownName(path)}?`,
-    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to ${savedOn(repo)}.`, "Claim")) return;
+    `Its status becomes In Progress and its assignee ${who}${move ? `, and it moves into ${move.name}` : ""}. This saves the task to ${savedOn(repo)}.`
+      + claimWarning(repo, path), "Claim")) return;
   button.disabled = true;
   try {
     const { text, sha } = await gh.readText(repo, fullPath(repo, path));

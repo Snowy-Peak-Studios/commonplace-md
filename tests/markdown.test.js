@@ -158,6 +158,11 @@ test("a task's block options: task names another task by its ID, name or link; o
     '<div class="app-block" data-block="sprint" data-sprint="next"><pre><code>sprint: next\n</code></pre></div>\n');
 });
 
+test("an occupied block becomes a placeholder that keeps its options", () => {
+  assert.equal(render("```occupied\nshow: conflicts\n```\n"), '<div class="occupied-block"><pre><code>show: conflicts\n</code></pre></div>\n');
+  assert.equal(render("```Occupied\n```\n"), '<div class="occupied-block"><pre><code>occupied</code></pre></div>\n');
+});
+
 test("an assets block becomes a placeholder holding its lines, with no options read, and says when it's empty", () => {
   assert.equal(render("```assets\nSource/A.cpp\ntask: not an option\n```\n"),
     '<div class="app-block" data-block="assets"><pre><code>Source/A.cpp\ntask: not an option\n</code></pre></div>\n');

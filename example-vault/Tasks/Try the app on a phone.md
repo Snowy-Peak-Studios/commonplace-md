@@ -39,6 +39,11 @@ As someone away from my desk, I want my notes on my phone, so that I can add to 
 ```commits
 ```
 
+```assets
+Templates/Note.md # a shorter template for phone notes
+Data/Reading list.csv # trying the table on a small screen
+```
+
 ```work-history
 - Opened the app in the phone's browser.
 ```

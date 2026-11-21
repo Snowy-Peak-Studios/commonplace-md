@@ -311,6 +311,70 @@ export function assetOptions(src) {
   return out;
 }
 
+/**
+ * A task's planned assets, from the first ```assets block in its text: { repo, branch, items } with `repo` in lower
+ * case ("" for the vault's own repo) and `items` from `assetList`. Null when the task has no such block.
+ */
+export function taskAssets(text) {
+  const src = blockContents(text, "assets")[0];
+  if (src == null) return null;
+  const o = assetOptions(src);
+  return { repo: o.repo.toLowerCase(), branch: o.branch, items: assetList(src) };
+}
+
+/**
+ * Whether a task occupies its assets now: it's claimed (it has an assignee) and it's started but not finished. To Do
+ * (or the setup's first status), Waiting, and a finished status (Done, Cancelled, or the setup's last) don't, so
+ * finishing a task, unclaiming it or putting it off releases its assets. Epics never do.
+ */
+export function occupies(props, setup = null) {
+  const status = String(props?.[fieldProp(setup, "status")] ?? "").trim();
+  const first = setup?.fields.find((f) => f.key === "status")?.values?.[0];
+  if (blank(props?.[fieldProp(setup, "assignee")]) || !status || isEpic({ props })) return false;
+  if (/^(to ?do|waiting|backlog)$/i.test(status) || (first && status.toLowerCase() === first.toLowerCase())) return false;
+  return !isDoneStatus(status, setup);
+}
+
+/** Two assets overlap: the same path (in any case, as on Windows), or one is a folder that holds the other. */
+export function assetsOverlap(a, b) {
+  const x = a.path.toLowerCase(), y = b.path.toLowerCase();
+  return x === y || (a.folder && y.startsWith(x + "/")) || (b.folder && x.startsWith(y + "/"));
+}
+
+/**
+ * The assets occupied now, from tasks [{ path, props, assets }] (`assets` from `taskAssets`): one row per path and
+ * repo, the earliest first by path, with every occupying task whose assets overlap it (a folder and a file in it
+ * too). `conflict` is true when more than one task is on it. Assets in different repos never overlap.
+ * [{ repo, path, folder, tasks, conflict }].
+ */
+export function occupiedAssets(tasks, setup = null) {
+  const rows = new Map();
+  const active = tasks.filter((t) => t.assets?.items.length && occupies(t.props, setup));
+  for (const t of active) {
+    for (const a of t.assets.items) {
+      const key = `${t.assets.repo}\n${a.path.toLowerCase()}`;
+      if (!rows.has(key)) rows.set(key, { repo: t.assets.repo, path: a.path, folder: a.folder });
+    }
+  }
+  return [...rows.values()].map((r) => {
+    const on = active.filter((t) => t.assets.repo === r.repo && t.assets.items.some((a) => assetsOverlap(r, a)));
+    return { ...r, tasks: on, conflict: on.length > 1 };
+  }).sort((a, b) => a.repo.localeCompare(b.repo) || a.path.localeCompare(b.path, undefined, { sensitivity: "base" }));
+}
+
+/**
+ * The conflicts for one task (`task`: { path, assets }): each of its assets that another task occupies now, with those
+ * tasks. Its own status doesn't count, so a task still To Do is warned before anyone claims it. [{ asset, tasks }].
+ */
+export function assetConflicts(task, tasks, setup = null) {
+  const mine = task?.assets;
+  if (!mine?.items.length) return [];
+  const others = tasks.filter((t) => t.path !== task.path && t.assets?.repo === mine.repo && occupies(t.props, setup));
+  return mine.items
+    .map((asset) => ({ asset, tasks: others.filter((t) => t.assets.items.some((b) => assetsOverlap(asset, b))) }))
+    .filter((c) => c.tasks.length);
+}
+
 /** Whether the note has a fenced block of this name: ```name (or ~~~name) on a line of its own. */
 export function hasBlock(text, name) {
   return new RegExp(`^ {0,3}(?:\`{3,}|~{3,})[ \\t]*${name}[ \\t]*$`, "mi").test(toLf(text));

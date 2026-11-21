@@ -1196,3 +1196,49 @@ test("an assets block lists one path per line from the repo's root, folders with
   assert.deepEqual(assetOptions("Source/A.cpp"), { repo: "", branch: "" });
   assert.deepEqual(assetOptions("Repo: `not a repo`\nBRANCH: 'feature/x'"), { repo: "", branch: "feature/x" }, "an odd repo is left out");
 });
+
+test("occupied assets: claimed and started tasks occupy their assets; overlaps by path, folder and repo; conflicts per task", async () => {
+  const { taskAssets, occupies, assetsOverlap, occupiedAssets, assetConflicts } = await import("../src/vault.js");
+  const setup = taskSetup({});
+  assert.equal(taskAssets("# No block\n"), null);
+  assert.deepEqual(taskAssets("```assets\nrepo: Org/Game\n- Source/A.cpp\n```\n```assets\nother.md\n```"),
+    { repo: "org/game", branch: "", items: [{ path: "Source/A.cpp", folder: false, note: "" }] }, "the first block counts");
+  // Who occupies: claimed and started, not finished, never an epic.
+  const p = (status, assignee = "Ann (Claude)", more = {}) => ({ status, assignee, ...more });
+  assert.equal(occupies(p("In Progress"), setup), true);
+  assert.equal(occupies(p("Testing"), setup), true, "Testing still holds its files until it's done");
+  assert.equal(occupies(p("Blocked"), setup), true);
+  assert.equal(occupies(p("In Progress", ""), setup), false, "no assignee, no claim");
+  for (const s of ["To Do", "Waiting", "Done", "Cancelled", ""]) assert.equal(occupies(p(s), setup), false, s);
+  assert.equal(occupies(p("In Progress", "Ann", { type: "Epic" }), setup), false);
+  const custom = taskSetup({ fields: { status: { values: ["Backlog", "Doing", "Shipped"] } } });
+  assert.equal(occupies(p("Doing"), custom), true);
+  assert.equal(occupies(p("Shipped"), custom), false, "the setup's last status is finished");
+  // Overlaps: any case, a folder holds its files, a folder doesn't hold a sibling with the same start.
+  const f = (path, folder = false) => ({ path, folder });
+  assert.equal(assetsOverlap(f("Content/Maps/A.umap"), f("content/maps/a.umap")), true);
+  assert.equal(assetsOverlap(f("Content/Maps", true), f("Content/Maps/A.umap")), true);
+  assert.equal(assetsOverlap(f("Content/Map", true), f("Content/Maps/A.umap")), false);
+  assert.equal(assetsOverlap(f("Content/Maps/A.umap"), f("Content/Maps/B.umap")), false);
+  // The occupied list and conflicts.
+  const task = (id, status, assignee, block) => ({ path: `Tasks/${id}.md`, props: { id, status, assignee }, assets: taskAssets("```assets\n" + block + "\n```") });
+  const tasks = [
+    task("T-1", "In Progress", "Ann (Claude)", "repo: Org/Game\nContent/Maps/\nSource/Player.cpp"),
+    task("T-2", "Testing", "Bo", "repo: org/game\ncontent/maps/Level 1.umap"),
+    task("T-3", "To Do", "", "repo: Org/Game\nSource/Player.cpp"),
+    task("T-4", "In Progress", "Cy", "Source/Player.cpp # in the vault's own repo, another project"),
+    task("T-5", "Done", "Di", "repo: Org/Game\nContent/Maps/Level 1.umap"),
+  ];
+  const rows = occupiedAssets(tasks, setup);
+  assert.deepEqual(rows.map((r) => [r.repo, r.path, r.tasks.map((t) => t.props.id), r.conflict]), [
+    ["", "Source/Player.cpp", ["T-4"], false],
+    ["org/game", "Content/Maps", ["T-1", "T-2"], true],
+    ["org/game", "content/maps/Level 1.umap", ["T-1", "T-2"], true],
+    ["org/game", "Source/Player.cpp", ["T-1"], false],
+  ], "To Do and Done tasks hold nothing; repos stay apart; a folder and a file in it conflict");
+  assert.deepEqual(assetConflicts(tasks[2], tasks, setup).map((c) => [c.asset.path, c.tasks.map((t) => t.props.id)]), [["Source/Player.cpp", ["T-1"]]],
+    "a task still To Do is warned before it's claimed");
+  assert.deepEqual(assetConflicts(tasks[3], tasks, setup), [], "the same path in another repo isn't a conflict");
+  assert.deepEqual(assetConflicts({ path: "Tasks/T-9.md", assets: null }, tasks, setup), []);
+  assert.deepEqual(occupiedAssets([], setup), []);
+});
