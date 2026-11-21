@@ -1,17 +1,17 @@
 # Graph Report - NotesApp  (2026-11-21)
 
 ## Corpus Check
-- 47 files · ~120,865 words
+- 47 files · ~121,770 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: (none) 5, .css 2, .base 2)
 
 ## Summary
-- 1067 nodes · 3384 edges · 53 communities (48 shown, 5 thin omitted)
+- 1067 nodes · 3386 edges · 52 communities (47 shown, 5 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 76 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9567a9b5`
+- Built from commit: `59a7001f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -32,7 +32,6 @@
 - task_commits.py
 - h
 - start
-- fieldProp
 - fill
 - .resolve
 - ref_node_assert
@@ -96,7 +95,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (53 total, 5 thin omitted)
+## Communities (52 total, 5 thin omitted)
 
 ### Community 0 - "GitHub"
 Cohesion: 0.14
@@ -127,16 +126,16 @@ Cohesion: 0.08
 Nodes (64): aiMinutes(), aiTimeEstimate(), aiTimeGroups(), aiTimeLabel(), aiTimeSamples(), summary(), word(), addRelation() (+56 more)
 
 ### Community 7 - "toLf"
-Cohesion: 0.12
-Nodes (29): embeddedPart(), addComment(), addNewTask(), blankOut(), blockContents(), captureAttachmentText(), claimTask(), commentHeader() (+21 more)
+Cohesion: 0.10
+Nodes (34): embeddedPart(), linkMarks(), addComment(), addNewTask(), blankOut(), blockContents(), captureAttachmentText(), claimTask() (+26 more)
 
 ### Community 8 - "inbox-overview.js"
 Cohesion: 0.06
 Nodes (61): allowed(), list(), OVERVIEW_KINDS, overviewBlock(), overviewCaptures(), overviewContents(), overviewEach(), overviewOptions() (+53 more)
 
 ### Community 9 - "vault.test.js"
-Cohesion: 0.08
-Nodes (26): linkMarks(), addDays(), inboxCandidates(), MARKER, markerText(), mergeMarker(), newTaskItems(), newTaskProps() (+18 more)
+Cohesion: 0.09
+Nodes (21): addDays(), inboxCandidates(), MARKER, markerText(), mergeMarker(), newTaskProps(), nextSprint(), pageListDepth() (+13 more)
 
 ### Community 10 - "vault.js"
 Cohesion: 0.11
@@ -162,17 +161,13 @@ Nodes (20): addLocalVault(), sync(), cleanName(), client(), connect(), copyField
 Cohesion: 0.19
 Nodes (14): applyMode(), closeSideOnPhone(), debounce(), goBack(), inboxOf(), isPhone(), isWide(), onTextChanged() (+6 more)
 
-### Community 16 - "fieldProp"
-Cohesion: 0.42
-Nodes (11): assigneeMatches(), assignmentTasks(), boardColumns(), claimedTasks(), fieldProp(), foldName(), idNum(), questionOf() (+3 more)
-
 ### Community 17 - "fill"
 Cohesion: 0.21
 Nodes (20): assigneeList(), editTaskFields(), ensureSidebar(), fill(), fillInboxOverview(), findOwnInbox(), loadCollaborators(), loadOverviewModule() (+12 more)
 
 ### Community 18 - ".resolve"
-Cohesion: 0.17
-Nodes (23): loadSuggestions(), blank(), blockedTasks(), byOrder(), isDoneStatus(), isEpic(), isTaskPath(), linkList() (+15 more)
+Cohesion: 0.15
+Nodes (33): loadSuggestions(), assigneeMatches(), assignmentTasks(), blank(), blockedTasks(), boardColumns(), byOrder(), claimedTasks() (+25 more)
 
 ### Community 19 - "ref_node_assert"
 Cohesion: 0.14
@@ -191,8 +186,8 @@ Cohesion: 0.24
 Nodes (17): baseCache(), baseNotes(), checkInboxDot(), chunks(), inboxAttention(), inParallel(), keepBaseCache(), lastCommitDates() (+9 more)
 
 ### Community 23 - ".has"
-Cohesion: 0.25
-Nodes (9): assigneeOptions(), LinkIndex, mentionKey(), seenList(), sortAssignments(), sortMentions(), vaultPeople(), withSeenAssignments() (+1 more)
+Cohesion: 0.23
+Nodes (10): assigneeOptions(), LinkIndex, mentionKey(), parentProblem(), seenList(), sortAssignments(), sortMentions(), vaultPeople() (+2 more)
 
 ### Community 24 - "inbox-overview.mjs"
 Cohesion: 0.16

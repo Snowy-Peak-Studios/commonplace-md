@@ -166,7 +166,23 @@ The optional `sprint` property selects `current`, `next`, a sprint name or a wik
 sprint: Sprint 1
 ```
 
-Sprints and the task sprint field must be enabled and configured for the project. A block targeting another sprint is for reading. [Sprint setup](../example-vault/How%20To/Run%20sprints.md).
+To show only how the sprint is going, for example above the top tasks in an inbox, add `show: progress`. It keeps the head, the goal and the progress bar and leaves out the task list. `owner` adds a line with that person's share of the sprint (tasks assigned to them or to their agent), and `login` also counts tasks assigned to their GitHub login:
+
+```sprint
+sprint: current
+show: progress
+owner: Your name
+login: your-github-login
+```
+
+| Option | Values and default |
+| --- | --- |
+| `sprint` | `current`, `next`, a sprint name or wikilink. Default: the sprint page the block is on. |
+| `show` | `progress` for the head, goal and progress bar only. Default: everything, with the tasks by status. |
+| `owner` | A person's name: adds their share of the sprint. Default: no share line. |
+| `login` | A GitHub login, with or without `@`: counted as that person too. |
+
+With no sprint going on today, a `sprint: current` block says so. Sprints and the task sprint field must be enabled and configured for the project. A block targeting another sprint is for reading. [Sprint setup](../example-vault/How%20To/Run%20sprints.md).
 
 ## board
 

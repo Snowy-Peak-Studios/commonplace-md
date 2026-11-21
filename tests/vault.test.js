@@ -566,6 +566,26 @@ test("a sprint's tasks by status in the setup's order, with how many are done an
   assert.deepEqual(s.points, { done: 3, total: 9, unit: "points" });
   assert.deepEqual(s.open.map((t) => t.id), ["T-1", "T-3", "T-5"]);
   assert.equal(sprintTasks(notes.slice(2, 3), "Sprints/Sprint 1.md", { setup, resolve: (t) => idx.resolve(t) }).points, null);
+  assert.equal(s.mine, null, "no owner, no share");
+});
+
+test("a sprint's tasks count one person's share: by name (with or without their agent) or GitHub login", () => {
+  const notes = [
+    { path: "Tasks/A.md", props: { id: "T-1", sprint: "[[Sprint 1]]", status: "Done", estimate: 3, assignee: "Ana Lée" } },
+    { path: "Tasks/B.md", props: { id: "T-2", sprint: "[[Sprint 1]]", status: "In Progress", estimate: 2, assignee: "Ana Lee (Claude)" } },
+    { path: "Tasks/C.md", props: { id: "T-3", sprint: "[[Sprint 1]]", status: "To Do", assignee: "@ana-gh" } },
+    { path: "Tasks/D.md", props: { id: "T-4", sprint: "[[Sprint 1]]", status: "To Do", assignee: "Bo" } },
+    { path: "Tasks/E.md", props: { id: "T-5", sprint: "[[Sprint 2]]", status: "To Do", assignee: "Ana Lee" } },
+  ];
+  const idx = new LinkIndex([...notes.map((n) => n.path), ...SPRINTS.map((n) => n.path)]);
+  const setup = taskSetup({});
+  const resolve = (t) => idx.resolve(t);
+  const of = (owner) => sprintTasks(notes, "Sprints/Sprint 1.md", { setup, resolve, owner }).mine;
+  assert.deepEqual(of({ name: "Ana Lee" }), { total: 2, done: 1, points: { done: 3, total: 5, unit: "points" } });
+  assert.deepEqual(of({ name: "Ana Lee", login: "ana-gh" }), { total: 3, done: 1, points: { done: 3, total: 5, unit: "points" } });
+  assert.deepEqual(of({ name: "", login: "@ana-gh" }), { total: 1, done: 0, points: null });
+  assert.deepEqual(of({ name: "Cy" }), { total: 0, done: 0, points: null });
+  assert.equal(of({ name: " ", login: "" }), null);
 });
 
 test("top tasks with sprints: the current sprint's free ones, else the next sprint's, marked", () => {

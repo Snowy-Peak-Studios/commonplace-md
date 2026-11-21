@@ -1238,6 +1238,7 @@ select.input { padding-right: 8px; }
 .sprint-when.now { color: var(--accent-text); background: var(--accent); }
 .sprint-goal { margin: 10px 0 0; color: var(--text-2); }
 .sprint-done { margin-top: 10px; }
+.sprint-mine { margin-top: 6px; }
 .sprint-group { margin-top: 10px; }
 .sprint-status { font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--line); }
 .sprint-empty { margin: 10px 0 0; }

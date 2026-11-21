@@ -236,10 +236,13 @@ export function createMarkdown() {
     if (PAGE_LIST_BLOCKS.includes(lang)) return `<div class="page-list-block" data-kind="${lang}"><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     if (lang === "base") return `<div class="base-block"><pre><code>${esc(token.content)}</code></pre></div>\n`;
     // A task's ```subtasks, ```relations and ```commits, and a sprint's ```sprint: the app puts the box there.
-    // A `task:` line shows another task's box, on any page.
+    // A `task:` line shows another task's box, on any page; a ```sprint block's `show`, `owner` and `login` say
+    // how much of the sprint's box it shows and whose tasks it also counts.
     if (APP_BLOCKS.includes(lang)) {
-      const { task, sprint } = appBlockOptions(token.content);
-      return `<div class="app-block" data-block="${lang}"${task ? ` data-task="${esc(task)}"` : ""}${sprint ? ` data-sprint="${esc(sprint)}"` : ""}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
+      const o = appBlockOptions(token.content);
+      const keys = lang === "sprint" ? ["task", "sprint", "show", "owner", "login"] : ["task", "sprint"];
+      const attrs = keys.map((k) => (o[k] ? ` data-${k}="${esc(o[k])}"` : "")).join("");
+      return `<div class="app-block" data-block="${lang}"${attrs}><pre><code>${esc(token.content || lang)}</code></pre></div>\n`;
     }
     if (lang !== "mermaid") return fence(tokens, idx, options, env, self);
     return `<div class="mermaid-diagram"><pre><code>${esc(token.content)}</code></pre></div>\n`;
@@ -309,14 +312,18 @@ export function topTasksOptions(src) {
 /**
  * The options of a task's or a sprint's block (```subtasks, ```relations, ```commits, ```sprint), one per line:
  * `task: C-12` (a task's ID, name or `[[link]]`: show that task's box, on any page) and, for ```sprint,
- * `sprint: current` (or `next`, or a sprint's name or link). Left out, the page's own. Other lines are ignored.
+ * `sprint: current` (or `next`, or a sprint's name or link; left out, the page's own), `show: progress` (only the
+ * head, goal and progress bar, without the task list; anything else or left out: all of it) and `owner: Your Name`
+ * with an optional `login: your-login` (also count that person's tasks in the sprint). Other lines are ignored.
  */
 export function appBlockOptions(src) {
-  const out = { task: "", sprint: "" };
+  const out = { task: "", sprint: "", show: "", owner: "", login: "" };
   for (const line of String(src ?? "").split("\n")) {
-    const m = line.match(/^\s*(task|sprint)\s*:\s*(.*?)\s*$/i);
+    const m = line.match(/^\s*(task|sprint|show|owner|login)\s*:\s*(.*?)\s*$/i);
     if (m) out[m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, "").trim();
   }
+  out.show = /^progress$/i.test(out.show) ? "progress" : "";
+  out.login = out.login.replace(/^@/, "");
   return out;
 }
 

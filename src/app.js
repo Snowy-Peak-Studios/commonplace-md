@@ -1135,8 +1135,8 @@ function renderPreview() {
     subtasks: isTask && (() => subtasksBox(f, setup)),
     relations: isTask && (() => relationsBox(f, setup)),
     commits: isTask && (() => commitsBox(f, props)),
-    sprint: isSprint && (() => sprintBox(f, setup)),
-  }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
+    sprint: isSprint && ((d) => sprintBox(f, setup, null, d)),
+  }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
   fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
   commentFocus?.focus();
@@ -1294,7 +1294,7 @@ function fillAppBlocks(body, boxes, other = null) {
     const box = (el.dataset.task || el.dataset.sprint) && other ? other(el.dataset.block, el.dataset) : undefined;
     if (box !== undefined) { el.replaceWith(box ?? ""); continue; }
     const make = boxes[el.dataset.block];
-    if (make) el.replaceWith(make() ?? "");
+    if (make) el.replaceWith(make(el.dataset) ?? "");
   }
 }
 
@@ -1595,7 +1595,7 @@ const amount = (n, unit = "") => `${n} ${n === 1 ? unit.replace(/s$/, "") : unit
  * page, naming it and linking to it. When there's no such sprint it says so; Start the next sprint stays on the
  * sprint's own page. Undefined without a `sprint:` line, so the block is drawn as before.
  */
-function otherSprintBox(f, setup, input) {
+function otherSprintBox(f, setup, input, opts = {}) {
   if (!input) return undefined;
   const none = (said) => h("section", { class: "sprint-box", "aria-label": "Sprint" },
     h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint")), h("p", { class: "muted sprint-empty" }, said));
@@ -1610,10 +1610,15 @@ function otherSprintBox(f, setup, input) {
     return none(word === "current" || word === "now" ? "No sprint is going on today."
       : word === "next" ? "No sprint is planned after this one yet." : `No sprint is called “${linkName(input)}”.`);
   }
-  return sprintBox(f, setup, pick.path);
+  return sprintBox(f, setup, pick.path, opts);
 }
 
-function sprintBox(f, setup, path = null) {
+/**
+ * A sprint's box: its head, goal, progress and tasks by status. From the block's options (`opts`, its dataset):
+ * `show: progress` leaves out the task list (and Start the next sprint), for an inbox or a Home; `owner` (and
+ * `login`) adds a line with that person's share of the sprint.
+ */
+function sprintBox(f, setup, path = null, opts = {}) {
   const tasks = taskNotes(f.repo, setup).notes;
   const all = sprintNotes(f.repo, setup).notes;
   if (!tasks || !all) return null;
@@ -1623,13 +1628,24 @@ function sprintBox(f, setup, path = null) {
   const away = !!path && path !== f.path;
   const me = list.find((s) => s.path === (path ?? f.path));
   if (!me) return null;
-  const s = sprintTasks(tasks, me.path, { setup, resolve: (t, from) => tree.index.resolve(t, from) });
-  const start = !away && canWrite(f.repo) && list[0]?.path === f.path
+  const progressOnly = opts.show === "progress";
+  const owner = opts.owner || opts.login ? { name: opts.owner ?? "", login: opts.login ?? "" } : null;
+  const s = sprintTasks(tasks, me.path, { setup, resolve: (t, from) => tree.index.resolve(t, from), owner });
+  const start = !progressOnly && !away && canWrite(f.repo) && list[0]?.path === f.path
     ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
   const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
-  const done = `${s.done} of ${s.total} task${s.total === 1 ? "" : "s"} done`
-    + (s.points ? ` · ${s.points.done} of ${amount(s.points.total, s.points.unit)}` : "");
-  return h("section", { class: "sprint-box", "aria-label": "Sprint" },
+  const count = (x) => `${x.done} of ${x.total} task${x.total === 1 ? "" : "s"} done`
+    + (x.points ? ` · ${x.points.done} of ${amount(x.points.total, x.points.unit)}` : "");
+  const done = count(s);
+  const who = opts.owner || "@" + opts.login;
+  const mine = s.mine && s.total
+    ? h("div", { class: "st-count sprint-mine" }, `${who}: `, s.mine.total ? count(s.mine) : "no tasks in this sprint") : null;
+  const tasksList = progressOnly ? [] : s.groups.map((g) => h("div", { class: "sprint-group" },
+    h("div", { class: "sprint-status" }, g.status || "No status", h("span", { class: "muted" }, ` ${g.tasks.length}`)),
+    h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
+      h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
+      t.points != null ? h("span", { class: "st-status" }, amount(t.points, s.points?.unit)) : null)))));
+  return h("section", { class: progressOnly ? "sprint-box sprint-progress" : "sprint-box", "aria-label": "Sprint" },
     h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Sprint"),
       away ? h("a", { class: "st-of", href: hrefFor(f.repo, me.path), title: `Open ${me.name}` }, me.name) : null,
       h("span", { class: `sprint-when ${me.when}` }, WHEN[me.when]),
@@ -1639,11 +1655,8 @@ function sprintBox(f, setup, path = null) {
       h("div", { class: "st-count sprint-done" }, done),
       h("div", { class: "st-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(s.total), "aria-valuenow": String(s.done),
         "aria-label": done }, h("span", { style: `width: ${Math.round((s.done / s.total) * 100)}%` })),
-      ...s.groups.map((g) => h("div", { class: "sprint-group" },
-        h("div", { class: "sprint-status" }, g.status || "No status", h("span", { class: "muted" }, ` ${g.tasks.length}`)),
-        h("ul", { class: "st-list" }, g.tasks.map((t) => h("li", { class: t.done ? "done" : null },
-          h("a", { href: hrefFor(f.repo, t.path) }, t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path)),
-          t.points != null ? h("span", { class: "st-status" }, amount(t.points, s.points?.unit)) : null))))),
+      mine,
+      ...tasksList,
     ] : h("p", { class: "muted sprint-empty" }, "No tasks in this sprint yet. Pick it in a task's Sprint field."));
 }
 

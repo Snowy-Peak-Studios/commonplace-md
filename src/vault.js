@@ -1378,11 +1378,14 @@ export function sprintSuggestions(notes, { areas = [], count = 3, prop = "sprint
 
 /**
  * A sprint's tasks: those whose sprint property links to it, grouped by status in the setup's order (others
- * after), with how many are done and, when estimates are on, how much of the estimate.
+ * after), with how many are done and, when estimates are on, how much of the estimate. With an `owner`
+ * ({ name, login }, either may be empty), `mine` says the same for that person's tasks (their agent's too);
+ * null without one.
  */
-export function sprintTasks(notes, path, { setup = null, resolve }) {
+export function sprintTasks(notes, path, { setup = null, resolve, owner = null }) {
   const prop = fieldProp(setup, "sprint");
   const statusProp = fieldProp(setup, "status");
+  const assigneeProp = fieldProp(setup, "assignee");
   const estimate = setup?.fields.find((f) => f.key === "estimate");
   const order = (setup?.fields.find((f) => f.key === "status")?.values ?? []).map((v) => v.toLowerCase());
   const tasks = notes
@@ -1390,7 +1393,7 @@ export function sprintTasks(notes, path, { setup = null, resolve }) {
     .map((n) => {
       const points = Number(n.props[estimate?.prop ?? "estimate"]);
       return { path: n.path, id: String(n.props.id ?? "").trim(), status: String(n.props[statusProp] ?? "").trim(),
-        done: isDoneStatus(n.props[statusProp], setup), points: Number.isFinite(points) && !blank(n.props[estimate?.prop ?? "estimate"]) ? points : null };
+        assignee: String(n.props[assigneeProp] ?? "").trim(), done: isDoneStatus(n.props[statusProp], setup), points: Number.isFinite(points) && !blank(n.props[estimate?.prop ?? "estimate"]) ? points : null };
     })
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }) || a.path.localeCompare(b.path));
   const groups = [];
@@ -1403,10 +1406,17 @@ export function sprintTasks(notes, path, { setup = null, resolve }) {
   groups.sort((a, b) => at(a.status) - at(b.status));
   const sum = (list) => list.reduce((n, t) => n + (t.points ?? 0), 0);
   const hasPoints = tasks.some((t) => t.points != null);
+  const unit = estimate?.unit ?? "points";
+  const ownerSet = !!owner && (!!foldName(owner.name) || !!String(owner.login ?? "").trim());
+  const own = ownerSet ? tasks.filter((t) => assigneeMatches(t.assignee, owner)) : [];
   return {
     groups, total: tasks.length, done: tasks.filter((t) => t.done).length,
-    points: hasPoints ? { done: sum(tasks.filter((t) => t.done)), total: sum(tasks), unit: estimate?.unit ?? "points" } : null,
+    points: hasPoints ? { done: sum(tasks.filter((t) => t.done)), total: sum(tasks), unit } : null,
     open: tasks.filter((t) => !t.done),
+    mine: ownerSet ? {
+      total: own.length, done: own.filter((t) => t.done).length,
+      points: own.some((t) => t.points != null) ? { done: sum(own.filter((t) => t.done)), total: sum(own), unit } : null,
+    } : null,
   };
 }
 

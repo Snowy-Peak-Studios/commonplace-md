@@ -148,13 +148,27 @@ test("a task's and a sprint's blocks become placeholders that keep their code", 
 });
 
 test("a task's block options: task names another task by its ID, name or link; other lines are ignored", () => {
-  assert.deepEqual(appBlockOptions(""), { task: "", sprint: "" });
-  assert.deepEqual(appBlockOptions("Task: T-12\nnote: hi"), { task: "T-12", sprint: "" });
-  assert.deepEqual(appBlockOptions("task: '[[Get set up]]'"), { task: "[[Get set up]]", sprint: "" });
-  assert.deepEqual(appBlockOptions("task:"), { task: "", sprint: "" });
-  assert.deepEqual(appBlockOptions("Sprint: current"), { task: "", sprint: "current" });
+  const none = { task: "", sprint: "", show: "", owner: "", login: "" };
+  assert.deepEqual(appBlockOptions(""), none);
+  assert.deepEqual(appBlockOptions("Task: T-12\nnote: hi"), { ...none, task: "T-12" });
+  assert.deepEqual(appBlockOptions("task: '[[Get set up]]'"), { ...none, task: "[[Get set up]]" });
+  assert.deepEqual(appBlockOptions("task:"), none);
+  assert.deepEqual(appBlockOptions("Sprint: current"), { ...none, sprint: "current" });
   assert.equal(render("```sprint\nsprint: next\n```\n"),
     '<div class="app-block" data-block="sprint" data-sprint="next"><pre><code>sprint: next\n</code></pre></div>\n');
+});
+
+test("a sprint block's show, owner and login: progress only, and whose share it counts", () => {
+  const none = { task: "", sprint: "", show: "", owner: "", login: "" };
+  assert.deepEqual(appBlockOptions("sprint: current\nShow: Progress\nowner: 'Ana Lee'\nlogin: @ana-gh"),
+    { ...none, sprint: "current", show: "progress", owner: "Ana Lee", login: "ana-gh" });
+  assert.equal(appBlockOptions("show: all").show, "", "anything but progress shows it all");
+  assert.equal(appBlockOptions("show: tasks").show, "");
+  assert.equal(render("```sprint\nsprint: current\nshow: progress\nowner: A & B\n```\n"),
+    '<div class="app-block" data-block="sprint" data-sprint="current" data-show="progress" data-owner="A &amp; B">'
+    + '<pre><code>sprint: current\nshow: progress\nowner: A &amp; B\n</code></pre></div>\n');
+  assert.equal(render("```subtasks\nshow: progress\nowner: Ana\n```\n"),
+    '<div class="app-block" data-block="subtasks"><pre><code>show: progress\nowner: Ana\n</code></pre></div>\n', "only a sprint block takes them");
 });
 
 test("a needs-attention block becomes a placeholder with what it shows, its owner and login, holding its source", () => {
