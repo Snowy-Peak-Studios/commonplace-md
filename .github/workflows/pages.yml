@@ -36,19 +36,6 @@ jobs:
         with:
           ref: dev
           path: site/dev
-      - name: Name the version in development
-        run: |
-          rm -rf site/.git site/dev/.git site/.github site/dev/.github
-          python3 - <<'PY'
-          import json
-          path = "site/dev/manifest.webmanifest"
-          m = json.load(open(path, encoding="utf-8"))
-          m["name"] = m["name"] + " (dev)"
-          m["short_name"] = m["short_name"] + " dev"
-          with open(path, "w", encoding="utf-8", newline="") as f:
-              json.dump(m, f, ensure_ascii=False, indent=2)
-              f.write("\n")
-          PY
       # The code graph for agents and people: graphify reads the code alone (code-only, no AI model, no key) and
       # writes graph.json and the clickable graph.html into graphify-out/, served at dev/graphify-out/graph.html
       # (and at the site's own graphify-out/ once main has a .graphifyignore). A failure here never stops a deploy.
@@ -65,6 +52,19 @@ jobs:
             (cd "$d" && graphify extract . --code-only --no-cluster && graphify cluster-only . --no-label)
             rm -rf "$d/graphify-out/cache" "$d/graphify-out/manifest.json" "$d"/graphify-out/.graphify_*
           done
+      - name: Name the version in development
+        run: |
+          rm -rf site/.git site/dev/.git site/.github site/dev/.github
+          python3 - <<'PY'
+          import json
+          path = "site/dev/manifest.webmanifest"
+          m = json.load(open(path, encoding="utf-8"))
+          m["name"] = m["name"] + " (dev)"
+          m["short_name"] = m["short_name"] + " dev"
+          with open(path, "w", encoding="utf-8", newline="") as f:
+              json.dump(m, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
