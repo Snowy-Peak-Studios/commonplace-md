@@ -170,8 +170,9 @@ a.btn { text-decoration: none; color: var(--text); }
   position: relative;
 }
 body.side-closed #side { display: none; }
-/* The sidebar's right edge: drag it (or use the arrow keys on it) to change the width. */
-#side-resize { position: absolute; top: 0; right: -4px; z-index: 5; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+/* The sidebar's right edge: drag it (or use the arrow keys on it) to change the width. Its grab area reaches 8px over
+   the note, so the list's scrollbar, which sits at the edge, doesn't take the drag. */
+#side-resize { position: absolute; top: 0; right: -8px; z-index: 5; width: 12px; height: 100%; cursor: col-resize; touch-action: none; }
 #side-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background 0.12s; }
 #side-resize:hover::after, #side-resize:focus-visible::after, body.side-resizing #side-resize::after { background: var(--accent); }
 #side-resize:focus-visible { outline: none; }
@@ -240,7 +241,7 @@ body.no-token #side, body.no-token .bar { display: none; }
 .search input { border: 0; background: none; outline: none; flex: 1; min-width: 0; color: var(--text); font-size: 14px; }
 .search input::placeholder { color: var(--muted); }
 
-.side-scroll { flex: 1; overflow: auto; padding: 2px 8px 20px; overscroll-behavior: contain; }
+.side-scroll { flex: 1; overflow: auto; padding: 2px 8px 20px; overscroll-behavior: contain; scrollbar-width: thin; }
 .side-label {
   font-size: 11.5px;
   font-weight: 600;
