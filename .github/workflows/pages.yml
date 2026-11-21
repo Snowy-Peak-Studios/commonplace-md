@@ -49,6 +49,22 @@ jobs:
               json.dump(m, f, ensure_ascii=False, indent=2)
               f.write("\n")
           PY
+      # The code graph for agents and people: graphify reads the code alone (code-only, no AI model, no key) and
+      # writes graph.json and the clickable graph.html into graphify-out/, served at dev/graphify-out/graph.html
+      # (and at the site's own graphify-out/ once main has a .graphifyignore). A failure here never stops a deploy.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the code graph
+        continue-on-error: true
+        run: |
+          pip install --quiet graphifyy==0.9.92
+          dirs="site/dev"
+          if [ -f site/.graphifyignore ]; then echo >> site/.graphifyignore; echo "dev/" >> site/.graphifyignore; dirs="site/dev site"; fi
+          for d in $dirs; do
+            (cd "$d" && graphify extract . --code-only --no-cluster && graphify cluster-only . --no-label)
+            rm -rf "$d/graphify-out/cache" "$d/graphify-out/manifest.json" "$d"/graphify-out/.graphify_*
+          done
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
