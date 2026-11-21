@@ -865,6 +865,7 @@ select.chip.pick:disabled { opacity: 0.6; cursor: progress; }
 .attention .attention-all { margin-left: auto; }
 .preview .attention-list li.attention-seen > details, .preview .attention-list li.attention-answered > details { flex: 1 0 100%; }
 .attention-seen summary, .attention-answered summary { cursor: pointer; padding: 4px 0; }
+.attention-seen .attention-clear { margin: 2px 0 6px; }
 .attention-list .attention-text { flex: 1 0 100%; color: var(--text-2); font-size: 13.5px; padding-bottom: 4px; overflow-wrap: anywhere; }
 .mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 550; text-decoration: none; }
 a.mention:hover { text-decoration: underline; }

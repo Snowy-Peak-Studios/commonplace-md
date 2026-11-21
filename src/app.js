@@ -12,7 +12,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_CLEARED, shownSeen, clearAllSeen, keptCleared,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -2635,10 +2635,11 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     const asked = questions.filter((t) => !t.answer), answered = questions.filter((t) => t.answer);
     const ms = sortMentions(found, seenNow);
     const assigned = sortAssignments(assignments.filter((t) => !reviewPaths.has(t.path)), note && noteProps(note.text)[SEEN_ASSIGNMENTS]);
+    const visible = shownSeen({ mentions: ms.seen, assignments: assigned.seen }, note && noteProps(note.text)[SEEN_CLEARED]);
     head.textContent = [
       askR ? `${reviews.length} for review · ${reviewStatuses.join(", ")}` : wantR ? "Add owner or login to show reviews" : "",
       askQ ? `${asked.length} question${asked.length === 1 ? "" : "s"} for ${owner} · Answer on the task` + (answered.length ? `, ${answered.length} answered` : "") : wantQ ? "No owner: line, so no questions" : "",
-      askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (ms.seen.length ? `, ${ms.seen.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
+      askM ? `${ms.open.length} new mention${ms.open.length === 1 ? "" : "s"} of @${login} in ${read} notes` + (visible.mentions.length ? `, ${visible.mentions.length} seen` : "") + (ms.answered.length ? `, ${ms.answered.length} answered` : "") : wantM ? "No login: line, so no mentions" : "",
       askA ? assigned.open.length + " new assignment" + (assigned.open.length === 1 ? "" : "s") : "",
       showSet ? "" : "Questions and mentions (the block sets no show)",
     ].filter(Boolean).join(" · ");
@@ -2654,8 +2655,12 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     ].filter(Boolean);
     if (!rows.length) rows.push(h("li", { class: "muted" }, "Nothing waits on you."));
     if (answered.length) rows.push(h("li", { class: "attention-answered" }, h("details", {}, h("summary", { class: "muted", title: "Your answers are on these tasks. Each leaves the list once the agent acts on it." }, `Answered, waiting for the agent (${answered.length})`), h("ol", { class: "attention-list" }, answered.map(questionRow)))));
-    const seenRows = [...assigned.seen.map((t) => assignmentRow(t, true)), ...ms.seen.map((m) => mentionRow(m, true))];
-    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), h("ol", { class: "attention-list" }, seenRows))));
+    const seenRows = [...visible.assignments.map((t) => assignmentRow(t, true)), ...visible.mentions.map((m) => mentionRow(m, true))];
+    // Clear seen takes them all out of the fold; they stay seen, so they never come back as new.
+    const clear = canMark ? h("button", { class: "btn small ghost attention-clear", type: "button",
+      title: "Take every seen item out of this list. They stay seen, so they don't come back as new",
+      onclick: () => clearInboxSeen(note, askM ? allFound : null, askA ? allAssignments : null) }, icon("trash"), "Clear seen") : null;
+    if (seenRows.length) rows.push(h("li", { class: "attention-seen" }, h("details", {}, h("summary", { class: "muted" }, `Seen (${seenRows.length})`), clear, h("ol", { class: "attention-list" }, seenRows))));
     list.replaceChildren(...rows);
   }, () => list.replaceChildren(h("li", { class: "muted" }, "The notes couldn't be read.")));
   return box;
@@ -2666,11 +2671,30 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
  */
 function markInboxSeen(f, mentions, found, assignments, allAssignments) {
   if (app.file !== f || (!mentions.length && !assignments.length)) return;
-  const was = f.dirty;
   const props = noteProps(f.text);
   const entries = [];
   if (mentions.length) entries.push([SEEN_MENTIONS, withSeenMentions(props[SEEN_MENTIONS], mentions, found)]);
   if (assignments.length) entries.push([SEEN_ASSIGNMENTS, withSeenAssignments(props[SEEN_ASSIGNMENTS], assignments, allAssignments)]);
+  // The seen lists drop what's gone; the cleared list follows them.
+  if (props[SEEN_CLEARED] != null) {
+    const now = Object.fromEntries(entries);
+    entries.push([SEEN_CLEARED, keptCleared(props[SEEN_CLEARED], now[SEEN_MENTIONS] ?? props[SEEN_MENTIONS], now[SEEN_ASSIGNMENTS] ?? props[SEEN_ASSIGNMENTS])]);
+  }
+  writeInboxProps(f, entries, "Marked as seen: Save to keep it");
+}
+
+/**
+ * **Clear seen**: every seen item leaves the Seen fold for good, in one commit (or with the existing draft). The seen
+ * lists of the kinds the box read keep only what still exists; `found` or `tasks` is null for a kind it didn't read.
+ */
+function clearInboxSeen(f, found, tasks) {
+  if (app.file !== f) return;
+  writeInboxProps(f, clearAllSeen(noteProps(f.text), { found, tasks }), "Cleared the seen items: Save to keep it");
+}
+
+/** Writes properties into the open inbox and saves it, or keeps them with its unsaved changes and says so. */
+function writeInboxProps(f, entries, unsaved) {
+  const was = f.dirty;
   const next = setProps(f.text, entries);
   if (!next || next === f.text) return;
   f.text = next;
@@ -2680,7 +2704,7 @@ function markInboxSeen(f, mentions, found, assignments, allAssignments) {
   renderPreview();
   $("#main").scrollTop = scroll;
   if (!was) save();
-  else toast("Marked as seen: Save to keep it", "info");
+  else toast(unsaved, "info");
 }
 
 /** How the box's head says each sprint choice. */

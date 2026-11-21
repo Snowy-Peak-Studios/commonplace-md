@@ -1543,3 +1543,39 @@ export function withSeenAssignments(seen, add, tasks) {
   const known = new Set([...seenList(seen), ...add.map((task) => task.key)]);
   return tasks.map((task) => task.key).filter((key) => known.has(key));
 }
+
+/**
+ * The inbox property with the seen items **Clear seen** took out of the Seen fold. They stay in `seen_mentions`
+ * and `seen_assignments` too, so they never come back as new, and the Inbox dot and the overview don't count them.
+ */
+export const SEEN_CLEARED = "seen_cleared";
+
+/** The seen mentions and assignments still shown under Seen: those whose key isn't in the cleared list. */
+export function shownSeen({ mentions = [], assignments = [] }, cleared) {
+  const gone = new Set(seenList(cleared));
+  return {
+    mentions: mentions.filter((m) => !gone.has(mentionKey(m.path, m))),
+    assignments: assignments.filter((t) => !gone.has(t.key)),
+  };
+}
+
+/**
+ * The inbox's lists after **Clear seen**, as [property, value] entries: each seen list the box read (`found`, the
+ * mentions, or `tasks`, the assignments; null when the box didn't read that kind, so it's left as it was) keeps
+ * only what still exists, and every seen item is cleared. The cleared list keeps only keys still seen.
+ */
+export function clearAllSeen(props, { found = null, tasks = null }) {
+  const mentions = found ? withSeenMentions(props[SEEN_MENTIONS], [], found) : seenList(props[SEEN_MENTIONS]);
+  const assignments = tasks ? withSeenAssignments(props[SEEN_ASSIGNMENTS], [], tasks) : seenList(props[SEEN_ASSIGNMENTS]);
+  return [
+    ...(found ? [[SEEN_MENTIONS, mentions]] : []),
+    ...(tasks ? [[SEEN_ASSIGNMENTS, assignments]] : []),
+    [SEEN_CLEARED, [...new Set([...mentions, ...assignments])]],
+  ];
+}
+
+/** The cleared list kept to the keys still in one of the seen lists, so it never outgrows them. */
+export function keptCleared(cleared, seenMentions, seenAssignments) {
+  const seen = new Set([...seenList(seenMentions), ...seenList(seenAssignments)]);
+  return seenList(cleared).filter((k) => seen.has(k));
+}
