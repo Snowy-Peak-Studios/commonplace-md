@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { blobSha, GitHubError } from "../src/github.js";
-import { plan, keptAtOnce, unreachable, Mirror } from "../src/mirror.js";
+import { plan, keptAtOnce, unreachable, Mirror, eachAtMost, keptShas, HASH_AT_ONCE } from "../src/mirror.js";
 
 const enc = (s) => new TextEncoder().encode(s);
 const dec = (b) => new TextDecoder().decode(b);
@@ -332,4 +332,50 @@ test("read-only overview reads never sync, remove, keep or flush a source copy",
   assert(mem.files.has("Wiki/Old.md"), "read-only scan never removes source files");
   assert(!mem.files.has("Wiki/New.md"), "read-only scan never downloads into the source");
   assert.equal(gh.files.get("Wiki/Home.md").text, "home\n", "pending source edit is not uploaded");
+});
+
+test("the copy's shas are kept between sessions: a later open hashes only what changed", async () => {
+  const gh = await fakeGitHub({ "Wiki/Home.md": "home\n", "Wiki/A.md": "a\n", "Wiki/B.md": "b\n" });
+  const mem = memoryFiles();
+  const kept = new Map(); // what the device keeps between sessions
+  const session = () => {
+    const m = mirrorWith(mem);
+    m.readShas = async (r) => kept.get(r.id) ?? null;
+    m.saveShas = async (r, shas) => { kept.set(r.id, shas); };
+    return m;
+  };
+  const first = session();
+  await first.tree(gh, repo, "main");
+  await first.state(repo).syncing;
+  // The download filled the copy; this session's next open reads them once and keeps their shas.
+  await first.tree(gh, repo, "main");
+  assert.equal(first.state(repo).lastLoad.hashed, 3);
+  // A new session (a new Mirror): nothing is read again.
+  const second = session();
+  await second.tree(gh, repo, "main");
+  assert.deepEqual(second.state(repo).lastLoad, { files: 3, hashed: 0 });
+  assert.deepEqual([...second.state(repo).local.keys()].sort(), ["Wiki/A.md", "Wiki/B.md", "Wiki/Home.md"]);
+  // A file changed on the disk is read again, alone; a removed one leaves the kept list.
+  mem.edit("Wiki/A.md", "a, edited here\n");
+  mem.files.delete("Wiki/B.md");
+  const third = session();
+  const t = await third.tree(gh, repo, "main");
+  assert.deepEqual(third.state(repo).lastLoad, { files: 2, hashed: 1 });
+  assert.equal(Object.keys(kept.get(repo.id)).length, 2);
+  assert.deepEqual([...t.changed], ["Wiki/A.md"], "the edit still shows as a change here");
+});
+
+test("eachAtMost runs every item, never more than n at once; keptShas drops what's gone", async () => {
+  let running = 0, most = 0;
+  const seen = [];
+  await eachAtMost([...Array(20).keys()], 3, async (i) => {
+    running++; most = Math.max(most, running);
+    await new Promise((r) => setTimeout(r, 1));
+    seen.push(i); running--;
+  });
+  assert.equal(seen.length, 20);
+  assert.equal(most, 3);
+  await eachAtMost([], 3, async () => { throw new Error("never"); });
+  assert.ok(HASH_AT_ONCE > 1 && HASH_AT_ONCE <= 16);
+  assert.deepEqual([...keptShas(new Map([["a|1|2", "x"], ["b|1|2", "y"]]), new Set(["b|1|2"]))], [["b|1|2", "y"]]);
 });

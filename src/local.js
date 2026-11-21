@@ -93,20 +93,74 @@ const SKIP = new Set(["node_modules"]);
 const fileKey = (id, path) => `${id}:${path}`;
 const vaultRange = (id) => IDBKeyRange.bound(`${id}:`, `${id}:￿`);
 
-/** A vault kept in the browser: one IndexedDB record per file, { bytes, mtime }. */
+/**
+ * Several requests on the `files` and `meta` stores in one transaction, so they all happen or none do. `make` gets
+ * the two stores and returns the requests; the promise gives their results once the transaction is done.
+ */
+async function filesAndMeta(mode, make) {
+  const tx = (await db()).transaction(["files", "meta"], mode);
+  try {
+    return await new Promise((resolve, reject) => {
+      const reqs = make(tx.objectStore("files"), tx.objectStore("meta"));
+      tx.oncomplete = () => resolve(reqs.map((r) => r?.result));
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch (e) {
+    throw new GitHubError(0, `This browser's storage refused: ${e?.message || e}`);
+  }
+}
+
+/**
+ * A vault kept in the browser: one IndexedDB record per file, { bytes, mtime }, and an index of them in `meta`
+ * (`index:<id>`: path -> { size, mtime }), changed in the same transaction as each file, so listing the vault reads
+ * no file's bytes. A vault kept before the index (or one whose index doesn't match its files) gets it built once.
+ */
 export class BrowserFiles {
   constructor(id) {
     this.id = id;
   }
+  get indexKey() {
+    return `index:${this.id}`;
+  }
   async list(withDots = false, under = "") {
-    const [keys, values] = await Promise.all([
-      idb("files", "readonly", (st) => st.getAllKeys(vaultRange(this.id))),
-      idb("files", "readonly", (st) => st.getAll(vaultRange(this.id))),
-    ]);
-    return keys.map((k, i) => ({
-      path: k.slice(this.id.length + 1), size: values[i].bytes.byteLength, mtime: values[i].mtime,
-      bytes: async () => new Uint8Array(values[i].bytes),
-    })).filter((f) => f.path.startsWith(under));
+    const [keys, saved] = await filesAndMeta("readonly", (files, meta) => [files.getAllKeys(vaultRange(this.id)), meta.get(this.indexKey)]);
+    const paths = keys.map((k) => k.slice(this.id.length + 1));
+    const fits = saved && paths.length === Object.keys(saved).length && paths.every((p) => saved[p]);
+    const index = fits ? saved : await this.buildIndex();
+    return Object.entries(index).filter(([path]) => path.startsWith(under))
+      .map(([path, e]) => ({ path, size: e.size, mtime: e.mtime, bytes: () => this.read(path) }));
+  }
+  /** Reads every record once, one at a time, and keeps the index of them: all in one transaction. */
+  async buildIndex() {
+    const index = {};
+    await filesAndMeta("readwrite", (files, meta) => {
+      const cursor = files.openCursor(vaultRange(this.id));
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) { meta.put(index, this.indexKey); return; }
+        index[c.key.slice(this.id.length + 1)] = { size: c.value.bytes.byteLength, mtime: c.value.mtime };
+        c.continue();
+      };
+      return [];
+    });
+    return index;
+  }
+  /** Changes a file and its index entry together; with no index yet, `list` builds it later from the files. */
+  change(path, record) {
+    return filesAndMeta("readwrite", (files, meta) => {
+      if (record) files.put(record, fileKey(this.id, path));
+      else files.delete(fileKey(this.id, path));
+      const get = meta.get(this.indexKey);
+      get.onsuccess = () => {
+        const index = get.result;
+        if (!index) return;
+        if (record) index[path] = { size: record.bytes.byteLength, mtime: record.mtime };
+        else delete index[path];
+        meta.put(index, this.indexKey);
+      };
+      return [];
+    });
   }
   async read(path) {
     const rec = await idb("files", "readonly", (st) => st.get(fileKey(this.id, path)));
@@ -115,13 +169,13 @@ export class BrowserFiles {
   }
   write(path, bytes) {
     const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    return idb("files", "readwrite", (st) => st.put({ bytes: copy, mtime: Date.now() }, fileKey(this.id, path)));
+    return this.change(path, { bytes: copy, mtime: Date.now() });
   }
   remove(path) {
-    return idb("files", "readwrite", (st) => st.delete(fileKey(this.id, path)));
+    return this.change(path, null);
   }
   clear() {
-    return idb("files", "readwrite", (st) => st.delete(vaultRange(this.id)));
+    return filesAndMeta("readwrite", (files, meta) => [files.delete(vaultRange(this.id)), meta.delete(this.indexKey)]);
   }
 }
 

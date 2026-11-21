@@ -63,6 +63,21 @@ export function plan(remote, local, bases) {
   return { shas, changed, download, remove, adopt };
 }
 
+/** How many files of the copy are read and hashed at the same time, when their shas aren't known yet. */
+export const HASH_AT_ONCE = 8;
+
+/** Runs `fn` on every item, at most `n` at a time, and waits for all. */
+export async function eachAtMost(items, n, fn) {
+  let next = 0;
+  const worker = async () => { while (next < items.length) await fn(items[next++]); };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+}
+
+/** The sha cache ("path|mtime|size" -> sha) kept to the files the copy has now, so it doesn't grow forever. */
+export function keptShas(cache, keys) {
+  return new Map([...cache].filter(([key]) => keys.has(key)));
+}
+
 let persisted = false;
 /** Asks the browser to keep this site's storage when it needs room, once. */
 function persist() {
@@ -91,7 +106,8 @@ export class Mirror {
         bases: null, // path -> sha it last had from GitHub
         syncedAt: null,
         local: new Map(), // path -> sha, as last looked at
-        shaCache: new Map(), // "path|mtime|size" -> sha
+        shaCache: new Map(), // "path|mtime|size" -> sha, also kept on the device (`shas:` in meta)
+        shasRead: false, // the kept shas are read once a session
         bySha: new Map(), // sha -> path, the files the copy has
         remote: new Map(), // path -> sha on GitHub, from the last tree
         remoteBySha: new Map(),
@@ -142,20 +158,46 @@ export class Mirror {
       st.syncedAt = meta?.syncedAt ?? null;
       st.pending = new Map(Object.entries(meta?.pending || {}));
     }
-    const list = await files.list(false, prefixOf(r));
+    // The shas worked out in earlier sessions, kept on the device by "path|mtime|size": only a file that changed (or
+    // is new) is read and hashed again, so opening a big vault doesn't read every file each time.
+    if (!st.shasRead) {
+      const saved = await this.readShas(r).catch(() => null);
+      for (const [key, sha] of Object.entries(saved || {})) if (!st.shaCache.has(key)) st.shaCache.set(key, sha);
+      st.shasRead = true;
+    }
+    const list = (await files.list(false, prefixOf(r))).filter((f) => !hidden(f.path.slice(prefixOf(r).length)));
     st.local = new Map();
     st.bySha = new Map();
-    await Promise.all(list.map(async (f) => {
-      if (hidden(f.path.slice(prefixOf(r).length))) return;
+    let hashed = 0;
+    const keys = new Set();
+    // A few at a time, not all at once: reading every file together could stall the browser and the disk.
+    await eachAtMost(list, HASH_AT_ONCE, async (f) => {
       const key = `${f.path}|${f.mtime}|${f.size}`;
+      keys.add(key);
       let sha = st.shaCache.get(key);
       if (!sha) {
         sha = await blobSha(await f.bytes());
         st.shaCache.set(key, sha);
+        hashed++;
       }
       st.local.set(f.path, sha);
       st.bySha.set(sha, f.path);
-    }));
+    });
+    const kept = keptShas(st.shaCache, keys);
+    if (hashed || kept.size !== st.shaCache.size) {
+      st.shaCache = kept;
+      await this.saveShas(r, Object.fromEntries(kept)).catch(() => {});
+    }
+    st.lastLoad = { files: list.length, hashed };
+  }
+
+  /** The shas kept on the device from earlier sessions ({ "path|mtime|size": sha }), or null. */
+  readShas(r) {
+    return idb("meta", "readonly", (s) => s.get(`shas:${mirrorId(r)}`));
+  }
+
+  saveShas(r, shas) {
+    return idb("meta", "readwrite", (s) => s.put(shas, `shas:${mirrorId(r)}`));
   }
 
   async saveBases(r) {
