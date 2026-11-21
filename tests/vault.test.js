@@ -6,7 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
-  isoDay, addDays, sprintTime, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
+  isoDay, addDays, sprintTime, githubFileUrl, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
   pageListDepth, tocTree, subpagesOf,
   hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
@@ -1127,4 +1127,14 @@ test("a sprint's time: today's day in it, the days left with today, and the part
   assert.equal(sprintTime("", "2026-11-29", "2026-11-21"), null);
   assert.equal(sprintTime("2026-11-16", "", "2026-11-21"), null);
   assert.equal(sprintTime("2026-11-29", "2026-11-16", "2026-11-21"), null, "end before start");
+});
+
+test("a file's GitHub address keeps the slashes and encodes each part of the branch and the path", () => {
+  const repo = { owner: "Ann", repo: "notes", branch: "main" };
+  assert.equal(githubFileUrl(repo, "Notes/Inbox.md"), "https://github.com/Ann/notes/blob/main/Notes/Inbox.md");
+  assert.equal(githubFileUrl(repo, "Wiki/Tasks/A task with spaces & #1.md"),
+    "https://github.com/Ann/notes/blob/main/Wiki/Tasks/A%20task%20with%20spaces%20%26%20%231.md");
+  assert.equal(githubFileUrl(repo, "Notatki/Łódź's łąka.md"), "https://github.com/Ann/notes/blob/main/Notatki/%C5%81%C3%B3d%C5%BA's%20%C5%82%C4%85ka.md");
+  assert.equal(githubFileUrl({ ...repo, branch: "feature/new look" }, "a.md"), "https://github.com/Ann/notes/blob/feature/new%20look/a.md");
+  assert.equal(githubFileUrl({ ...repo, branch: "" }, "/a.md"), "https://github.com/Ann/notes/blob/main/a.md", "no branch: main; no empty parts");
 });

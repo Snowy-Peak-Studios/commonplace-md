@@ -1308,6 +1308,15 @@ export function isoDay(v) {
   return /^\d{4}-\d\d-\d\d/.exec(String(v ?? "").trim())?.[0] ?? "";
 }
 
+/**
+ * A file's address on GitHub, from a repo ({ owner, repo, branch }) and its path in the repo: each part of the branch
+ * and the path encoded, the slashes kept, so spaces, `#` and letters like `ł` work. The branch is `main` when empty.
+ */
+export function githubFileUrl({ owner, repo, branch }, path) {
+  const segs = (s) => String(s).split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  return `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/blob/${segs(branch || "main")}/${segs(path)}`;
+}
+
 /** `YYYY-MM-DD` plus some days. */
 export function addDays(day, n) {
   const d = new Date(`${day}T00:00:00Z`);

@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID,
@@ -624,7 +624,7 @@ function renderHeader() {
       COPY_BADGE[copyStatus(f.repo, f.path)]
         ? h("span", { class: "badge", title: COPY_BADGE[copyStatus(f.repo, f.path)][1] }, COPY_BADGE[copyStatus(f.repo, f.path)][0])
         : null);
-    title.title = f.path;
+    title.title = `${f.path}\nRight-click to copy its link or path`;
   } else {
     fill(title, h("span", { class: "name" }, app.pageTitle));
     title.title = "";
@@ -5088,6 +5088,115 @@ function showSettings(adding = false, tokenOwner = "") {
 // Start
 // ================================================================
 
+/** Puts text on the clipboard, with the older way as a fallback; false when neither works. */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = h("textarea", { style: "position: fixed; opacity: 0; pointer-events: none" });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { /* nothing more to try */ }
+    area.remove();
+    return ok;
+  }
+}
+
+/** The open file's addresses: in the app, on GitHub (null for a vault on this device) and its path in the repo or folder. */
+function fileAddresses(f) {
+  const { repo, path } = f;
+  const inRepo = fullPath(repo, path);
+  return {
+    app: `${location.origin}${location.pathname}${hrefFor(repo, path)}`,
+    github: isLocal(repo) ? null : githubFileUrl(repo, inRepo),
+    path: inRepo,
+  };
+}
+
+/**
+ * The open page's title menu (a right-click on the title at the top, a long press on a touch screen, or the menu key):
+ * Copy link (the app's address for this page), Copy GitHub link (for a GitHub vault) and Copy file path.
+ */
+function titleMenu(x, y) {
+  const f = app.file;
+  if (!f) return;
+  $("#title-menu")?.remove();
+  const at = fileAddresses(f);
+  const close = () => {
+    menu.remove();
+    removeEventListener("pointerdown", outside, true);
+    removeEventListener("keydown", onKey, true);
+    removeEventListener("scroll", close, true);
+    removeEventListener("blur", close);
+  };
+  const outside = (e) => { if (!menu.contains(e.target)) close(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); $("#title").focus(); }
+    const items = [...menu.querySelectorAll("button")];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+    }
+  };
+  const item = (glyph, label, text, done, hint) => h("button", { role: "menuitem", title: hint, onclick: async () => {
+    close();
+    if (await copyText(text)) toast(done, "ok");
+    else toast("The browser didn't allow copying. Select it here instead: " + text, "error");
+  } }, icon(glyph), label);
+  const menu = h("div", { id: "title-menu", class: "menu title-menu", role: "menu", "aria-label": `Copy for ${shownName(f.path)}` },
+    item("link", "Copy link", at.app, "Copied the link",
+      isLocal(f.repo) ? "Opens this page in the app, in this browser only: the vault is on this device" : "Opens this page in the app, for anyone with this vault"),
+    at.github ? item("external", "Copy GitHub link", at.github, "Copied the GitHub link", "The file on GitHub: opens in any browser, for anyone who can see the repo") : null,
+    item("file", "Copy file path", at.path, "Copied the file path", at.path));
+  document.body.append(menu);
+  const w = menu.offsetWidth, hgt = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - hgt - 8))}px`;
+  menu.querySelector("button").focus();
+  addEventListener("pointerdown", outside, true);
+  addEventListener("keydown", onKey, true);
+  addEventListener("scroll", close, true);
+  addEventListener("blur", close);
+}
+
+/** The title at the top opens its menu on a right-click, the menu key or Shift+F10, and a long press on a touch screen. */
+function titleMenuEvents() {
+  const title = $("#title");
+  title.tabIndex = 0;
+  title.setAttribute("aria-haspopup", "menu");
+  const openAt = (e) => {
+    const r = title.getBoundingClientRect();
+    const fromKeys = !e.clientX && !e.clientY;
+    titleMenu(fromKeys ? r.left + 12 : e.clientX, fromKeys ? r.bottom + 4 : e.clientY);
+  };
+  title.addEventListener("contextmenu", (e) => {
+    if (!app.file) return;
+    e.preventDefault();
+    openAt(e);
+  });
+  // From the keyboard on the focused title: the menu key, Shift+F10 or Enter.
+  title.addEventListener("keydown", (e) => {
+    if (!app.file || !(e.key === "ContextMenu" || (e.shiftKey && e.key === "F10") || e.key === "Enter")) return;
+    e.preventDefault();
+    openAt({ clientX: 0, clientY: 0 });
+  });
+  // Long press: phones that don't send a contextmenu event of their own (iOS Safari).
+  let timer = null;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  title.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch" || !app.file) return;
+    cancel();
+    timer = setTimeout(() => { timer = null; titleMenu(e.clientX, e.clientY); }, 550);
+  });
+  for (const type of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) {
+    title.addEventListener(type, (e) => { if (type !== "pointermove" || Math.abs(e.movementX) + Math.abs(e.movementY) > 6) cancel(); });
+  }
+}
+
 /** The files sidebar's usual width and the narrowest it goes, in pixels (the widest is half the window, up to 600). */
 const SIDE_WIDTH = { usual: 280, min: 200 };
 
@@ -5151,6 +5260,7 @@ function start() {
   renderWho();
   renderRepoPicker();
   sideLayout();
+  titleMenuEvents();
   $("#menu-btn").addEventListener("click", () => {
     document.body.classList.toggle(isPhone() ? "side-open" : "side-closed");
     if (!isPhone()) store.set("sideClosed", document.body.classList.contains("side-closed"));

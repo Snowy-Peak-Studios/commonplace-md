@@ -42,7 +42,7 @@ import {
   Folder, FileText, Sheet, Image, X, Trash2, TriangleAlert, Info, Lightbulb, CircleCheck, ClipboardList,
   Quote, Lock, ExternalLink, ArrowLeft, Clock, House, LoaderCircle, Bug, CircleHelp, CircleX, Flame,
   ListChecks, NotebookPen, KeyRound, Rows3, Columns3, FilePlus, History, File, Eye, CloudUpload, ArrowUp,
-  Download, FileCode, HardDrive,
+  Download, FileCode, HardDrive, Link,
 } from "lucide";
 export const iconNodes = {
   panel: PanelLeft, inbox: Inbox, read: BookOpen, edit: Pencil, check: Check, more: Ellipsis, plus: Plus,
@@ -52,5 +52,5 @@ export const iconNodes = {
   recent: Clock, home: House, spinner: LoaderCircle, bug: Bug, question: CircleHelp, failure: CircleX,
   danger: Flame, todo: ListChecks, note: NotebookPen, key: KeyRound, rows: Rows3, columns: Columns3,
   newNote: FilePlus, history: History, blank: File, eye: Eye, upload: CloudUpload, up: ArrowUp,
-  download: Download, code: FileCode, device: HardDrive,
+  download: Download, code: FileCode, device: HardDrive, link: Link,
 };

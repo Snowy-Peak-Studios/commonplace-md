@@ -1,17 +1,17 @@
 # Graph Report - NotesApp  (2026-11-21)
 
 ## Corpus Check
-- 47 files · ~122,539 words
+- 47 files · ~123,334 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: (none) 5, .css 2, .base 2)
 
 ## Summary
-- 1070 nodes · 3397 edges · 52 communities (47 shown, 5 thin omitted)
+- 1075 nodes · 3418 edges · 51 communities (46 shown, 5 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 76 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0938f0a2`
+- Built from commit: `69b6b22f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -26,19 +26,19 @@
 - toLf
 - inbox-overview.js
 - vault.test.js
-- .has
-- toast
+- vault.js
+- renderLocalNote
 - icon
 - task_commits.py
 - showSettings
 - h
 - Mirror
+- checkInboxDot
 - renderHeader
-- .resolve
 - ref_node_assert
 - LocalSource
 - version-switch.mjs
-- checkInboxDot
+- linkName
 - fieldProp
 - inbox-overview.mjs
 - local.js
@@ -52,7 +52,6 @@
 - NavWidget
 - csv.js
 - realFile
-- printNote
 - local-load.mjs
 - newtasks.mjs
 - wait
@@ -69,129 +68,129 @@
 - README.md
 
 ## God Nodes (most connected - your core abstractions)
-1. `h()` - 82 edges
+1. `h()` - 84 edges
 2. `renderPreview()` - 48 edges
-3. `icon()` - 44 edges
+3. `icon()` - 45 edges
 4. `Mirror` - 43 edges
 5. `showSettings()` - 41 edges
-6. `toast()` - 39 edges
-7. `start()` - 38 edges
-8. `route()` - 34 edges
-9. `join()` - 34 edges
-10. `shownName()` - 33 edges
+6. `toast()` - 40 edges
+7. `start()` - 39 edges
+8. `shownName()` - 34 edges
+9. `route()` - 34 edges
+10. `join()` - 34 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Working on it` --references--> `modal()`  [INFERRED]
-  CLAUDE.md → src/app.js
 - `Working on it` --references--> `icon()`  [INFERRED]
   CLAUDE.md → src/icons.js
 - `Rules` --references--> `toLf()`  [INFERRED]
   CLAUDE.md → src/vault.js
 - `Version switch check` --references--> `main()`  [INFERRED]
   tests/e2e/README.md → tools/task-commits/task_commits.py
+- `Working on it` --references--> `modal()`  [INFERRED]
+  CLAUDE.md → src/app.js
 - `Rules` --references--> `main()`  [INFERRED]
   CLAUDE.md → tools/task-commits/task_commits.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (52 total, 5 thin omitted)
+## Communities (51 total, 5 thin omitted)
 
 ### Community 0 - "GitHub"
 Cohesion: 0.14
 Nodes (8): decodeBase64(), encodeBase64(), encodeBytes(), encodePath(), GitHub, GitHubError, newTokenUrl(), ownerOfPath()
 
 ### Community 1 - ".state"
-Cohesion: 0.22
+Cohesion: 0.18
 Nodes (6): blobSha(), dec(), enc(), hidden(), prefixOf(), unreachable()
 
 ### Community 2 - "run.mjs"
 Cohesion: 0.03
-Nodes (48): claimedNotes, commitWrites, copied(), copyRepo, created, currentView, diff, doneTasks (+40 more)
+Nodes (47): claimedNotes, commitWrites, copied(), copyRepo, created, currentView, diff, doneTasks (+39 more)
 
 ### Community 3 - "app.js"
 Cohesion: 0.05
-Nodes (65): app, applyMode(), ATTENTION_TITLES, baseCaches, baseCell(), baseLoads, baseTable(), baseView() (+57 more)
+Nodes (63): amount(), app, ATTENTION_TITLES, baseCaches, baseLoads, BINARY, blobUrls, checkForNewer() (+55 more)
 
 ### Community 4 - "editor.js"
 Cohesion: 0.03
 Nodes (7): highlight, LANGUAGE_NAMES, LANGUAGES, navGuard, protectNavBox, streamLanguages, theme
 
 ### Community 5 - "bases.js"
-Cohesion: 0.09
-Nodes (49): loadBase(), arithmetic(), asTime(), BaseError, baseNameOf(), BINARY, candidatePaths(), compareValues() (+41 more)
+Cohesion: 0.08
+Nodes (51): loadBase(), pageText(), arithmetic(), asTime(), BaseError, baseNameOf(), BINARY, candidatePaths() (+43 more)
 
 ### Community 6 - "shownName"
-Cohesion: 0.14
-Nodes (40): addImage(), addRelation(), addSubtask(), assigneeList(), assignmentEdits(), canWrite(), changeTask(), claimSuggested() (+32 more)
+Cohesion: 0.15
+Nodes (35): Working on it, addImage(), addSubtask(), assignmentEdits(), changeTask(), claimSuggested(), cleanDir(), clearWaitingDate() (+27 more)
 
 ### Community 7 - "toLf"
-Cohesion: 0.09
-Nodes (47): embeddedPart(), norm(), addComment(), addNewTask(), ASSIGNMENT_ID, blankOut(), blockContents(), captureAttachmentText() (+39 more)
+Cohesion: 0.13
+Nodes (26): addComment(), addNewTask(), blockContents(), captureAttachmentText(), claimTask(), commentHeader(), commentReply(), editNewTask() (+18 more)
 
 ### Community 8 - "inbox-overview.js"
 Cohesion: 0.06
-Nodes (63): linkMarks(), allowed(), list(), OVERVIEW_KINDS, overviewBlock(), overviewCaptures(), overviewContents(), overviewEach() (+55 more)
+Nodes (63): embeddedPart(), norm(), allowed(), list(), OVERVIEW_KINDS, overviewBlock(), overviewCaptures(), overviewContents() (+55 more)
 
 ### Community 9 - "vault.test.js"
-Cohesion: 0.08
-Nodes (29): lookWith(), addDays(), captureAttachment(), imageAttachment(), isImagePath(), MARKER, markerDir(), markerText() (+21 more)
+Cohesion: 0.09
+Nodes (24): addDays(), inboxCandidates(), isoDay(), isWaiting(), MARKER, markerText(), mergeMarker(), nextSprint() (+16 more)
 
-### Community 10 - ".has"
-Cohesion: 0.14
-Nodes (16): assigneeOptions(), cleanFolder(), cleanValues(), isFieldProp(), LinkIndex, mentionKey(), parentProblem(), seenList() (+8 more)
+### Community 10 - "vault.js"
+Cohesion: 0.09
+Nodes (37): lookWith(), linkMarks(), assigneeOptions(), blankOut(), captureAttachment(), cleanFolder(), cleanValues(), findNavBlock() (+29 more)
 
-### Community 11 - "toast"
-Cohesion: 0.18
-Nodes (19): copyStatus(), downloadCopy(), draftKey(), flushDraft(), hasCaptureDraft(), mayLeave(), parseHash(), pickCopyFolder() (+11 more)
+### Community 11 - "renderLocalNote"
+Cohesion: 0.25
+Nodes (11): afterOutsideChange(), checkDraft(), draftKey(), hasCaptureDraft(), mayLeave(), parseHash(), reloadFromGitHub(), renderLocalNote() (+3 more)
 
 ### Community 12 - "icon"
-Cohesion: 0.17
-Nodes (28): addRepo(), blobUrl(), checkDraft(), closeFile(), discoverVaults(), emptyState(), fileView(), guestSteps() (+20 more)
+Cohesion: 0.26
+Nodes (20): addRepo(), closeFile(), discoverVaults(), editTaskFields(), emptyState(), guestSteps(), join(), loadAccess() (+12 more)
 
 ### Community 13 - "task_commits.py"
 Cohesion: 0.08
-Nodes (23): Rules, Working on it, AI work history, Answered questions check, Browser check, Comment reply check, Expanded settings scrolling check, Inbox identity setup check (+15 more)
+Nodes (22): Rules, AI work history, Answered questions check, Browser check, Comment reply check, Expanded settings scrolling check, Inbox identity setup check, Isolated inbox overview check (+14 more)
 
 ### Community 14 - "showSettings"
-Cohesion: 0.16
-Nodes (25): addLocalVault(), sync(), cleanName(), client(), columnName(), connect(), copyField(), editTaskFields() (+17 more)
+Cohesion: 0.12
+Nodes (41): addLocalVault(), sync(), cleanName(), client(), connect(), copyField(), downloadCopy(), ensureSidebar() (+33 more)
 
 ### Community 15 - "h"
-Cohesion: 0.15
-Nodes (34): afterOutsideChange(), aiEstimateField(), amount(), applyPreviewEdit(), commitsBox(), fillAppBlocks(), fillComments(), fillEmbeds() (+26 more)
+Cohesion: 0.16
+Nodes (33): baseCell(), baseTable(), baseView(), cellText(), commitsBox(), decorate(), fillAppBlocks(), fillBases() (+25 more)
 
 ### Community 16 - "Mirror"
-Cohesion: 0.17
+Cohesion: 0.26
 Nodes (3): folderOf(), Mirror, mirrorId()
 
-### Community 17 - "renderHeader"
-Cohesion: 0.15
-Nodes (28): attentionBox(), checkInboxDot(), chunks(), fillAttention(), fillInboxOverview(), findOwnInbox(), hrefFor(), inboxOf() (+20 more)
+### Community 17 - "checkInboxDot"
+Cohesion: 0.20
+Nodes (21): attentionBox(), baseCache(), baseNotes(), checkInboxDot(), chunks(), fillAttention(), inboxAttention(), inParallel() (+13 more)
 
-### Community 18 - ".resolve"
-Cohesion: 0.21
-Nodes (17): fillTopTasks(), loadSuggestions(), blank(), byOrder(), isEpic(), isTaskPath(), isWaiting(), listProp() (+9 more)
+### Community 18 - "renderHeader"
+Cohesion: 0.12
+Nodes (31): applyMode(), applyPreviewEdit(), assigneeList(), canWrite(), columnName(), copyStatus(), fillComments(), flushDraft() (+23 more)
 
 ### Community 19 - "ref_node_assert"
 Cohesion: 0.14
 Nodes (6): errors, offsite, errors, remote, skills, vault
 
 ### Community 20 - "LocalSource"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (4): decode(), FolderFiles, LocalError, LocalSource
 
 ### Community 21 - "version-switch.mjs"
 Cohesion: 0.15
 Nodes (8): errors, offsite, PORT, ROOT, server, tag(), tagShots(), TYPES
 
-### Community 22 - "checkInboxDot"
-Cohesion: 0.42
-Nodes (10): baseCache(), baseNotes(), inboxAttention(), inParallel(), keepBaseCache(), loadQuestions(), noteMentions(), readNotes() (+2 more)
+### Community 22 - "linkName"
+Cohesion: 0.40
+Nodes (6): addRelation(), dirOf(), fieldValue(), findTask(), linkName(), pick()
 
 ### Community 23 - "fieldProp"
-Cohesion: 0.21
-Nodes (22): fillBoards(), assigneeMatches(), assignmentTasks(), blockedTasks(), boardColumns(), claimedTasks(), fieldProp(), foldName() (+14 more)
+Cohesion: 0.15
+Nodes (34): loadSuggestions(), assigneeMatches(), assignmentTasks(), blank(), blockedTasks(), boardColumns(), byOrder(), claimedTasks() (+26 more)
 
 ### Community 24 - "inbox-overview.mjs"
 Cohesion: 0.16
@@ -218,8 +217,8 @@ Cohesion: 0.18
 Nodes (5): docs, errors, marker, requests, writes
 
 ### Community 30 - "renderTree"
-Cohesion: 0.42
-Nodes (9): baseName(), dirName(), fileRow(), iconFor(), kindOf(), markActive(), renderMatches(), renderTree() (+1 more)
+Cohesion: 0.23
+Nodes (15): baseName(), blobUrl(), dirName(), fileRow(), fileView(), iconFor(), kindOf(), markActive() (+7 more)
 
 ### Community 31 - "capture-attachments.mjs"
 Cohesion: 0.25
@@ -230,8 +229,8 @@ Cohesion: 0.25
 Nodes (7): description, license, name, private, scripts, test, type
 
 ### Community 33 - "NavWidget"
-Cohesion: 0.25
-Nodes (5): navDecorations(), navField, navRange(), NavWidget, findNavBlock()
+Cohesion: 0.29
+Nodes (4): navDecorations(), navField, navRange(), NavWidget
 
 ### Community 34 - "csv.js"
 Cohesion: 0.52
@@ -240,10 +239,6 @@ Nodes (5): RFC-4180, detectDelimiter(), parseCsv(), serializeCsv(), roundTrip()
 ### Community 35 - "realFile"
 Cohesion: 0.29
 Nodes (7): encPath(), folderNotes(), ghGet(), gql(), json(), realFile(), realNotes()
-
-### Community 36 - "printNote"
-Cohesion: 0.73
-Nodes (5): clearPrintView(), createPrintView(), isolateSvgIds(), printNote(), ready()
 
 ### Community 37 - "local-load.mjs"
 Cohesion: 0.33
@@ -262,24 +257,24 @@ Cohesion: 0.40
 Nodes (5): contentsUrl(), formPut, relPut, subPut, unrelPut
 
 ### Community 43 - "languageFor"
-Cohesion: 0.50
-Nodes (4): hasLanguage(), languageFor(), languageMaker(), own()
+Cohesion: 0.67
+Nodes (3): languageFor(), languageMaker(), own()
 
 ### Community 47 - "ai-time.js"
-Cohesion: 0.29
-Nodes (11): aiMinutes(), aiTimeEstimate(), aiTimeGroups(), aiTimeLabel(), aiTimeSamples(), summary(), word(), fillAiTime() (+3 more)
+Cohesion: 0.33
+Nodes (10): aiMinutes(), aiTimeEstimate(), aiTimeGroups(), aiTimeLabel(), aiTimeSamples(), summary(), word(), aiEstimateField() (+2 more)
 
 ### Community 48 - "asNewTask"
-Cohesion: 0.27
-Nodes (11): asNewTask(), isSprintNote(), sprintField(), sprintList(), suggestSprints(), isoDate(), isoDay(), newTaskProps() (+3 more)
+Cohesion: 0.22
+Nodes (18): asNewTask(), fillBoards(), isSprintNote(), loadTaskSetup(), otherSprintBox(), shortDay(), sprintBox(), sprintField() (+10 more)
 
 ### Community 49 - "idb"
-Cohesion: 0.24
-Nodes (7): BrowserFiles, db(), done(), fileKey(), forgetFolder(), idb(), vaultRange()
+Cohesion: 0.18
+Nodes (10): BrowserFiles, db(), done(), fileKey(), forgetFolder(), idb(), keepFolder(), vaultRange() (+2 more)
 
 ### Community 50 - "mirror.js"
-Cohesion: 0.22
-Nodes (11): keepFolder(), BINARY, keptAtOnce(), persist(), plan(), enc(), fakeGitHub(), memoryFiles() (+3 more)
+Cohesion: 0.33
+Nodes (7): keptAtOnce(), enc(), fakeGitHub(), memoryFiles(), mirrorWith(), repo, synced()
 
 ### Community 51 - "README.md"
 Cohesion: 0.18
@@ -293,17 +288,17 @@ Nodes (9): A look inside, Guides, License, Quick start, What it is, 🔭 Explori
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Mirror` connect `Mirror` to `.state`, `mirror.js`, `app.js`?**
-  _High betweenness centrality (0.073) - this node is a cross-community bridge._
+- **Why does `Mirror` connect `Mirror` to `idb`, `mirror.js`, `app.js`, `.state`?**
+  _High betweenness centrality (0.072) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `icon()` (e.g. with `Working on it` and `fillInboxOverview()`) actually correct?**
   _`icon()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `RFC-4180`, `./src/github.js` to the rest of the system?**
   _2 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `GitHub` be split into smaller, more focused modules?**
   _Cohesion score 0.13978494623655913 - nodes in this community are weakly interconnected._
-- **Why does `toLf()` connect `toLf` to `app.js`, `shownName`, `inbox-overview.js`, `toast`, `task_commits.py`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `toLf()` connect `toLf` to `app.js`, `shownName`, `inbox-overview.js`, `vault.js`, `task_commits.py`, `renderHeader`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `showSettings()` (e.g. with `goBack()` and `.folderName()`) actually correct?**
   _`showSettings()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `run.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.02857142857142857 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.028985507246376812 - nodes in this community are weakly interconnected._
