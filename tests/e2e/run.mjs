@@ -1420,7 +1420,13 @@ const fresh = await browser.createBrowserContext();
 const newcomer = await fresh.newPage();
 await newcomer.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 await newcomer.goto(BASE, { waitUntil: "networkidle0" });
-check(await newcomer.$(".welcome input[type=password]") !== null && !(await newcomer.$eval(".bar", (b) => b.offsetParent !== null)), "without a token: the first-run screen, no toolbar");
+check(!(await newcomer.$eval(".bar", (b) => b.offsetParent !== null)), "without a token: the first-run screen, no toolbar");
+check(await newcomer.$$eval(".welcome-choices .choice", (cs) => cs.length === 2 && cs[0].textContent.includes("On this device") && cs[1].textContent.includes("On GitHub")),
+  "the first page offers two equal choices: on this device, or on GitHub");
+check(await newcomer.$eval("#welcome-github", (c) => c.hidden && c.querySelector("input[type=password]").offsetParent === null), "and asks for no token until GitHub is chosen");
+await newcomer.screenshot({ path: `${OUT}/9a-welcome-choices-phone.png` });
+await newcomer.click(".welcome [data-choice=github]");
+check(await newcomer.$eval("#welcome-github", (c) => !c.hidden) && await newcomer.evaluate(() => document.activeElement?.type === "password"), "Connect GitHub shows the token steps, with the token field focused");
 // The version in development (served under dev/) says so in its title.
 const shownApp = /\/dev\/$/.test(new URL(BASE).pathname) ? `${APP} (dev)` : APP;
 check(await newcomer.title() === shownApp, "the page is called " + shownApp);
@@ -1552,8 +1558,9 @@ other.on("request", (req) => {
 });
 await other.setViewport({ width: 1280, height: 860 });
 await other.goto(BASE, { waitUntil: "networkidle0" });
+await other.click(".welcome [data-choice=github]");
 await other.type(".welcome input", "not-a-real-token");
-await other.click(".welcome .btn.primary");
+await other.click("#welcome-github .btn.primary");
 check(await until(() => location.hash === "#/settings?add=1" && !!document.querySelector(".repo-card[open] [name=repo]"), 10000, other),
   "with no invite, connecting leads to Settings with a new repo to fill in");
 check(await other.$eval(".repo-card[open] [name=owner]", (i) => i.value).catch(() => null) === "someone", "its owner starts as the signed-in login");
@@ -1585,8 +1592,9 @@ found.on("request", (req) => {
 });
 await found.setViewport({ width: 1280, height: 860 });
 await found.goto(BASE, { waitUntil: "networkidle0" });
+await found.click(".welcome [data-choice=github]");
 await found.type(".welcome input", "not-a-real-token");
-await found.click(".welcome .btn.primary");
+await found.click("#welcome-github .btn.primary");
 check(await until(() => !location.hash.startsWith("#/settings") && (localStorage.getItem("commonplace:repos") || "").includes("Found vault"), 10000, found),
   "a vault with a .commonplace.json is found and added when a new device connects");
 const foundRepos = await storedRepos(found);

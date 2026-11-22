@@ -1318,6 +1318,17 @@ select.input { padding-right: 8px; }
 .welcome .logo { width: 56px; height: 56px; border-radius: 14px; box-shadow: var(--shadow); display: block; margin-bottom: 18px; }
 .welcome h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.02em; }
 .welcome .lead { color: var(--text-2); margin: 0 0 26px; font-size: 15.5px; }
+/* The first page's two equal choices: on this device, or on GitHub. */
+.welcome.wide { max-width: 760px; }
+.welcome-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.welcome-choices .card.choice { display: flex; flex-direction: column; margin: 0; }
+.welcome-choices .choice p { margin: 0 0 8px; }
+.choice-facts { margin: 0 0 16px; padding-left: 1.2em; color: var(--text-2); font-size: 14px; flex: 1; }
+.choice-facts li { margin: 4px 0; }
+.welcome-choices .choice > .btn { align-self: flex-start; }
+.welcome-choices .btn.on { box-shadow: 0 0 0 3px var(--accent-soft); }
+#welcome-github[hidden] { display: none; }
+@media (max-width: 640px) { .welcome-choices { grid-template-columns: 1fr; } }
 
 /* ================================================================
    Toast

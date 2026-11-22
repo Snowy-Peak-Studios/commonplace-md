@@ -44,7 +44,7 @@ For a team, an organization or a developer, we recommend the full [setup with Gi
 
 Notes only on this device: not on GitHub, not on your other devices. No account and no token.
 
-1. Open the app. On the first page press **Add a vault on this device** (or later: **Settings › Notes repos › Add a vault on this device**).
+1. Open the app. The first page asks where your notes should live: under **On this device**, press **Start on this device** (or later: **Settings › Notes repos › Add a vault on this device**). No account or token is asked for.
 2. Pick one (Chrome and Edge on a computer; in Brave, first turn on `brave://flags/#file-system-access-api` and restart it, since Brave keeps opening folders off):
    - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or one of the [example vaults](example-vaults.md#pick-a-starter-vault)). The app makes a new folder with the vault's name inside that location.
    - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
@@ -169,7 +169,7 @@ Make one token per device, so you can revoke one without the others.
 
 #### 4. Connect and add the repo
 
-1. Open the app, paste the token and press **Connect**.
+1. Open the app. On the first page, under **On GitHub**, press **Connect GitHub**; paste the token and press **Connect**. (An invite link goes straight to this step.)
 2. The app takes you to **Settings › Notes repos** with a new repo to fill in. **Owner** and **Repo** are enough to start; for the example vault, also set:
    - **Start page:** `Home.md`
    - **Inbox page:** `Notes/Inbox.md`
@@ -193,4 +193,4 @@ Commonplace.md can be installed like any other app: it gets its own window and i
 - **On Android** (Chrome): the menu (⋮) › **Install app** or **Add to home screen**.
 - **On iPhone and iPad** (Safari): the **Share** button › **Add to Home Screen**.
 
-The installed app is the same page, and it updates by itself when the app does. On a computer and on Android it shares the browser's storage, so your token and repos are already there. On iPhone and iPad it has storage of its own: connect the token and add your repos once more inside it. It supports the same local vaults and offline copies as the browser; a connected vault uploads pending saves when it is online. To remove it, uninstall it like any other app.
+The installed app is the same page, and it updates by itself when the app does. On a computer and on Android it shares the browser's storage, so your token, repos and local vaults are already there. On iPhone and iPad it has storage of its own: connect the token and add your repos once more inside it, and start a local vault inside it (a vault kept in Safari stays in Safari). Installing is never needed, and it isn't a backup: for a vault kept in the browser, use **Download a copy**. It supports the same local vaults and offline copies as the browser; a connected vault uploads pending saves when it is online. To remove it, uninstall it like any other app.

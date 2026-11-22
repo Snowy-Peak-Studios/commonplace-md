@@ -15,7 +15,7 @@ The repo has two, for two different jobs. Both show up in the app's list of exam
 
 ### Pick a starter vault
 
-Open Commonplace.md and choose **Add a vault on this device**. Under **Start with**, pick **An example vault** and choose the one closest to what you do. The app copies its notes into your new local vault. You can try, edit and keep it without a GitHub account.
+Open Commonplace.md and choose **On this device** › **Start on this device** (or **Settings › Notes repos › Add a vault on this device**). Under **Start with**, pick **An example vault** and choose the one closest to what you do. The app copies its notes into your new local vault. You can try, edit and keep it without a GitHub account.
 
 | If you want to… | Choose |
 | --- | --- |

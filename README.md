@@ -33,7 +33,7 @@
 
 ## Quick start
 
-1. **[Open the app](https://snowy-peak-studios.github.io/commonplace-md/)** and choose **Add a vault on this device**.
+1. **[Open the app](https://snowy-peak-studios.github.io/commonplace-md/)** The first page asks where your notes should live: choose **On this device** › **Start on this device**.
 2. **Pick an example vault** to try the features, or start empty. No GitHub account or token is needed for a local vault.
 3. **Write and save.** In Chrome or Edge on a computer, you can keep real files in a folder. For a browser-only vault, use **Download a copy** regularly: clearing browser data removes its notes.
 

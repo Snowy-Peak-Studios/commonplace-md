@@ -1,17 +1,17 @@
 # Graph Report - NotesApp  (2026-11-22)
 
 ## Corpus Check
-- 53 files · ~133,534 words
+- 53 files · ~133,820 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: (none) 5, .css 2, .base 2)
 
 ## Summary
-- 1140 nodes · 3655 edges · 54 communities (50 shown, 4 thin omitted)
+- 1140 nodes · 3656 edges · 52 communities (48 shown, 4 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 78 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `00230945`
+- Built from commit: `de0a69e5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -46,7 +46,6 @@
 - puppeteer-core
 - BrowserFiles
 - ai-time.mjs
-- renderTree
 - capture-attachments.mjs
 - package.json
 - NavWidget
@@ -54,7 +53,6 @@
 - realFile
 - checkInboxDot
 - local-load.mjs
-- addLocalVault
 - wait
 - createEditor
 - icons.js
@@ -97,7 +95,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (54 total, 4 thin omitted)
+## Communities (52 total, 4 thin omitted)
 
 ### Community 0 - "GitHub"
 Cohesion: 0.14
@@ -113,7 +111,7 @@ Nodes (47): claimedNotes, commitWrites, copyRepo, created, currentView, diff, do
 
 ### Community 3 - "app.js"
 Cohesion: 0.05
-Nodes (52): app, assetLoads, assigneeList(), ATTENTION_TITLES, attentionBox(), baseCaches, baseLoads, BINARY (+44 more)
+Nodes (49): app, assetLoads, assigneeList(), ATTENTION_TITLES, baseCaches, baseLoads, BINARY, blobUrls (+41 more)
 
 ### Community 4 - "editor.js"
 Cohesion: 0.03
@@ -124,8 +122,8 @@ Cohesion: 0.09
 Nodes (49): loadBase(), arithmetic(), asTime(), BaseError, baseNameOf(), BINARY, candidatePaths(), compareValues() (+41 more)
 
 ### Community 6 - "h"
-Cohesion: 0.11
-Nodes (40): assetsBox(), baseCell(), baseTable(), cellText(), claimWarning(), commitsBox(), copyText(), decorate() (+32 more)
+Cohesion: 0.12
+Nodes (37): assetsBox(), baseCell(), baseTable(), cellText(), claimWarning(), commitsBox(), copyText(), decorate() (+29 more)
 
 ### Community 7 - "vault.js"
 Cohesion: 0.15
@@ -148,8 +146,8 @@ Cohesion: 0.06
 Nodes (40): filterInserts(), INSERT_GROUPS, insertion(), INSERTS, insertSample(), APP_BLOCKS, appBlockOptions(), ATTENTION_SHOWS (+32 more)
 
 ### Community 12 - "icon"
-Cohesion: 0.14
-Nodes (38): Working on it, addRepo(), blobUrl(), client(), closeFile(), connect(), discoverVaults(), editTaskFields() (+30 more)
+Cohesion: 0.12
+Nodes (46): Working on it, addLocalVault(), sync(), addRepo(), blobUrl(), cleanName(), client(), closeFile() (+38 more)
 
 ### Community 13 - "task_commits.py"
 Cohesion: 0.08
@@ -192,8 +190,8 @@ Cohesion: 0.14
 Nodes (8): errors, remote, docs, errors, requests, errors, offsite, ./src/local.js
 
 ### Community 23 - "openOverviewSetup"
-Cohesion: 0.29
-Nodes (13): ensureSidebar(), fillInboxOverview(), findOwnInbox(), inboxOf(), loadOverviewModule(), loadTree(), loginFor(), openOverviewSetup() (+5 more)
+Cohesion: 0.19
+Nodes (21): baseName(), dirName(), ensureSidebar(), fileRow(), fillInboxOverview(), findOwnInbox(), inboxOf(), loadOverviewModule() (+13 more)
 
 ### Community 24 - "inbox-overview.mjs"
 Cohesion: 0.16
@@ -218,10 +216,6 @@ Nodes (5): BrowserFiles, db(), fileKey(), filesAndMeta(), vaultRange()
 ### Community 29 - "ai-time.mjs"
 Cohesion: 0.18
 Nodes (5): docs, errors, marker, requests, writes
-
-### Community 30 - "renderTree"
-Cohesion: 0.46
-Nodes (8): baseName(), dirName(), fileRow(), markActive(), renderMatches(), renderTree(), searchText(), build()
 
 ### Community 31 - "capture-attachments.mjs"
 Cohesion: 0.25
@@ -250,10 +244,6 @@ Nodes (16): baseCache(), baseNotes(), checkInboxDot(), chunks(), inboxAttention(
 ### Community 37 - "local-load.mjs"
 Cohesion: 0.33
 Nodes (5): BIG, BIG_MB, errors, NOTES, offsite
-
-### Community 38 - "addLocalVault"
-Cohesion: 0.33
-Nodes (9): addLocalVault(), sync(), cleanName(), copyField(), noFolderText(), pickCopyFolder(), pickFolder(), canPickFolder() (+1 more)
 
 ### Community 39 - "wait"
 Cohesion: 0.33
@@ -284,8 +274,8 @@ Cohesion: 0.21
 Nodes (13): BINARY, eachAtMost(), HASH_AT_ONCE, keptAtOnce(), keptShas(), persist(), plan(), enc() (+5 more)
 
 ### Community 50 - "noteProps"
-Cohesion: 0.17
-Nodes (30): addRelation(), assignmentEdits(), changeTask(), claimSuggested(), clearWaitingDate(), confirmDialog(), editBoardCard(), fillTopTasks() (+22 more)
+Cohesion: 0.13
+Nodes (37): addRelation(), assignmentEdits(), attentionBox(), changeTask(), claimSuggested(), clearWaitingDate(), confirmDialog(), editBoardCard() (+29 more)
 
 ### Community 51 - "README.md"
 Cohesion: 0.18

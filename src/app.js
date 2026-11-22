@@ -4649,13 +4649,7 @@ function showWelcome(joining = null) {
     redirect(hrefFor(r));
   };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-  showMain(h("div", { class: "welcome" },
-    h("img", { class: "logo", src: "icons/icon.svg", alt: "" }),
-    h("h1", {}, APP_NAME),
-    joining
-      ? h("p", { class: "lead" }, "You're invited to the notes in ", h("b", {}, joining.label), ` (${joining.owner}/${joining.repo}). They live on GitHub, and this page reads them from there.`)
-      : h("p", { class: "lead" }, "Your Markdown and CSV notes, kept in your own GitHub repo and opened on any device. Every save is a commit, so nothing is ever lost."),
-    h("div", { class: "card" },
+  const connectCard = h("div", { class: "card", id: "welcome-github", hidden: !joining },
       h("h2", {}, icon("key"), "Connect this device"),
       h("p", {}, joining
         ? "You need a GitHub account and a token that lets this page open the shared notes. You make the token once per device."
@@ -4663,14 +4657,48 @@ function showWelcome(joining = null) {
       joining ? guestSteps(joining) : tokenSteps(),
       h("div", { class: "inline-form" }, input, h("button", { class: "btn primary", onclick: go }, "Connect")),
       out,
-      h("p", { class: "fine" }, TOKEN_NOTE)),
-    joining ? null : h("div", { class: "card" },
-      h("h2", {}, icon("device"), "Or keep notes only on this device"),
-      h("p", {}, "No GitHub needed: the notes stay in a folder on this device (Chrome and Edge on a computer, Brave once it's turned on) or in this browser. They're not on your other devices, and you can connect GitHub later."),
-      h("button", { class: "btn", onclick: async () => {
-        const r = await addLocalVault();
-        if (r) redirect(hrefFor(r));
-      } }, icon("plus"), "Add a vault on this device"))));
+      h("p", { class: "fine" }, TOKEN_NOTE));
+  if (joining) {
+    return showMain(h("div", { class: "welcome" },
+      h("img", { class: "logo", src: "icons/icon.svg", alt: "" }),
+      h("h1", {}, APP_NAME),
+      h("p", { class: "lead" }, "You're invited to the notes in ", h("b", {}, joining.label), ` (${joining.owner}/${joining.repo}). They live on GitHub, and this page reads them from there.`),
+      connectCard));
+  }
+  // No invite: where the notes live is the first choice, and both ways are equal. GitHub's steps show only once picked.
+  const folders = canPickFolder();
+  const githubBtn = h("button", { class: "btn primary", type: "button", "data-choice": "github", "aria-expanded": "false", "aria-controls": "welcome-github", onclick: () => {
+    connectCard.hidden = false;
+    githubBtn.setAttribute("aria-expanded", "true");
+    githubBtn.classList.add("on");
+    connectCard.scrollIntoView({ block: "start", behavior: "smooth" });
+    input.focus({ preventScroll: true });
+  } }, icon("key"), "Connect GitHub");
+  showMain(h("div", { class: "welcome wide" },
+    h("img", { class: "logo", src: "icons/icon.svg", alt: "" }),
+    h("h1", {}, APP_NAME),
+    h("p", { class: "lead" }, "Your notes in plain Markdown, with links, tasks and a board. Where should they live?"),
+    h("div", { class: "welcome-choices" },
+      h("section", { class: "card choice" },
+        h("h2", {}, icon("device"), "On this device"),
+        h("p", {}, "No account and no token: start right away. Good for your own notes on one computer or phone."),
+        h("ul", { class: "choice-facts" },
+          folders
+            ? h("li", {}, "Kept in a folder you pick, as real files, or in this browser.")
+            : h("li", {}, "Kept in this browser. It's lost if the browser's data is cleared, so use ", h("b", {}, "Download a copy"), " now and then."),
+          h("li", {}, "Not on your other devices. You can connect GitHub later.")),
+        h("button", { class: "btn primary", type: "button", "data-choice": "device", onclick: async () => {
+          const r = await addLocalVault();
+          if (r) redirect(hrefFor(r));
+        } }, icon("plus"), "Start on this device")),
+      h("section", { class: "card choice" },
+        h("h2", {}, icon("folder"), "On GitHub"),
+        h("p", {}, "Your notes in your own GitHub repo (a private one is fine): on every device, shared with others if you like, and every save is a commit."),
+        h("ul", { class: "choice-facts" },
+          h("li", {}, "Needs a free GitHub account and a repo for the notes."),
+          h("li", {}, "You make a token once on each device: the steps are next.")),
+        githubBtn)),
+    connectCard));
 }
 
 // ================================================================
