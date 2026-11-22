@@ -1694,3 +1694,89 @@ export function keptResolved(resolved, seenMentions, seenAssignments) {
   const seen = new Set([...seenList(seenMentions), ...seenList(seenAssignments)]);
   return seenList(resolved).filter((k) => seen.has(k));
 }
+
+// ---- tags and star ratings on any note ----
+
+/** A note's tags, from its `tags` (or `tag`) property only: a list or a comma/space separated text, `#` left out. */
+export function noteTags(props) {
+  const raw = props?.tags ?? props?.tag;
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : [];
+  return [...new Set(list.filter((t) => t != null && t !== "").map((t) => String(t).trim().replace(/^#/, "")).filter(Boolean))];
+}
+
+/** Tags are the same tag whatever their case. */
+export const tagKey = (tag) => String(tag).replace(/^#/, "").trim().toLowerCase();
+
+export const RATING_MAX = 5;
+
+/** A note's star rating, 0 to 5, from its `rating` property; null when it has none (or it isn't a whole number in range). */
+export function noteRating(props) {
+  const raw = props?.rating;
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : typeof raw === "string" && /^\s*\d+\s*$/.test(raw) ? Number(raw) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= RATING_MAX ? n : null;
+}
+
+/** The note with `rating: n` in its front matter (made when it has none); `null` takes the rating out. */
+export function withRating(text, n) {
+  const src = toLf(text);
+  if (n == null) {
+    const fm = splitFrontMatter(src);
+    if (!fm) return src;
+    const raw = fm.raw.replace(/^rating:.*(?:\n|$)/m, "").replace(/\n$/, "");
+    return raw === fm.raw ? src : `---\n${raw}${src.slice(4 + fm.raw.length)}`;
+  }
+  if (!Number.isInteger(n) || n < 0 || n > RATING_MAX) throw new Error(`A rating is 0 to ${RATING_MAX} stars.`);
+  return withProps(src, [["rating", String(n)]]);
+}
+
+/** Every tag in these notes ([{ path, props }]) with how many notes have it: the most used first, then by name. */
+export function tagCounts(notes) {
+  const counts = new Map();
+  for (const n of notes) {
+    for (const tag of noteTags(n.props)) {
+      const key = tagKey(tag);
+      const seen = counts.get(key);
+      if (seen) seen.count++;
+      else counts.set(key, { tag, count: 1 });
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+/**
+ * The notes with every tag in `tags` and a rating that passes `stars`: null for any, "unrated" for none, or a number
+ * for at least that many stars. The best rated first (unrated last), then by name.
+ */
+export function findNotes(notes, { tags = [], stars = null } = {}) {
+  const want = tags.map(tagKey);
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+  return notes
+    .map((n) => ({ ...n, tags: noteTags(n.props), rating: noteRating(n.props) }))
+    .filter((n) => {
+      const have = new Set(n.tags.map(tagKey));
+      if (!want.every((t) => have.has(t))) return false;
+      if (stars === "unrated") return n.rating == null;
+      if (typeof stars === "number") return n.rating != null && n.rating >= stars;
+      return true;
+    })
+    .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || name(a.path).localeCompare(name(b.path)));
+}
+
+/** The Find page's filter in its address: `tag=` (each picked tag) and `stars=` (1 to 5, or "unrated"). */
+export function findParams(params) {
+  const tags = [...new Set(params.getAll("tag").map((t) => t.replace(/^#/, "").trim()).filter(Boolean))];
+  const s = params.get("stars");
+  const stars = s === "unrated" ? "unrated" : /^[1-5]$/.test(s ?? "") ? Number(s) : null;
+  return { tags, stars };
+}
+
+/** The address of the Find page for a vault, with a filter. */
+export function findHref(repoId, { tags = [], stars = null } = {}) {
+  const q = new URLSearchParams();
+  if (repoId) q.set("vault", repoId);
+  for (const t of tags) q.append("tag", t);
+  if (stars != null) q.set("stars", String(stars));
+  const s = q.toString();
+  return `#/find${s ? `?${s}` : ""}`;
+}

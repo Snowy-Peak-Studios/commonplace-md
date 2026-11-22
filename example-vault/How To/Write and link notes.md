@@ -1,5 +1,7 @@
 ---
 parent: "[[How To]]"
+tags: [how-to, writing]
+rating: 5
 ---
 
 # Write and link notes
@@ -36,6 +38,13 @@ In **Edit**, press **Insert** in the top bar, next to the page title (on a phone
 - Hover an entry, move to it with the arrow keys, or tap it on a phone, to see a small preview of how it looks in **Read**, and the Markdown it adds.
 - Press **Insert**, Enter, or double-click it to add it at the cursor. A block goes on lines of its own, after the line the cursor is on; text such as **Bold** goes in the line, around the words you selected.
 - The example words are selected, so you can type over them at once.
+
+## Tags and stars
+
+- **Tags** go in a note's properties: `tags: [recipe, vegan]` (with or without `#`). They show as chips under **Properties**; press one to see every note with that tag.
+- **Stars**: every note has a row of five stars above its properties, in **Read**. Press a star to give the note that many (or **0**), and the same star again to take the rating out; **Save** keeps it, as with a ticked checkbox. It's the note's `rating` property, 0 to 5.
+- **Find** (the tag button beside **New note** in the file list) lists every tag in the vault. Pick one or more, and *at least N stars* or *Not rated*; the notes that match show the best rated first. The filter is in the page's address, so you can link to it.
+- A [base view](Markdown%20and%20blocks.md) can filter by them too: `file.hasTag("vegan")`, `rating >= 4`.
 
 ## What else a note can hold
 

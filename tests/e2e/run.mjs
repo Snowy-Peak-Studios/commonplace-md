@@ -1536,6 +1536,7 @@ check(await page.$eval("#title .badge", (b) => b.textContent === "Read only").ca
 check(await page.evaluate(() => ["#mode", "#save-btn", "#side-new"].every((s) => document.querySelector(s).hidden)), "no Edit, Save or New note there");
 check(await page.$$eval(".preview input.task", (bs) => bs.length > 0 && bs.every((b) => b.disabled)), "its checkboxes can't be ticked");
 check(await page.$eval("#edit-tools", (t) => t.hidden), "a read-only vault has no Insert or Add image control");
+check(await page.$$eval(".note-rating [role=radio]", (bs) => bs.length === 6 && bs.every((b) => b.disabled)), "a read-only vault shows the stars but can't change them");
 await shot("10-read-only");
 await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector(".board-card a"), 15000)

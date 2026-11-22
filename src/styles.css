@@ -12,6 +12,7 @@
   --muted: #8a8795;
   --line: #ebe9f0;
   --line-strong: #dcd9e4;
+  --star: #d97706;
   --accent: #6352d9;
   --accent-hover: #5443c9;
   --accent-soft: rgba(99, 82, 217, 0.1);
@@ -57,6 +58,7 @@
     --muted: #8f8c9b;
     --line: #2e2e36;
     --line-strong: #3b3b45;
+    --star: #fbbf24;
     --accent: #9d92ff;
     --accent-hover: #b1a8ff;
     --accent-soft: rgba(157, 146, 255, 0.14);
@@ -224,8 +226,10 @@ body.no-token #side, body.no-token .bar { display: none; }
 .repo-pick:focus-within { box-shadow: 0 0 0 2px var(--accent-soft); }
 
 .side-tools { display: flex; gap: 4px; padding: 4px 10px 8px; }
+.side-tools .icon-btn { flex: none; }
 .search {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1326,6 +1330,41 @@ select.input { padding-right: 8px; }
 .choice-facts { margin: 0 0 16px; padding-left: 1.2em; color: var(--text-2); font-size: 14px; flex: 1; }
 .choice-facts li { margin: 4px 0; }
 .welcome-choices .choice > .btn { align-self: flex-start; }
+
+/* Tags and star ratings (any note), and the Find page. */
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-soft); color: var(--text-2); font-size: 12.5px; line-height: 1.6; text-decoration: none; cursor: pointer; font-family: inherit; }
+.tag-chip .icon { width: 12px; height: 12px; color: var(--muted); }
+.tag-chip:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
+.tag-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 550; }
+.tag-chip.on .icon { color: var(--accent); }
+.tag-chip .count { color: var(--muted); font-size: 11.5px; }
+.prop-vals .tag-chip { margin: 1px 4px 1px 0; }
+.note-rating { display: flex; align-items: center; gap: 2px; margin: 4px 0 8px; }
+.note-rating button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.note-rating button:hover:not(:disabled), .note-rating button:focus-visible { background: var(--bg-soft); }
+.note-rating button:disabled { cursor: default; }
+.note-rating .icon { width: 18px; height: 18px; }
+.note-rating .star.on, .stars-shown .icon.on { color: var(--star); }
+.note-rating .star.on .icon, .stars-shown .icon.on { fill: currentColor; }
+.note-rating .star-zero { font-size: 12px; font-weight: 600; width: 24px; }
+.note-rating .star-zero[aria-checked="true"] { color: var(--star); }
+.note-rating .rating-text { margin-left: 8px; font-size: 13px; }
+.stars-shown { display: inline-flex; gap: 1px; align-items: center; font-size: 12.5px; }
+.stars-shown .icon { width: 14px; height: 14px; color: var(--line-strong); }
+.page.find .page-head h1 { display: flex; align-items: center; gap: 8px; }
+.page.find .page-head .muted { margin-left: auto; }
+.find-filter h2 { font-size: 13px; font-weight: 650; color: var(--text-2); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.find-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.find-tags .tag-chip { font-size: 13.5px; padding: 3px 10px; }
+.find-stars { flex-wrap: wrap; }
+.find-stars button .icon { width: 13px; height: 13px; color: var(--star); fill: currentColor; }
+.find-count { margin: 18px 0 6px; color: var(--muted); font-size: 13.5px; }
+.find-results { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.find-results li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+.find-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 550; }
+.find-name .icon { width: 15px; height: 15px; color: var(--muted); }
+.find-folder { font-size: 12.5px; }
+.find-note-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .choice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .welcome-choices .btn.on { box-shadow: 0 0 0 3px var(--accent-soft); }
 #welcome-github[hidden] { display: none; }

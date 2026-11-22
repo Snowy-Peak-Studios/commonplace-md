@@ -13,6 +13,7 @@ import {
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
+  noteTags, tagKey, noteRating, withRating, RATING_MAX, tagCounts, findNotes, findParams, findHref,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
 import { createEditor, createCommentEditor, setEditorText, createMergeView, languageFor, hasLanguage } from "./editor.js";
@@ -728,7 +729,11 @@ async function route() {
     if (fieldsOf) editTaskFields(fieldsOf);
     return;
   }
-  const repo = app.repos.find((r) => r.id === parts[0]);
+  // #/find?vault=<id>&tag=…&stars=…: the Find page, in a vault (the one in the address, else the current one).
+  const finding = parts[0] === "find";
+  const repo = finding
+    ? app.repos.find((r) => r.id === params.get("vault")) || app.repo || app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0]
+    : app.repos.find((r) => r.id === parts[0]);
   if (!repo) {
     const last = app.repos.find((r) => r.id === store.get("lastRepo")) || app.repos[0];
     if (!last) {
@@ -740,8 +745,8 @@ async function route() {
     }
     return redirect(hrefFor(last));
   }
-  const path = parts.slice(1).join("/");
-  if (app.file && app.file.repo === repo && app.file.path === path) {
+  const path = finding ? "" : parts.slice(1).join("/");
+  if (!finding && app.file && app.file.repo === repo && app.file.path === path) {
     if (heading) scrollToHeading(heading);
     return;
   }
@@ -779,6 +784,7 @@ async function route() {
     return;
   }
   if (nav !== app.nav) return;
+  if (finding) return showFind(repo, params, nav);
   if (!path) {
     // No start page (a folder opened as a vault, say): its first note at the top, else its first note anywhere.
     const notes = [...tree.files.keys()].filter((p) => /\.md$/i.test(p)).sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
@@ -1251,7 +1257,7 @@ function renderPreview() {
     assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "", setup)),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
-  fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm) : "", body);
+  fill(f.dom.preview, ratingRow(f), form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm, f.repo) : "", body);
   commentFocus?.focus();
   fitWide(f);
 }
@@ -3323,7 +3329,7 @@ function fillDiagrams(root) {
 }
 
 /** The front matter as a Properties box; `skip` (lower-case keys) leaves out what a task's form already shows. */
-function propertiesBox(raw, env, skip = null) {
+function propertiesBox(raw, env, skip = null, repo = null) {
   let data;
   try { data = yamlLoad(raw); } catch { return h("pre", { class: "props-raw" }, raw); }
   if (!data || typeof data !== "object" || Array.isArray(data)) return h("pre", { class: "props-raw" }, raw);
@@ -3331,6 +3337,11 @@ function propertiesBox(raw, env, skip = null) {
   const entries = Object.entries(data).filter(([key]) => !skip?.has(key.toLowerCase()));
   if (!entries.length) return "";
   const cells = entries.flatMap(([key, value]) => {
+    // Tags are chips that open the Find page with that tag.
+    if (repo && ["tags", "tag"].includes(key.toLowerCase())) {
+      const tags = noteTags({ tags: value });
+      if (tags.length) return [h("div", { class: "prop-key" }, key), h("div", { class: "prop-vals" }, tags.map((t) => tagChip(repo, t)))];
+    }
     const vals = h("div", { class: "prop-vals" });
     vals.innerHTML = sanitize((Array.isArray(value) ? value : [value]).filter((v) => v !== "" && v != null)
       .map((v) => `<span class="prop-val">${md.renderInline(show(v), env)}</span>`).join(""));
@@ -3920,6 +3931,118 @@ function updateLinkWarning() {
       ...missing.flatMap((t, i) => [i ? ", " : "", h("b", {}, `[[${t}]]`)]),
       f.repo.vault ? ". This repo's vault rules say every link must lead to a page." : "."));
   }
+}
+
+// ================================================================
+// Tags and star ratings, and the Find page
+// ================================================================
+
+/** A tag as a chip that opens the Find page with it. */
+const tagChip = (repo, tag, extra = null) => h("a", { class: "tag-chip", href: findHref(repo.id, { tags: [tag] }), title: `Find the notes tagged ${tag}` },
+  icon("tag"), tag, extra);
+
+/** Stars to look at (not to click): `n` of 5 filled; "Not rated" when there's no rating. */
+function starsShown(n) {
+  if (n == null) return h("span", { class: "stars-shown muted" }, "Not rated");
+  return h("span", { class: "stars-shown", role: "img", "aria-label": `${n} of ${RATING_MAX} stars`, title: `${n} of ${RATING_MAX} stars` },
+    Array.from({ length: RATING_MAX }, (_, i) => icon("star", i < n ? "on" : "")));
+}
+
+/**
+ * A note's stars (its `rating` property, 0 to 5), on every note in Read mode. A star sets the rating; the same one
+ * again takes it out, as does 0 when it's 0. Like ticking a checkbox, it changes the note, and Save keeps it.
+ * A read-only vault shows the stars without changing them. The arrow keys move between them.
+ */
+function ratingRow(f) {
+  const rating = noteRating(noteProps(f.text));
+  const writable = canWrite(f.repo);
+  const set = (n) => {
+    if (!writable || app.file !== f) return;
+    const next = withRating(f.text, n === rating ? null : n);
+    if (next === f.text) return;
+    f.text = next;
+    if (f.editor) setEditorText(f.editor, f.text);
+    updateDirty();
+    const scroll = $("#main").scrollTop;
+    renderPreview();
+    $("#main").scrollTop = scroll;
+    f.dom?.preview.querySelector(`.note-rating [data-stars="${n}"]`)?.focus();
+  };
+  const label = rating == null ? "Not rated" : `${rating} of ${RATING_MAX} stars`;
+  const choices = Array.from({ length: RATING_MAX + 1 }, (_, n) => h("button", {
+    type: "button", class: n === 0 ? "star-zero" : `star${rating != null && n <= rating ? " on" : ""}`, role: "radio",
+    "data-stars": String(n), "aria-checked": String(n === rating), disabled: !writable,
+    "aria-label": n === 0 ? "No stars" : `${n} ${n === 1 ? "star" : "stars"}`,
+    title: !writable ? label : n === rating ? "Take the rating out" : n === 0 ? "No stars" : `${n} of ${RATING_MAX} stars`,
+    onclick: () => set(n),
+  }, n === 0 ? "0" : icon("star")));
+  const row = h("div", { class: "note-rating", role: "radiogroup", "aria-label": `Rating: ${label}` },
+    choices, h("span", { class: "rating-text muted" }, label));
+  row.addEventListener("keydown", (e) => {
+    const i = choices.indexOf(document.activeElement);
+    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+    if (i < 0 || !step) return;
+    e.preventDefault();
+    choices[Math.max(0, Math.min(RATING_MAX, i + step))].focus();
+  });
+  return row;
+}
+
+/**
+ * The Find page: every tag in the vault (pick one or more: notes with all of them) and a minimum of stars (or not
+ * rated), with the notes that pass, the best rated first. The filter is in the address (`findHref`), so it can be
+ * linked, and Back undoes a click.
+ */
+function showFind(repo, params, nav) {
+  const filter = findParams(params);
+  app.pageTitle = "Find";
+  renderHeader();
+  const entry = notesWithProps(repo, "notes", (p) => /\.md$/i.test(p));
+  const draw = (notes) => {
+    if (nav !== app.nav) return;
+    if (!notes) return showProblem("Couldn't read the notes", "Their properties couldn't be read. Reload, and try again.");
+    const go = (next) => { location.hash = findHref(repo.id, { ...filter, ...next }); };
+    const picked = new Set(filter.tags.map(tagKey));
+    const counts = tagCounts(notes);
+    // A tag from a link that no note has (any more) still shows, picked, so it can be taken off.
+    for (const t of filter.tags) if (!counts.some((c) => tagKey(c.tag) === tagKey(t))) counts.push({ tag: t, count: 0 });
+    const tagButtons = counts.map(({ tag, count }) => {
+      const on = picked.has(tagKey(tag));
+      return h("button", {
+        type: "button", class: `tag-chip${on ? " on" : ""}`, "aria-pressed": String(on),
+        onclick: () => go({ tags: on ? filter.tags.filter((t) => tagKey(t) !== tagKey(tag)) : [...filter.tags, tag] }),
+      }, icon("tag"), tag, h("span", { class: "count" }, String(count)));
+    });
+    const starChoices = [[null, "Any"], [1, "1+"], [2, "2+"], [3, "3+"], [4, "4+"], [5, "5"], ["unrated", "Not rated"]];
+    const starButtons = starChoices.map(([value, label]) => h("button", {
+      type: "button", class: filter.stars === value ? "on" : "", "aria-pressed": String(filter.stars === value),
+      "aria-label": typeof value === "number" ? (value === 5 ? "5 stars" : `At least ${value} ${value === 1 ? "star" : "stars"}`) : label,
+      onclick: () => go({ stars: value }),
+    }, typeof value === "number" ? icon("star") : null, label));
+    const found = findNotes(notes, filter);
+    const filtered = filter.tags.length || filter.stars != null;
+    showMain(h("div", { class: "page find" },
+      h("div", { class: "page-head" }, h("h1", {}, icon("tag"), "Find"), h("span", { class: "muted" }, repo.label)),
+      h("section", { class: "find-filter" },
+        h("h2", {}, "Tags"),
+        counts.length
+          ? h("div", { class: "find-tags", role: "group", "aria-label": "Tags: pick one or more" }, tagButtons)
+          : h("p", { class: "muted" }, "No note has tags yet. Give a note a tags property, like tags: [vegan, quick]."),
+        h("h2", {}, "Stars"),
+        h("div", { class: "seg find-stars", role: "group", "aria-label": "Stars" }, starButtons)),
+      h("p", { class: "find-count", role: "status" }, `${found.length} ${found.length === 1 ? "note" : "notes"}`,
+        filtered ? [" · ", h("a", { href: findHref(repo.id) }, "Show all")] : null),
+      found.length
+        ? h("ul", { class: "find-results" }, found.map((n) => h("li", {},
+          h("a", { class: "find-name", href: hrefFor(repo, n.path) }, icon("file"), shownName(n.path)),
+          dirName(n.path) ? h("span", { class: "find-folder muted" }, dirName(n.path)) : null,
+          starsShown(n.rating),
+          n.tags.length ? h("span", { class: "find-note-tags" }, n.tags.map((t) => tagChip(repo, t))) : null)))
+        : h("p", { class: "muted" }, "No note matches. Take a tag off, or pick fewer stars.")));
+  };
+  if (entry.notes) return draw(entry.notes);
+  showMain(skeleton());
+  (entry.load ?? Promise.resolve()).then(() => draw(entry.notes));
 }
 
 // ================================================================
@@ -5701,6 +5824,7 @@ function start() {
   });
   addEventListener("afterprint", clearPrintView);
   $("#side-new").addEventListener("click", () => { closeSideOnPhone(); newNote(); });
+  $("#side-find").addEventListener("click", () => { closeSideOnPhone(); location.hash = findHref(app.repo?.id); });
   $("#reload-btn").addEventListener("click", reloadFromGitHub);
   $("#nudge-reload").addEventListener("click", reloadFromGitHub);
   $("#settings-btn").addEventListener("click", () => { closeMenu(); location.hash = "#/settings"; });

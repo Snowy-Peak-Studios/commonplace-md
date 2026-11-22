@@ -4,7 +4,7 @@
 // anything else is refused with a message the view shows instead of a wrong table.
 
 import { yamlLoad } from "../vendor/vendor.js";
-import { splitFrontMatter } from "./vault.js";
+import { splitFrontMatter, noteTags } from "./vault.js";
 
 // ================================================================
 // The .base file
@@ -240,11 +240,8 @@ const FORMULA = Symbol("formula");
 
 const baseNameOf = (path) => path.slice(path.lastIndexOf("/") + 1);
 
-function fileTags(props) {
-  const raw = props.tags ?? props.tag;
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : [];
-  return list.filter((t) => t != null && t !== "").map((t) => String(t).replace(/^#/, ""));
-}
+/** The same tags the Find page reads (`noteTags` in vault.js). */
+const fileTags = (props) => noteTags(props);
 
 function fileField(ctx, name) {
   const { path } = ctx.note;

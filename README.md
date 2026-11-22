@@ -16,7 +16,7 @@
 
 **Commonplace.md** brings your wiki, notes and task board together as plain Markdown files you own. Keep them in a local vault on one device, or in your own GitHub repo for a team and multiple devices. It runs in your browser and can be installed as an app.
 
-- **Notes that stay yours:** linked pages, pictures, checklists, diagrams and tables.
+- **Notes that stay yours:** linked pages, pictures, checklists, diagrams and tables, with tags and 0 to 5 stars to find the best ones.
 - **Tasks alongside the context:** boards, subtasks, relations, sprints and fields you choose.
 - **People and AI agents together:** your inbox, project rules and decisions live in the same files.
 - **Free and open source:** no server or account of ours. GitHub saves are commits; local notes stay on your device.

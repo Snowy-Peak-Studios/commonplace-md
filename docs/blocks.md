@@ -312,7 +312,7 @@ views:
 | `views[].columnSize` | Mapping of column keys to positive widths in pixels. Default: automatic widths. |
 | `views[].limit` | Positive maximum row count. Default: no limit. |
 
-Column keys can be note properties such as `status` (or `note.status`), file properties such as `file.name`, or `formula.rank`. Expressions support comparisons, arithmetic, `&&`, `||`, `!`, `if()`, `today()`, `date()`, and methods including `file.inFolder()`, `file.hasTag()`, `.contains()`, `.startsWith()`, `.endsWith()`, `.lower()` and `.isEmpty()`. Unsupported expressions show an error rather than silently drawing a wrong table. See [example base files](../example-vault/Bases/Tasks.base).
+Column keys can be note properties such as `status` (or `note.status`), file properties such as `file.name`, or `formula.rank`. Expressions support comparisons, arithmetic, `&&`, `||`, `!`, `if()`, `today()`, `date()`, and methods including `file.inFolder()`, `file.hasTag()`, `.contains()`, `.startsWith()`, `.endsWith()`, `.lower()` and `.isEmpty()`. For example, `file.hasTag("vegan") && rating >= 4` keeps the notes tagged vegan with at least four stars (`rating` is the property the stars on every note set). Unsupported expressions show an error rather than silently drawing a wrong table. See [example base files](../example-vault/Bases/Tasks.base).
 
 ## mermaid
 

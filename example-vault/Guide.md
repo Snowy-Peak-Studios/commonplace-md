@@ -2,6 +2,8 @@
 parent: "[[Home]]"
 tags:
   - guide
+  - writing
+rating: 4
 ---
 
 %% nav: made by a script, don't edit it by hand %%
