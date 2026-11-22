@@ -62,5 +62,6 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `examples/` | Four starter vaults for solo projects, teams and personal notes |
 | `tools/task-commits/` | The GitHub Action (and its script) that adds commits to their tasks, to copy into a notes repo |
 | `ROADMAP.md`, `roadmap/` | What we're working on and what's next: a list, and the same as a task board (one note per task, and `Roadmap.base`) |
-| `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` |
+| `tools/download/` | The download to try it out: `build.mjs` makes `dist/commonplace-md/` (the app as one plain script, the example notes packed into `vault-data.js`, a page with no network) and its zip; `.github/workflows/download.yml` adds it to every release |
+| `tests/` | Unit tests (`npm test`), their fixtures, and the browser check in `tests/e2e/` (`download.mjs` opens the built download from the disk in Chrome and Edge) |
 | `docs/` | Setup, usage, block and contributor guides, plus documentation images |

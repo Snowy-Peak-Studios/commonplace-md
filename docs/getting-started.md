@@ -26,7 +26,19 @@ flowchart LR
 | 🟨 **In a repo of its own** ([steps](#1-open-the-app)) | Private notes, even for a public project. | One more repo to make. |
 
 > [!NOTE]
-> **No GitHub account?** A [local vault](#a-local-vault) doesn't need one; the other ways do. **Your own copy of the app?** Not needed: you can [host one](#1-open-the-app), but it won't update by itself.
+> **No GitHub account?** A [local vault](#a-local-vault) doesn't need one, nor does [the download](#try-it-from-a-download); the other ways do. **Your own copy of the app?** Not needed: you can [host one](#1-open-the-app), but it won't update by itself.
+
+### Try it from a download
+
+To try it out, or for casual use on one computer, you don't need GitHub at all:
+
+1. Download `commonplace-md-<version>.zip` from [the latest release](https://github.com/Snowy-Peak-Studios/commonplace-md/releases/latest).
+2. Unzip it, and open `index.html` from the `commonplace-md` folder in Chrome or Edge (double-click it, or drag it into the browser).
+3. It opens the example notes as a vault in that browser. Change anything: **Save** keeps it in the browser on that device, and nothing goes to GitHub or anywhere else (the download's page allows no network at all). **Download a copy** saves your notes as a zip.
+
+What the download leaves out: GitHub (tokens, repos, invite links, history), switching app versions, and installing it as an app. Each release has its own zip, made by the Download workflow, so it's never older than the site. A newer download opens the notes you already have in that browser: Chrome and Edge keep one storage for every page opened from the disk.
+
+For a team, an organization or a developer, we recommend the full [setup with GitHub](#set-it-up-with-github).
 
 ### A local vault
 

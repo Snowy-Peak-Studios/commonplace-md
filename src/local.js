@@ -624,10 +624,32 @@ export function emptyVault(name, kept) {
   return [{ path: "Home.md", bytes: encode(`# ${name}\n\nThis vault is only on this device: not on GitHub, not on your other devices. ${where}\n\nPress **New note** to start.\n`) }];
 }
 
-/** Fetches a starter before writing any notes. The feature guide keeps its existing best-effort fetch. */
-export async function fetchExample(example = EXAMPLE_VAULTS[0], base = new URL(`${example.directory}/`, document.baseURI)) {
+/**
+ * The download (opened from the disk) can't fetch its own files, so its build packs the starters into a plain
+ * script: `globalThis.COMMONPLACE_PACKED` maps each file's path in the app's folder to its bytes in base64.
+ */
+export const packedFiles = () => globalThis.COMMONPLACE_PACKED || null;
+
+/** Bytes from base64. */
+export function fromBase64(text) {
+  const raw = atob(text);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Fetches a starter before writing any notes. The feature guide keeps its existing best-effort fetch. In the
+ * download, the starter comes from the packed script instead, with no fetch.
+ */
+export async function fetchExample(example = EXAMPLE_VAULTS[0], base = null, packed = packedFiles()) {
   const got = await Promise.all(example.files.map(async (path) => {
+    if (packed) {
+      const data = packed[`${example.directory}/${path}`];
+      return data == null ? null : { path, bytes: fromBase64(data) };
+    }
     try {
+      base ??= new URL(`${example.directory}/`, document.baseURI);
       const res = await fetch(new URL(path.split("/").map(encodeURIComponent).join("/"), base));
       return res.ok ? { path, bytes: new Uint8Array(await res.arrayBuffer()) } : null;
     } catch {

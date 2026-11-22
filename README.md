@@ -37,6 +37,8 @@
 2. **Pick an example vault** to try the features, or start empty. No GitHub account or token is needed for a local vault.
 3. **Write and save.** In Chrome or Edge on a computer, you can keep real files in a folder. For a browser-only vault, use **Download a copy** regularly: clearing browser data removes its notes.
 
+**Just trying it, or casual use?** [Download the latest release](https://github.com/Snowy-Peak-Studios/commonplace-md/releases/latest) (`commonplace-md-<version>.zip`), unzip it and open `index.html` in Chrome or Edge. No account, no token, no internet: it opens the example notes, and your changes stay in that browser. [More](docs/getting-started.md#try-it-from-a-download).
+
 **For a team or several devices:** [connect your own GitHub repo](docs/getting-started.md#set-it-up-with-github). Each device gets a token you make; your repo controls who can read and save.
 
 [Full setup guide](docs/getting-started.md) · [Install it as an app](docs/getting-started.md#5-install-it-as-an-app-optional) · [Ask an agent to help you choose](docs/using-commonplace.md#not-sure-its-for-you)

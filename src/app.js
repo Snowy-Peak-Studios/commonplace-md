@@ -2,7 +2,7 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
-import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS } from "./local.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS, packedFiles } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
@@ -34,6 +34,12 @@ const APP_NAME = "Commonplace.md";
 
 /** This is the development version, served under dev/ beside the released one, on the same origin. */
 const DEV_BUILD = /\/dev\/(index\.html)?$/.test(location.pathname);
+/**
+ * The download to try it out, opened from the disk: its build packs the example notes into a script. It opens
+ * them as a vault in this browser and never talks to GitHub (its page allows no network at all).
+ */
+const DOWNLOAD = !!packedFiles();
+const SETUP_URL = "https://github.com/Snowy-Peak-Studios/commonplace-md/blob/main/docs/getting-started.md#set-it-up-with-github";
 /** The name in the tab's title: the development version says so. Commit messages keep APP_NAME. */
 const SHOWN_APP = DEV_BUILD ? `${APP_NAME} (dev)` : APP_NAME;
 /** The address of the released (`dev` false) or development version, at the same page. */
@@ -707,7 +713,9 @@ async function route() {
   flushDraft();
   closeSideOnPhone();
   const { parts, heading, params } = parseHash();
-  if (parts[0] === "join") return join(params);
+  if (parts[0] === "join") {
+    return DOWNLOAD ? showProblem("Invite links need the app online", "This is the download to try it out: it can't open notes on GitHub. Open the link in the app online instead.") : join(params);
+  }
   if (!app.token && !app.repos.some(isLocal)) return showWelcome(store.get("join"));
   document.body.classList.remove("no-token");
   if (parts[0] === "settings") {
@@ -4738,6 +4746,12 @@ function renderLocalNote() {
     h("button", { class: "btn small", onclick: async () => { await upload(); reloadFromGitHub(); } }, icon("reload"), "Try again"));
   }
   const browser = r.local === "browser";
+  if (DOWNLOAD) {
+    return fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Trying it out:"),
+      " these are example notes. Your changes stay in this browser and never go to GitHub. To keep your own notes, ",
+      h("a", { href: SETUP_URL, target: "_blank", rel: "noopener noreferrer" }, "set it up with GitHub"), ".")),
+    browser ? h("button", { class: "btn small", onclick: () => downloadCopy(r) }, icon("download"), "Download a copy") : null);
+  }
   fill(el, h("span", {}, icon("device"), h("span", {}, h("b", {}, "Only on this device:"), " not on GitHub, not on your other devices.",
     browser ? " Kept in this browser, so it's lost if the browser's data is cleared." : "")),
   browser ? h("button", { class: "btn small", onclick: () => downloadCopy(r) }, icon("download"), "Download a copy") : null);
@@ -5333,11 +5347,23 @@ function showSettings(adding = false, tokenOwner = "") {
       showSettings();
     } }, icon("trash"), "Discard all drafts") : null);
 
+  // The download can't reach GitHub: no tokens, no GitHub repos, no app versions to switch between.
+  if (DOWNLOAD) {
+    for (const el of [...repos.querySelectorAll(".card-actions > .btn")].filter((b) => ["Add a repo", "Look for vaults"].includes(b.textContent))) el.remove();
+    repos.querySelector("p.fine")?.remove();
+    repos.querySelector("h2 + p").textContent = "The vaults in this browser. Switch between them at the top of the file list.";
+    device.querySelector(".version-pick")?.closest(".field")?.remove();
+  }
+  const downloadCard = DOWNLOAD ? h("section", { class: "card" },
+    h("h2", {}, icon("key"), "GitHub"),
+    h("p", {}, "This is the download to try it out: it works with no account, no token and no internet, and never talks to GitHub. Notes kept here stay in this browser."),
+    h("p", {}, "To keep your notes on GitHub and use them on every device, ", h("a", { href: SETUP_URL, target: "_blank", rel: "noopener noreferrer" }, "set it up with GitHub"),
+      ". For a team, an organization or a developer, we recommend that.")) : null;
   showMain(h("div", { class: "page" },
     h("div", { class: "page-head" },
       h("button", { class: "icon-btn", title: "Back to the notes", "aria-label": "Back to the notes", onclick: goBack }, icon("back")),
       h("h1", {}, "Settings")),
-    github, ownersCard, repos, device,
+    DOWNLOAD ? downloadCard : [github, ownersCard], repos, device,
     h("section", { class: "card" },
       h("h2", {}, "Support Commonplace.md"),
       h("a", { class: "btn", href: "https://ko-fi.com/jansnieg", target: "_blank", rel: "noopener noreferrer" }, "Support on Ko-fi"))));
@@ -5557,13 +5583,14 @@ function start() {
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });
   $("#new-btn").addEventListener("click", () => { closeMenu(); newNote(); });
   const versionTag = $("#version-tag");
-  versionTag.textContent = DEV_BUILD ? "dev" : "main";
+  versionTag.textContent = DOWNLOAD ? "download" : DEV_BUILD ? "dev" : "main";
   versionTag.classList.toggle("dev", DEV_BUILD);
   versionTag.title = DEV_BUILD ? "The version in development" : "The released version";
   const versionBtn = $("#version-btn");
   fill(versionBtn, icon(DEV_BUILD ? "back" : "code"), DEV_BUILD ? "Use the released version" : "Try the dev version");
   versionBtn.title = DEV_BUILD ? "The released version: reviewed and steady" : "The newest work, before it's released: things may break";
   versionBtn.addEventListener("click", () => { closeMenu(); switchVersion(!DEV_BUILD); });
+  versionBtn.hidden = DOWNLOAD;
   $("#export-pdf-btn").addEventListener("click", async () => {
     closeMenu();
     const f = app.file;
@@ -5621,11 +5648,30 @@ function start() {
   if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
     navigator.serviceWorker.register("sw.js").catch(() => { /* the app works without it */ });
   }
-  if (app.token) {
+  if (app.token && !DOWNLOAD) {
     refreshUser();
     lookForVaults();
   }
-  route();
+  if (DOWNLOAD) document.body.classList.add("download");
+  if (DOWNLOAD && !app.repos.some(isLocal)) addPackedExample().finally(route);
+  else route();
+}
+
+/** The download's first start: the packed example notes become a vault in this browser. */
+async function addPackedExample() {
+  try {
+    const starter = await fetchExample(EXAMPLE_VAULTS[0]);
+    const r = {
+      id: "local-example-notes", local: "browser", owner: "", repo: "", branch: "", folder: "",
+      home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...starter.settings, label: "Example notes",
+    };
+    await local.create(r, { handle: null, seed: starter.files });
+    app.repos.push(r);
+    store.set("repos", app.repos);
+    renderRepoPicker();
+  } catch (e) {
+    toast(`The example notes couldn't be opened here: ${e.message}`, "error");
+  }
 }
 
 start();
