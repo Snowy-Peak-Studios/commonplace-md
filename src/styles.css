@@ -1326,6 +1326,7 @@ select.input { padding-right: 8px; }
 .choice-facts { margin: 0 0 16px; padding-left: 1.2em; color: var(--text-2); font-size: 14px; flex: 1; }
 .choice-facts li { margin: 4px 0; }
 .welcome-choices .choice > .btn { align-self: flex-start; }
+.choice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .welcome-choices .btn.on { box-shadow: 0 0 0 3px var(--accent-soft); }
 #welcome-github[hidden] { display: none; }
 @media (max-width: 640px) { .welcome-choices { grid-template-columns: 1fr; } }

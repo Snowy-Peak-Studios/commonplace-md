@@ -46,11 +46,11 @@ Notes only on this device: not on GitHub, not on your other devices. No account 
 
 1. Open the app. The first page asks where your notes should live: under **On this device**, press **Start on this device** (or later: **Settings › Notes repos › Add a vault on this device**). No account or token is asked for.
 2. Pick one (Chrome and Edge on a computer; in Brave, first turn on `brave://flags/#file-system-access-api` and restart it, since Brave keeps opening folders off):
-   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, or one of the [example vaults](example-vaults.md#pick-a-starter-vault)). The app makes a new folder with the vault's name inside that location.
+   - **Create a new vault**: a name, a location you pick (**Pick a location**), and what it starts with (empty, one of the [example vaults](example-vaults.md#pick-a-starter-vault), or a copy you downloaded). The app makes a new folder with the vault's name inside that location.
    - **Open a folder as a vault**: pick any folder of Markdown notes (**Pick the folder**), like another app's vault or a repo's clone. It opens as it is, with nothing added.
 3. Either way the notes are real `.md` files, so your agent and other Markdown editors can read and change them, and **Reload** shows their changes. Each time the browser is opened again, it asks once before it lets the app into the folder. The browser shows the app only the folder's name, not its whole path.
 
-A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari, on phones, and in Brave until it's turned on, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note).
+A new vault can also be kept **in this browser** instead of a folder (and always is in Firefox, Safari, on phones, and in Brave until it's turned on, which can't open a folder): the notes are kept in the browser's storage. They're lost if the browser's data is cleared, so press **Download a copy** now and then (a zip of every note). To use such a copy again, on another device or after the browser's data was cleared, choose **Start with › A copy you downloaded** in the same dialog (or **Restore a copy you downloaded** on the first page): it becomes a new vault, and nothing else is changed. A copy is a backup you make by hand, not syncing; for the same notes on every device, use [GitHub](#set-it-up-with-github). Installing the app is not a backup.
 
 **Save** saves on the device; nothing is sent anywhere. A local vault always says so, in the list of vaults (*on this device*) and in a line above the note.
 

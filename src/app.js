@@ -2,7 +2,7 @@
 
 import { DOMPurify, yamlLoad } from "../vendor/vendor.js";
 import { GitHub, newTokenUrl } from "./github.js";
-import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS, packedFiles } from "./local.js";
+import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS, packedFiles, readZip, restoredSettings, nameFromZip, ZIP_LIMITS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
   LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
@@ -4687,10 +4687,15 @@ function showWelcome(joining = null) {
             ? h("li", {}, "Kept in a folder you pick, as real files, or in this browser.")
             : h("li", {}, "Kept in this browser. It's lost if the browser's data is cleared, so use ", h("b", {}, "Download a copy"), " now and then."),
           h("li", {}, "Not on your other devices. You can connect GitHub later.")),
-        h("button", { class: "btn primary", type: "button", "data-choice": "device", onclick: async () => {
-          const r = await addLocalVault();
-          if (r) redirect(hrefFor(r));
-        } }, icon("plus"), "Start on this device")),
+        h("div", { class: "choice-actions" },
+          h("button", { class: "btn primary", type: "button", "data-choice": "device", onclick: async () => {
+            const r = await addLocalVault();
+            if (r) redirect(hrefFor(r));
+          } }, icon("plus"), "Start on this device"),
+          h("button", { class: "btn ghost small", type: "button", "data-choice": "restore", onclick: async () => {
+            const r = await addLocalVault({ startWith: "copy" });
+            if (r) redirect(hrefFor(r));
+          } }, icon("upload"), "Restore a copy you downloaded"))),
       h("section", { class: "card choice" },
         h("h2", {}, icon("folder"), "On GitHub"),
         h("p", {}, "Your notes in your own GitHub repo (a private one is fine): on every device, shared with others if you like, and every save is a commit."),
@@ -4907,7 +4912,8 @@ function showLocalProblem(repo, e) {
  * opened as it is). Where the browser can't open folders (Firefox, Safari, phones) only a new vault kept in the
  * browser is offered, and the dialog says why. Resolves to the new repo, or null.
  */
-async function addLocalVault() {
+/** The dialog for a new vault on this device; `startWith` picks what it starts with ("empty", "example" or "copy"). */
+async function addLocalVault({ startWith = "empty" } = {}) {
   const folderOk = canPickFolder();
   let location = null; // where a new vault's folder is made
   let opened = null; // the folder opened as a vault
@@ -4928,8 +4934,34 @@ async function addLocalVault() {
     choice("local-keep", "folder", "In a folder on this device", "Real .md files your agent and other tools can read and change.", true),
     choice("local-keep", "browser", "In this browser", "No folder: lost if the browser's data is cleared, so download a copy now and then."));
   const start = h("div", { class: "choices" },
-    choice("local-start", "empty", "Empty", "One note to start from.", true),
-    choice("local-start", "example", "An example vault", "Try a set of notes you can edit and keep. Needs the connection this once."));
+    choice("local-start", "empty", "Empty", "One note to start from.", startWith === "empty"),
+    choice("local-start", "example", "An example vault", "Try a set of notes you can edit and keep. Needs the connection this once.", startWith === "example"),
+    choice("local-start", "copy", "A copy you downloaded", "A .zip from Download a copy, restored as a new vault. Nothing in it is sent anywhere.", startWith === "copy"));
+  // A copy to restore: read and checked as soon as it's picked, so the dialog can say what it holds before anything is written.
+  let copy = null;
+  const copyInput = h("input", { type: "file", accept: ".zip,application/zip", hidden: true, "aria-label": "Choose the copy" });
+  const copyText = h("span", { class: "picked" });
+  const copyHint = h("small", { class: "hint" });
+  const pickCopy = h("button", { class: "btn small", type: "button", onclick: () => copyInput.click() }, icon("upload"), "Choose the .zip");
+  copyInput.addEventListener("change", async () => {
+    const file = copyInput.files[0];
+    copyInput.value = "";
+    if (!file) return;
+    copy = null;
+    fill(copyText, h("span", { class: "muted" }, `Reading ${file.name}…`));
+    try {
+      if (file.size > ZIP_LIMITS.archive) throw new Error(`${file.name} is ${formatSize(file.size)}: copies up to ${formatSize(ZIP_LIMITS.archive)} can be restored.`);
+      const files = await readZip(new Uint8Array(await file.arrayBuffer()));
+      if (!files.length) throw new Error(`${file.name} has no files in it.`);
+      copy = { fileName: file.name, files, settings: restoredSettings(files), size: files.reduce((n, f) => n + f.bytes.length, 0) };
+      if (!named) name.value = nameFromZip(file.name);
+    } catch (e) {
+      fill(copyText, h("span", { class: "bad" }, e.message));
+      return void sync(false);
+    }
+    sync();
+  });
+  const copyField = h("div", { class: "field" }, h("span", {}, "The copy"), h("div", { class: "pick-line" }, pickCopy, copyInput, copyText), copyHint);
   const examplePicker = h("select", { class: "input", "aria-label": "Example vault" },
     EXAMPLE_VAULTS.map((example) => h("option", { value: example.key }, example.label)));
   const selectedExample = () => EXAMPLE_VAULTS.find((example) => example.key === examplePicker.value);
@@ -4949,12 +4981,12 @@ async function addLocalVault() {
   const openedField = h("div", { class: "field" }, h("span", {}, "Folder"), h("div", { class: "pick-line" }, pickOpened, openedText),
     h("small", { class: "hint" }, "Nothing is added to it. An empty folder starts with no notes."));
   const keepField = h("div", { class: "field" }, h("span", {}, "Where it's kept"), keep);
-  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start, examplePicker);
+  const startField = h("div", { class: "field" }, h("span", {}, "Start with"), start, examplePicker, copyField);
   const fine = h("p", { class: "fine" }, folderOk
     ? "The browser shows the app only the folder's name, not its whole path on the disk."
     : noFolderText("a new vault is kept in the browser. It's lost if the browser's data is cleared, so download a copy now and then (Settings, Download a copy)."));
   const problem = h("p", { class: "fine bad" });
-  function sync() {
+  function sync(showCopy = true) {
     const opening = folderOk && value(mode) === "open";
     const inFolder = folderOk && !opening && value(keep) === "folder";
     keepField.hidden = !folderOk || opening;
@@ -4962,7 +4994,15 @@ async function addLocalVault() {
     openedField.hidden = !opening;
     startField.hidden = opening;
     examplePicker.hidden = value(start) !== "example";
-    if (!opening && !named) name.value = examplePicker.hidden ? "My notes" : selectedExample().name;
+    copyField.hidden = value(start) !== "copy";
+    if (!opening && !named) name.value = !examplePicker.hidden ? selectedExample().name : !copyField.hidden && copy ? nameFromZip(copy.fileName) : "My notes";
+    if (showCopy) {
+      const into = inFolder ? (location ? `a new folder, ${cleanName(name.value) || "My notes"}, inside ${location.name}` : "a new folder, inside the location you pick") : "this browser";
+      fill(copyText, copy ? h("span", {}, icon("file"), " ", h("b", {}, copy.fileName), `: ${copy.files.length} ${copy.files.length === 1 ? "file" : "files"}, ${formatSize(copy.size)}`)
+        : h("span", { class: "muted" }, "No copy picked yet"));
+      copyHint.textContent = (copy ? `It becomes a new vault, ${name.value.trim() || "Restored notes"}, in ${into}. No other vault or file is changed.` : "Only zips made by Download a copy are read.")
+        + (folderOk ? " On a computer you can also unzip it and choose Open a folder as a vault." : "");
+    }
     fill(locationText, picked(location, "No location picked yet"));
     fill(openedText, picked(opened, "No folder picked yet"));
     fill(where, location ? `The vault is made as a new folder, ${cleanName(name.value) || "My notes"}, inside ${location.name}.` : "The vault is made as a new folder with its name, inside the location you pick.");
@@ -4977,6 +5017,8 @@ async function addLocalVault() {
   return modal({
     title: "Add a vault on this device",
     text: "Its notes stay only on this device: not on GitHub, not on your other devices. Save keeps them here, and nothing is sent anywhere.",
+    // Opened to restore a copy: its chooser is at the dialog's end, so it's brought into view.
+    onOpen: () => { if (startWith === "copy") pickCopy.focus(); },
     body: [folderOk ? h("div", { class: "field" }, h("span", {}, "What"), mode) : null,
       h("label", { class: "field" }, h("span", {}, "Name"), name), keepField, locationField, openedField, startField, fine, problem],
     buttons: [
@@ -4993,12 +5035,17 @@ async function addLocalVault() {
           return false;
         }
         let starter;
-        if (example) {
+        if (!opening && value(start) === "copy") {
+          if (!copy) { problem.textContent = "Choose the .zip to restore first."; return false; }
+          starter = { files: copy.files, settings: copy.settings };
+        } else if (example) {
           problem.textContent = "Getting the example notes…";
           try { starter = await fetchExample(example); }
           catch (e) { problem.textContent = e.message; return false; }
         }
+        const restoring = !opening && value(start) === "copy";
         let handle = null;
+        let madeFolder = false;
         if (opening) {
           if (!opened) { problem.textContent = "Pick the vault's folder first."; return false; }
           handle = opened;
@@ -5014,13 +5061,15 @@ async function addLocalVault() {
                 }
               }
             }
+            madeFolder = !there;
             handle = there || await place.getDirectoryHandle(folderName, { create: true });
           } catch (e) {
             problem.textContent = `The folder couldn't be made in ${location.name}: ${e?.message || e}`;
             return false;
           }
         }
-        problem.textContent = "Setting it up…";
+        problem.textContent = restoring ? `Restoring ${starter.files.length} files…` : "Setting it up…";
+        let made = null;
         try {
           const seed = opening ? [] : starter?.files ?? emptyVault(label, kind);
           let id = `local-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vault"}`;
@@ -5029,13 +5078,27 @@ async function addLocalVault() {
             id, local: kind, owner: "", repo: "", branch: "", folder: "",
             home: "Home.md", inbox: "", inboxes: "", notes: "", template: "", vault: false, ...starter?.settings, label,
           };
+          made = r;
           const seeded = await local.create(r, { handle, seed });
+          // A copy goes only into an empty place: never mixed with files already there.
+          if (restoring && !seeded) {
+            made = null; // the files there aren't the restore's: they stay as they are
+            throw new Error("There are notes there already, so the copy wasn't restored. Pick another name or place.");
+          }
           if (opening || !seeded) Object.assign(r, { home: "", inbox: "", inboxes: "", notes: "", template: "", vault: false });
           app.repos.push(r);
           store.set("repos", app.repos);
           renderRepoPicker();
           return r;
         } catch (e) {
+          // Nothing half-made stays: a restore that failed leaves no vault, and no files it wrote.
+          if (restoring && made && !app.repos.includes(made)) {
+            if (made.local === "browser") await local.remove(made).catch(() => {});
+            else {
+              await local.remove(made).catch(() => {});
+              if (madeFolder) await place.removeEntry(folderName, { recursive: true }).catch(() => {});
+            }
+          }
           problem.textContent = e.message;
           return false;
         }

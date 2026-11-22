@@ -514,6 +514,149 @@ export function zipFiles(files) {
   return out;
 }
 
+// ---- reading a copy back: the app's own zips (stored), and deflated ones ----
+
+/** How big a copy to restore may be. */
+export const ZIP_LIMITS = Object.freeze({ archive: 200 * 1024 * 1024, expanded: 500 * 1024 * 1024, files: 20000 });
+
+const zipError = (text) => new GitHubError(0, text);
+const mb = (n) => Math.round(n / 1024 / 1024);
+
+/** Why a path in a zip can't be a file in a vault, or "" when it can. */
+export function zipPathProblem(path) {
+  if (!path) return "a file with no name";
+  if (/[\u0000-\u001f\u007f]/.test(path)) return `${JSON.stringify(path)} has a control character in its name`;
+  if (path.includes("\\")) return `${path} uses a backslash`;
+  if (path.startsWith("/") || /^[A-Za-z]:/.test(path)) return `${path} is an absolute path`;
+  if (path.split("/").some((part) => part === "" || part === "." || part === "..")) return `${path} leads outside the vault or has an empty folder name`;
+  return "";
+}
+
+/** The same file for a folder on any disk: Windows and macOS don't tell case or Unicode forms apart. */
+const pathKey = (path) => path.normalize("NFC").toLowerCase();
+
+/** Two entries that would be the same file, or a file that is also a folder; "" when there are none. */
+export function zipConflict(paths) {
+  const seen = new Map();
+  for (const path of paths) {
+    const key = pathKey(path);
+    if (seen.has(key)) return seen.get(key) === path ? `${path} is in it twice` : `${seen.get(key)} and ${path} would be the same file`;
+    seen.set(key, path);
+  }
+  for (const [key, path] of seen) {
+    const parts = key.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      const folder = parts.slice(0, i).join("/");
+      if (seen.has(folder)) return `${seen.get(folder)} is a file and also a folder of ${path}`;
+    }
+  }
+  return "";
+}
+
+const NO_INFLATE = "This browser can't unpack compressed zips. Try another browser, or unzip it and open the folder as a vault.";
+
+async function inflateRaw(data, size) {
+  let stream;
+  try { stream = new DecompressionStream("deflate-raw"); } catch { throw zipError(NO_INFLATE); }
+  const out = new Uint8Array(size);
+  let at = 0;
+  const reader = new Blob([data]).stream().pipeThrough(stream).getReader();
+  for (;;) {
+    let step;
+    try { step = await reader.read(); } catch { throw zipError("The zip is damaged: a file in it can't be unpacked."); }
+    if (step.done) break;
+    if (at + step.value.length > size) {
+      reader.cancel().catch(() => {});
+      throw zipError("The zip is damaged: a file in it is bigger than it says.");
+    }
+    out.set(step.value, at);
+    at += step.value.length;
+  }
+  if (at !== size) throw zipError("The zip is damaged: a file in it is smaller than it says.");
+  return out;
+}
+
+/**
+ * The files in a zip, [{ path, bytes }], from its central directory. Every check runs before any file is
+ * returned: the zip's size, its files' count and unpacked size (ZIP_LIMITS), each path (zipPathProblem), clashes
+ * (zipConflict) and each file's CRC. Folders are skipped. Zip64, encryption, split zips, names not in UTF-8 and
+ * methods other than stored and deflated are refused with a plain message.
+ */
+export async function readZip(input, limits = ZIP_LIMITS) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  if (bytes.length > limits.archive) throw zipError(`The zip is ${mb(bytes.length)} MB: copies up to ${mb(limits.archive)} MB can be restored.`);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0) throw zipError("This isn't a zip, or it's damaged.");
+  const count = view.getUint16(end + 10, true), cdSize = view.getUint32(end + 12, true), cdStart = view.getUint32(end + 16, true);
+  if (view.getUint16(end + 4, true) || view.getUint16(end + 6, true) || view.getUint16(end + 8, true) !== count) {
+    throw zipError("This zip is split into parts; that kind can't be restored.");
+  }
+  if (count === 0xffff || cdSize === 0xffffffff || cdStart === 0xffffffff) throw zipError("This is a very big kind of zip (Zip64); that kind can't be restored.");
+  if (count > limits.files) throw zipError(`The zip has ${count} files: copies with up to ${limits.files} can be restored.`);
+  if (cdStart + cdSize > end) throw zipError("This zip is damaged: its list of files is cut off.");
+  const entries = [];
+  let at = cdStart;
+  let total = 0;
+  for (let n = 0; n < count; n++) {
+    if (at + 46 > end || view.getUint32(at, true) !== 0x02014b50) throw zipError("This zip is damaged: its list of files is cut off.");
+    const flags = view.getUint16(at + 8, true);
+    const method = view.getUint16(at + 10, true);
+    const crc = view.getUint32(at + 16, true);
+    const packed = view.getUint32(at + 20, true);
+    const size = view.getUint32(at + 24, true);
+    const nameLen = view.getUint16(at + 28, true);
+    const skip = view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+    const local = view.getUint32(at + 42, true);
+    let path;
+    try { path = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(at + 46, at + 46 + nameLen)); } catch {
+      throw zipError("A file name in the zip isn't in UTF-8; that kind can't be restored. Unzip it and open the folder as a vault instead.");
+    }
+    at += 46 + nameLen + skip;
+    if (flags & 1) throw zipError(`${path} is encrypted: a zip with a password can't be restored.`);
+    if (packed === 0xffffffff || size === 0xffffffff || local === 0xffffffff) throw zipError("This is a very big kind of zip (Zip64); that kind can't be restored.");
+    if (path.endsWith("/")) {
+      if (size) throw zipError(`The zip is damaged: the folder ${path} has data in it.`);
+      continue;
+    }
+    if (method !== 0 && method !== 8) throw zipError(`${path} is packed in a way that can't be read here. Unzip it and open the folder as a vault instead.`);
+    if (method === 0 && packed !== size) throw zipError(`The zip is damaged: ${path} has two sizes.`);
+    const problem = zipPathProblem(path);
+    if (problem) throw zipError(`This zip can't be restored: ${problem}.`);
+    total += size;
+    if (total > limits.expanded) throw zipError(`Unpacked, the zip is over ${mb(limits.expanded)} MB: copies up to that can be restored.`);
+    entries.push({ path, method, crc, packed, size, local });
+  }
+  const clash = zipConflict(entries.map((e) => e.path));
+  if (clash) throw zipError(`This zip can't be restored: ${clash}.`);
+  if (entries.some((e) => e.method === 8) && typeof DecompressionStream !== "function") throw zipError(NO_INFLATE);
+  const files = [];
+  for (const e of entries) {
+    if (e.local + 30 > bytes.length || view.getUint32(e.local, true) !== 0x04034b50) throw zipError(`The zip is damaged: ${e.path} isn't where its list says.`);
+    const start = e.local + 30 + view.getUint16(e.local + 26, true) + view.getUint16(e.local + 28, true);
+    if (start + e.packed > bytes.length) throw zipError(`The zip is damaged: ${e.path} is cut off.`);
+    const data = bytes.subarray(start, start + e.packed);
+    const out = e.method === 0 ? data.slice() : await inflateRaw(data, e.size);
+    if (crc32(out) !== e.crc) throw zipError(`The zip is damaged: ${e.path} doesn't match its checksum.`);
+    files.push({ path: e.path, bytes: out });
+  }
+  return files;
+}
+
+/** A restored vault's settings: its .commonplace.json when it has one, else its start page if there's one. */
+export function restoredSettings(files) {
+  const marker = files.find((f) => f.path === MARKER);
+  const settings = marker && parseMarker(decode(marker.bytes), "", "");
+  if (settings) return settings;
+  return { home: ["Home.md", "README.md"].find((p) => files.some((f) => f.path === p)) || "" };
+}
+
+/** A vault's name from its copy's file name: "My notes 2026-11-22.zip" → "My notes". */
+export const nameFromZip = (fileName) => String(fileName || "").replace(/\.zip$/i, "").replace(/\s+\d{4}-\d{2}-\d{2}(\s*\(\d+\))?$/, "").trim() || "Restored notes";
+
 // ---- what a new vault starts with ----
 
 /** The example vault's files (as in the app's example-vault/ folder), fetched from the app's own site. */

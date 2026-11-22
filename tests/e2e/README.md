@@ -84,3 +84,9 @@ To check your own fork, push it and run with `OWNER=<you>`.
 ## Version switch check
 
 `node version-switch.mjs <screenshots-folder>` serves this clone at both `/` and `/dev/` on a port of its own (`PORT`, default 8799), as GitHub Pages serves `main` and `dev`. On the released version the **⋯** menu's **Try the dev version** must open `dev/` at the same note and remember the choice; there **Use the released version** must come back. Desktop/phone light/dark screenshots of the menu; no token, page errors or network calls.
+
+## Restore and download checks
+
+`node restore.mjs <screenshots-folder>` makes a fictional local vault (Markdown, an empty file, a picture, Unicode names, a `.commonplace.json`), saves it as **Download a copy** does, and restores the zip through **Add a vault on this device**: into this browser and into a folder (the browser's own private file system stands in for one picked on the disk). It checks the preview before writing, the settings, edit, save and reload, every file's bytes, a folder that already has notes being refused, bad zips (a path outside the vault, not a zip) refused with nothing registered, and the first page's **Restore a copy you downloaded** at phone width. No token or remote calls.
+
+`node download.mjs [unzipped folder] [screenshots-folder]` opens the download to try it out from the disk (`file://`) in Chrome and Edge, after `node tools/download/build.mjs` in the repo's root: the example notes, the *Trying it out* line, diagrams, pictures, an edit kept after a reload, Settings with no token, phone width, no network and no page errors.
