@@ -4,13 +4,13 @@
 
 **A common place for your everyday: your project's wiki, notes and task board, your private notes and recipes, all in your own GitHub repo, for free.**
 
-**[Open Commonplace.md](https://snowy-peak-studios.github.io/commonplace-md/)** · [Roadmap](ROADMAP.md) · [Support us on Ko-fi](https://ko-fi.com/jansnieg)
+**[Open Commonplace.md](https://snowy-peak-studios.github.io/commonplace-md/)** · [Roadmap](ROADMAP.md) · [Support us on Ko-fi](https://ko-fi.com/jansnieg) · [For teams](#for-companies-and-bigger-teams)
 
 *Don't rely on your agent's memory: make your own vault with all the answers.*
 
 </div>
 
-**Contents:** [What it is](#what-it-is) · [A look inside](#a-look-inside) · [Quick start](#quick-start) · [Guides](#guides) · [License](#license)
+**Contents:** [What it is](#what-it-is) · [A look inside](#a-look-inside) · [Quick start](#quick-start) · [Guides](#guides) · [For companies and bigger teams](#for-companies-and-bigger-teams) · [License](#license)
 
 ## What it is
 
@@ -60,6 +60,16 @@ Every guide in `docs/`, in one place.
 | Agent setup, rules and skills | [Working with AI agents](docs/ai-agents.md) |
 | Tokens, local storage and network access | [Privacy and security](docs/privacy.md) |
 | Running locally, tests and code layout | [Contributing](docs/contributing.md) |
+
+## For companies and bigger teams
+
+Does your company or a bigger team use Commonplace.md? Please [support us on Ko-fi](https://ko-fi.com/jansnieg): it keeps the project going.
+
+Need more than the free app? Write to **[hello@snowypeakstudios.com](mailto:hello@snowypeakstudios.com)** about a version made for your team, for example with:
+
+- user accounts and user permissions
+- repositories that aren't on GitHub
+- other features your team needs
 
 ## License
 
