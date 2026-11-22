@@ -360,6 +360,11 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
 /* a file saved on this device and not on GitHub yet */
 .row .wait-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; margin-left: auto; }
 .bar-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+/* Insert and Add image sit right after the title while a note is edited; the title then gives up its spare room. */
+.edit-tools { display: flex; align-items: center; gap: 2px; flex: none; margin-right: auto; }
+.edit-tools[hidden] { display: none; }
+.bar:has(.edit-tools:not([hidden])) .title { flex: 0 1 auto; }
+.edit-tools .btn.busy .icon { animation: spin 0.8s linear infinite; }
 
 /* newer notes on GitHub */
 .nudge {
@@ -523,7 +528,6 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
    The editor
    ================================================================ */
 .editor-pane { padding-top: 14px; }
-.image-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .cm-editor { font-size: 16px; }
 .cm-editor.cm-focused { outline: none; }
 .cm-scroller { font-family: var(--font) !important; line-height: 1.7 !important; }

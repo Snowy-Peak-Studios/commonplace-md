@@ -640,6 +640,13 @@ function renderHeader() {
       b.title = modes[i][1];
     });
   }
+  // Insert and Add image: in the top bar, next to the title, while a note is edited.
+  $("#edit-tools").hidden = !(f?.kind === "md" && f.editor && app.mode === "edit" && writable);
+  const image = $("#image-btn");
+  image.disabled = !!f?.imageUpload;
+  image.classList.toggle("busy", !!f?.imageUpload);
+  fill(image, icon(f?.imageUpload ? "spinner" : "image"), h("span", { class: "label" }, f?.imageUpload ? "Uploading…" : "Add image"));
+  image.title = f?.imageUpload ? "Uploading the image…" : "Add an image at the cursor";
   const save = $("#save-btn");
   save.hidden = !f || viewOnly(f.kind) || !writable;
   save.disabled = !(f?.dirty || uploadable(f)) || app.saving || !!f?.imageUpload;
@@ -997,21 +1004,12 @@ function onTextChanged(text, changes) {
   warnLater();
 }
 
-/** The chooser, clipboard and editor drop all go through the same image action. */
+/**
+ * The chooser (**Add image** in the top bar), the clipboard and an editor drop all go through the same image
+ * action. Here: the paste and the drop on the editor.
+ */
 function setupImageTools(f) {
-  const input = h("input", { type: "file", accept: IMAGE_ACCEPT, hidden: true, "aria-label": "Choose an image",
-    onchange: () => {
-      const file = input.files[0];
-      input.value = "";
-      if (file) addImage(f, file);
-    } });
-  const pick = h("button", { type: "button", class: "btn small", onclick: () => input.click() }, icon("image"), "Add image");
-  const insert = h("button", { type: "button", class: "btn small", "aria-haspopup": "dialog", title: "Insert Markdown or an app block at the cursor",
-    onclick: () => openInsertMenu(f) }, icon("plus"), "Insert");
-  const status = h("span", { class: "muted", role: "status" });
-  f.dom.imageTools = { pick, status };
   const pane = f.dom.editorPane;
-  pane.append(h("div", { class: "image-tools" }, insert, pick, input, status));
   const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => file.type.startsWith("image/") || isImagePath(file.name))
     || [...(transfer.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile());
   const handle = (event, transfer, at) => {
@@ -1039,11 +1037,8 @@ async function addImage(f, file, at = f.editor?.state.selection.main.head) {
   const nav = f.repo.vault && findNavBlock(f.text);
   if (nav && at >= nav.from && at <= nav.to) return toast("Move the cursor outside the navigation box to add an image.", "info");
 
-  const { pick, status } = f.dom.imageTools;
   const tree = app.trees.get(f.repo.id);
   f.imageUpload = { at };
-  pick.disabled = true;
-  status.textContent = "Uploading image…";
   renderHeader();
   try {
     const image = imageAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
@@ -1068,8 +1063,6 @@ async function addImage(f, file, at = f.editor?.state.selection.main.head) {
     toast(`Image not added: ${e.message}`, "error");
   } finally {
     f.imageUpload = null;
-    pick.disabled = false;
-    status.textContent = "";
     renderHeader();
   }
 }
@@ -5550,6 +5543,15 @@ function start() {
     if (i >= 0) setMode(i ? "edit" : "read");
   });
   $("#save-btn").addEventListener("click", save);
+  $("#insert-btn").addEventListener("click", () => { if (app.file) openInsertMenu(app.file); });
+  const imageInput = $("#image-input");
+  imageInput.accept = IMAGE_ACCEPT;
+  $("#image-btn").addEventListener("click", () => imageInput.click());
+  imageInput.addEventListener("change", () => {
+    const file = imageInput.files[0];
+    imageInput.value = "";
+    if (file && app.file) addImage(app.file, file);
+  });
   const more = $("#more");
   const closeMenu = () => more.removeAttribute("open");
   document.addEventListener("click", (e) => { if (!more.contains(e.target)) closeMenu(); });

@@ -48,6 +48,11 @@
       <button id="back-btn" class="icon-btn" data-icon="back" hidden title="Back" aria-label="Back"></button>
       <button id="up-btn" class="icon-btn" data-icon="up" hidden title="Up" aria-label="Up"></button>
       <div id="title" class="title"></div>
+      <div id="edit-tools" class="edit-tools" hidden role="group" aria-label="Add to the note">
+        <button id="insert-btn" class="btn ghost" data-icon="plus" title="Insert Markdown or an app block at the cursor" aria-haspopup="dialog"><span class="label">Insert</span></button>
+        <button id="image-btn" class="btn ghost" title="Add an image at the cursor"><span class="label">Add image</span></button>
+        <input id="image-input" type="file" hidden aria-label="Choose an image">
+      </div>
       <div class="bar-actions">
         <button id="inbox-btn" class="btn ghost" data-icon="inbox" hidden title="Inbox"><span class="label">Inbox</span></button>
         <div id="mode" class="seg" hidden role="group" aria-label="Mode">

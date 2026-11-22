@@ -59,7 +59,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
-  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add image** on a phone.
+  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add image** in the top bar on a phone.
   - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
   - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).

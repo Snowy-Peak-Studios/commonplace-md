@@ -661,7 +661,7 @@ check(p1?.body.sha === real.sha, "save used the file's current sha");
 
 // 5a. Editing: paste binary image data at the cursor and commit only the attachment.
 await page.evaluate(() => document.querySelectorAll("#mode button")[1].click());
-await page.waitForSelector(".image-tools button");
+await page.waitForSelector("#edit-tools:not([hidden]) #image-btn");
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIAK+Y6GQAAAABJRU5ErkJggg==";
 const putsBeforeImage = puts.length;
 const pasteImage = () => page.$eval(".editor-pane .cm-editor", async (node, png) => {
@@ -1529,7 +1529,7 @@ await page.waitForSelector(".preview input.task");
 check(await page.$eval("#title .badge", (b) => b.textContent === "Read only").catch(() => false), "a read-only repo says so in the toolbar");
 check(await page.evaluate(() => ["#mode", "#save-btn", "#side-new"].every((s) => document.querySelector(s).hidden)), "no Edit, Save or New note there");
 check(await page.$$eval(".preview input.task", (bs) => bs.length > 0 && bs.every((b) => b.disabled)), "its checkboxes can't be ticked");
-check(!(await page.$(".image-tools")), "a read-only vault has no Add image control");
+check(await page.$eval("#edit-tools", (t) => t.hidden), "a read-only vault has no Insert or Add image control");
 await shot("10-read-only");
 await page.goto(at("Task Board.md"), { waitUntil: "networkidle0" });
 check(await until(() => !!document.querySelector(".board-card a"), 15000)
