@@ -50,6 +50,7 @@ Commit the new `vendor/vendor.js` and `vendor/mermaid.min.js`.
 | `src/ai-time.js` | Local arithmetic over recorded AI work minutes: grouped chart statistics and exact area/type task estimates |
 | `src/markdown.js` | The Markdown preview (markdown-it with wikilinks, embeds, callouts, checkboxes, Mermaid placeholders) |
 | `src/bases.js` | Bases: the `.base` file, its filter and formula expressions, a table view's rows, sort and groups |
+| `src/inserts.js` | The editor's Insert menu: its Markdown and block entries, their preview samples, and where each goes in the note |
 | `src/editor.js` | CodeMirror setup: the protected navigation box, link marks, the merge view, colours for code and other text files |
 | `src/csv.js` | CSV and TSV parsing and writing |
 | `src/store.js` | This browser's storage, and moving older settings forward |

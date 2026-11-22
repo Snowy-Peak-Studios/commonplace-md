@@ -1116,6 +1116,31 @@ dialog.modal[open] { display: flex; flex-direction: column; animation: pop 0.14s
 .modal-body p { margin: 0 0 14px; color: var(--text-2); font-size: 14px; }
 .modal-foot { flex: none; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 22px 18px; }
 .modal-foot .spacer { flex: 1; }
+/* The editor's Insert menu: a search, the list, and a read-mode preview of the chosen entry. */
+dialog.modal.insert-modal { width: min(860px, calc(100vw - 32px)); }
+.insert-search { margin-bottom: 12px; }
+.insert-panes { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: 14px; height: min(440px, calc(100dvh - 300px)); min-height: 220px; }
+.insert-list { overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius); padding: 4px; }
+.insert-group + .insert-group { margin-top: 6px; }
+.insert-group-name { padding: 6px 8px 2px; font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.insert-option { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.insert-option:hover { background: var(--bg-soft); }
+.insert-option[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.insert-kind { margin-left: auto; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.insert-none { padding: 8px; }
+.insert-preview { min-width: 0; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; background: var(--bg); }
+.insert-label { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.modal-body p.insert-about { margin: 4px 0 6px; font-size: 13.5px; }
+.preview.insert-sample { padding: 4px 0 8px; font-size: 15px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.preview.insert-sample > .note-body > :first-child { margin-top: 0.3em; }
+.preview.insert-sample h2 { margin-top: 0.3em; }
+.insert-source { margin: 6px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--code-bg); font-family: var(--mono); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .insert-panes { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .insert-list { max-height: 34dvh; }
+  .insert-option { min-height: 40px; }
+  .insert-preview { max-height: 36dvh; }
+}
 .field { display: block; margin: 0 0 14px; }
 .field > span { display: block; font-size: 13px; font-weight: 550; margin-bottom: 6px; color: var(--text-2); }
 .field small { display: block; margin-top: 6px; font-size: 12.5px; color: var(--muted); }

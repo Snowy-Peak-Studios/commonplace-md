@@ -4,7 +4,7 @@
 
 Blocks turn a part of a Markdown note into a view, a capture box or a named section. Write three backticks, the block name, its contents, and a closing line of three backticks. In Commonplace.md, switch to **Read** to use it. On GitHub and in other Markdown readers, app-specific blocks show their source.
 
-Block names are case insensitive. Put app blocks directly in the note; views inside an embedded page may keep their source instead of becoming interactive. Task and sprint views need the project's task settings and matching notes. Being able to see a view does not grant permission to change its files.
+In **Edit**, **Insert** above the editor lists every block here, with a preview of how it looks, and adds it at the cursor. Block names are case insensitive. Put app blocks directly in the note; views inside an embedded page may keep their source instead of becoming interactive. Task and sprint views need the project's task settings and matching notes. Being able to see a view does not grant permission to change its files.
 
 | Block | What it shows |
 | --- | --- |

@@ -22,6 +22,7 @@ import { store, upgradeRepo, upgradeInboxOverview } from "./store.js";
 import { icon, fillIcons } from "./icons.js";
 import { createPrintView, clearPrintView, printNote } from "./print.js";
 import { aiTimeSamples, aiTimeGroups, aiTimeEstimate, aiTimeLabel } from "./ai-time.js";
+import { INSERTS, INSERT_GROUPS, filterInserts, insertSample, insertion } from "./inserts.js";
 
 // ================================================================
 // Helpers
@@ -119,9 +120,9 @@ const skeleton = () => h("div", { class: "skeleton" }, h("div", { class: "sk h" 
  * Opens a modal. Each button is { label, kind, icon, value, onclick }; an `onclick` returning false keeps
  * the dialog open. Resolves with the chosen button's value (null when dismissed).
  */
-function modal({ title, text, body = [], wide = false, buttons, onOpen }) {
+function modal({ title, text, body = [], wide = false, cls = "", buttons, onOpen }) {
   return new Promise((resolve) => {
-    const dlg = h("dialog", { class: `modal${wide ? " wide" : ""}` });
+    const dlg = h("dialog", { class: `modal${wide ? " wide" : ""}${cls ? ` ${cls}` : ""}` });
     let result = null;
     const foot = h("div", { class: "modal-foot" });
     const els = buttons.map((b) => {
@@ -1005,10 +1006,12 @@ function setupImageTools(f) {
       if (file) addImage(f, file);
     } });
   const pick = h("button", { type: "button", class: "btn small", onclick: () => input.click() }, icon("image"), "Add image");
+  const insert = h("button", { type: "button", class: "btn small", "aria-haspopup": "dialog", title: "Insert Markdown or an app block at the cursor",
+    onclick: () => openInsertMenu(f) }, icon("plus"), "Insert");
   const status = h("span", { class: "muted", role: "status" });
   f.dom.imageTools = { pick, status };
   const pane = f.dom.editorPane;
-  pane.append(h("div", { class: "image-tools" }, pick, input, status));
+  pane.append(h("div", { class: "image-tools" }, insert, pick, input, status));
   const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => file.type.startsWith("image/") || isImagePath(file.name))
     || [...(transfer.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile());
   const handle = (event, transfer, at) => {
@@ -1069,6 +1072,113 @@ async function addImage(f, file, at = f.editor?.state.selection.main.head) {
     status.textContent = "";
     renderHeader();
   }
+}
+
+// ---- the Insert menu ----
+
+/**
+ * Insert: a searchable list of Markdown and app blocks, each with a small read-mode preview. Hovering an entry
+ * previews it; a click or a tap selects it (and previews it, on touch too); Insert, Enter or a double-click puts it
+ * in the note at the cursor. The arrow keys move through the list while the search box keeps the focus.
+ */
+async function openInsertMenu(f) {
+  if (app.file !== f || app.mode !== "edit" || !f.editor || !canWrite(f.repo)) return;
+  const sel = f.editor.state.selection.main;
+  let shown = INSERTS;
+  let chosen = INSERTS[0];
+  const search = h("input", { type: "search", class: "input insert-search", placeholder: "Search: list, table, sprint…", autocomplete: "off", spellcheck: "false",
+    role: "combobox", "aria-expanded": "true", "aria-controls": "insert-list", "aria-autocomplete": "list", "aria-label": "Search what to insert" });
+  const list = h("div", { class: "insert-list", id: "insert-list", role: "listbox", "aria-label": "What to insert" });
+  const about = h("p", { class: "insert-about" });
+  const sample = h("div", { class: "preview insert-sample", inert: true });
+  const source = h("pre", { class: "insert-source", "aria-label": "What goes into the note" });
+  const preview = h("div", { class: "insert-preview", "aria-live": "polite" },
+    h("div", { class: "insert-label" }, "Preview"), about, sample, h("div", { class: "insert-label" }, "Adds"), source);
+  let insertBtn = null;
+  const optionId = (e) => `insert-${e.id}`;
+
+  const showPreview = (e) => {
+    if (!e) {
+      about.textContent = "Nothing matches. Try another word.";
+      fill(sample);
+      source.textContent = "";
+      return;
+    }
+    about.textContent = e.about;
+    const body = h("div", { class: "note-body" });
+    body.innerHTML = sanitize(renderNote(md, insertSample(e), linkEnv(f.repo, f.path)).html);
+    fillIcons(body);
+    fillDiagrams(body);
+    fill(sample, body);
+    source.textContent = e.text;
+  };
+  const choose = (e, scroll = false) => {
+    chosen = e;
+    for (const el of list.querySelectorAll("[role=option]")) el.setAttribute("aria-selected", String(el.id === (e && optionId(e))));
+    if (e) search.setAttribute("aria-activedescendant", optionId(e));
+    else search.removeAttribute("aria-activedescendant");
+    if (insertBtn) insertBtn.disabled = !e;
+    showPreview(e);
+    if (scroll && e) list.querySelector(`#${optionId(e)}`)?.scrollIntoView({ block: "nearest" });
+  };
+  const draw = () => {
+    shown = filterInserts(search.value);
+    fill(list, INSERT_GROUPS.map((group) => {
+      const items = shown.filter((e) => e.group === group);
+      if (!items.length) return null;
+      return h("div", { class: "insert-group", role: "group", "aria-label": group }, h("div", { class: "insert-group-name", "aria-hidden": "true" }, group),
+        items.map((e) => h("div", { class: "insert-option", id: optionId(e), role: "option", "aria-selected": "false",
+          onmouseenter: () => showPreview(e),
+          onclick: () => { choose(e); if (!matchMedia("(pointer: coarse)").matches) search.focus(); },
+          ondblclick: () => { choose(e); insertBtn?.click(); } },
+        h("span", { class: "insert-name" }, e.label), e.inline ? h("span", { class: "insert-kind" }, "in a line") : null)));
+    }));
+    if (!shown.length) list.append(h("p", { class: "muted insert-none" }, "Nothing matches."));
+    choose(shown.includes(chosen) ? chosen : shown[0] ?? null);
+  };
+  list.addEventListener("mouseleave", () => showPreview(chosen));
+  search.addEventListener("input", draw);
+  search.addEventListener("keydown", (event) => {
+    const i = shown.indexOf(chosen);
+    const moves = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: shown.length - 1, PageDown: i + 5, PageUp: i - 5 };
+    if (event.key in moves && shown.length && !(event.key in { Home: 1, End: 1 } && search.value)) {
+      event.preventDefault();
+      choose(shown[Math.max(0, Math.min(shown.length - 1, moves[event.key]))], true);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (chosen) insertBtn?.click();
+    }
+  });
+
+  const picked = await modal({
+    title: "Insert",
+    text: "Pick what to add at the cursor. The preview shows how it looks in Read mode.",
+    cls: "insert-modal",
+    body: [search, h("div", { class: "insert-panes" }, list, preview)],
+    buttons: [{ label: "Cancel", value: null }, { label: "Insert", kind: "primary", icon: "plus", onclick: () => chosen ?? false }],
+    onOpen: ({ buttons }) => {
+      insertBtn = buttons[1];
+      draw();
+      // A phone's keyboard would cover the list, so the search box takes the focus only with a mouse or keys.
+      if (!matchMedia("(pointer: coarse)").matches) search.focus();
+    },
+  });
+  if (!picked || app.file !== f || !f.editor) return;
+  insertEntry(f, picked, sel.from, sel.to);
+}
+
+/** Puts an Insert menu entry into the note, with its placeholder selected so typing replaces it. */
+function insertEntry(f, entry, from, to) {
+  const text = f.editor.state.doc.toString();
+  const end = Math.min(text.length, Math.max(from, to));
+  const c = insertion(text, Math.min(from, end), end, entry);
+  const nav = f.repo.vault && findNavBlock(text);
+  if (nav && c.from <= nav.to && c.to >= nav.from) {
+    f.editor.focus();
+    return toast("Move the cursor outside the navigation box to insert there.", "info");
+  }
+  f.editor.dispatch({ changes: { from: c.from, to: c.to, insert: c.insert }, selection: { anchor: c.anchor, head: c.head }, scrollIntoView: true, userEvent: "input" });
+  f.editor.focus();
 }
 
 function updateDirty() {

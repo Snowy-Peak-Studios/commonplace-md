@@ -10,7 +10,7 @@ parent: "[[How To]]"
 ## Write
 
 1. Open a note and press **Edit** (or Ctrl+E). On a wide screen, the preview shows beside the editor as you type.
-2. Write in Markdown.
+2. Write in Markdown. Don't know how to write something? Press **Insert** above the editor: it lists the Markdown and the app's blocks, with a preview of each. See [Insert Markdown or a block](#insert-markdown-or-a-block).
 3. Press **Save** (or Ctrl+S). See [Save, drafts and conflicts](Save%2C%20drafts%20and%20conflicts.md).
 
 A new note: **New note** in the file list or the menu asks for a name and a folder. In a vault like this one, new notes go in `Notes/` and start from `Templates/Note.md`.
@@ -28,6 +28,14 @@ A link to a page that doesn't exist is marked in red, in the editor and in the p
 Open **Edit** and place the cursor where the picture belongs. Paste an image from the clipboard, drop an image onto the editor, or press **Add image** to choose a file on your device. The note gets an embed such as `![[screenshot-2026-11-17-12-00-00-abcd1234.png]]`. Press **Save** to keep the link.
 
 The file goes into **Attachments folder** in vault Settings, or next to the note if that setting is empty. GitHub saves the image in its own commit. To upload to GitHub, the app needs a connection and write access. You can also add images to a local vault. Images may be up to 10 MiB.
+
+## Insert Markdown or a block
+
+In **Edit**, press **Insert** above the editor. It lists common Markdown (a heading, a list, a checklist, a callout, a table, a diagram) and every block the app draws (task sections, the top tasks, a sprint, a board and more). Search by a word, such as *list* or *sprint*.
+
+- Hover an entry, move to it with the arrow keys, or tap it on a phone, to see a small preview of how it looks in **Read**, and the Markdown it adds.
+- Press **Insert**, Enter, or double-click it to add it at the cursor. A block goes on lines of its own, after the line the cursor is on; text such as **Bold** goes in the line, around the words you selected.
+- The example words are selected, so you can type over them at once.
 
 ## What else a note can hold
 
