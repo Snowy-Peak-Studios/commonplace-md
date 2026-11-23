@@ -27,6 +27,35 @@ If your person says the rules are already set up, just delete this section.
 - Start at `Home.md`: it says where everything is.
 - Every page but `Home.md` has a `parent` property that links to the page above it. A new page gets one too, and every `[[link]]` leads to a page that exists.
 
+## The vault is your memory
+
+Your person may switch agents, or start a new session, at any time. What isn't saved in the vault is lost to the next one: your chat, and your agent's own memory, are not where project facts live. So save each thing where the next agent looks for it:
+
+| What | Where |
+| --- | --- |
+| What a task is and when it's done | The task: `description`, `acceptance-criteria` |
+| What you did, checked and found, step by step | The task's `work-history` |
+| What changed and what to test, for review | The task's `review` block |
+| A question, and its answer | The task, with a line in your person's inbox (see Questions) |
+| A decision and its reason | The task's notes, and the page about that topic |
+| How something works, for good | The page about that topic (a how-to, a guide), not only the task |
+| Work you stop before it's done | A **handoff** in the task's `work-history` (below) |
+
+- **Before you stop** in the middle of a task (the session ends, your person switches agents, you wait for an answer), write a handoff in its `work-history`, commit and push it:
+
+  ```markdown
+  - **Handoff** (2026-05-02, Your name (Claude) → the next agent)
+    - Done: the criteria you met, and the commit.
+    - Next: the very next step.
+    - Open: questions waiting, and where they are.
+    - Checks: what you ran, and what still fails.
+  ```
+
+  Then set `assignee` to your person's name alone (no agent after it): the task stays theirs, and their next agent takes it first (see Picking a task).
+- **To pick a task up**, read its note from the top: criteria, comments, the last handoff in `work-history`, then its commits. Start from **Next**. Where the notes and the code disagree, trust the code, and say so in the task.
+- Save the outcome, not the chat: short facts and their reasons, never pasted conversations or anything private. A vault only on one device stays there; never copy its notes anywhere else to "remember" them.
+- Your agent's own memory can hold how your person likes to work. Project facts go in the vault, even when you remember them too.
+
 ## Every session starts the same way
 
 1. `git pull --rebase --autostash`. People write from their phones and other devices all day. If the rebase stops on a conflict, sort it out first, keeping both sides' edits.

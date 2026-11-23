@@ -18,7 +18,7 @@
 
 - **Notes that stay yours:** linked pages, pictures, checklists, diagrams and tables, with tags and 0 to 5 stars to find the best ones.
 - **Tasks alongside the context:** boards, subtasks, relations, sprints and fields you choose.
-- **People and AI agents together:** your inbox, project rules and decisions live in the same files.
+- **People and AI agents together:** your inbox, project rules and decisions live in the same files. Agents save their reports and handoffs there too, so you can [switch agents](example-vault/How%20To/Switch%20AI%20agents.md) and the next one carries on.
 - **Free and open source:** no server or account of ours. GitHub saves are commits; local notes stay on your device.
 
 ## A look inside
@@ -57,7 +57,7 @@ Every guide in `docs/`, in one place.
 | Screenshots of the board, tasks and phone layouts | [Gallery](docs/gallery.md) |
 | The two example folders: `example-vault/` shows every feature, `examples/` has starter vaults for kinds of use | [Example vaults](docs/example-vaults.md#two-example-folders) |
 | Team access, invite links and inboxes | [Sharing and inboxes](docs/collaboration.md) |
-| Agent setup, rules and skills | [Working with AI agents](docs/ai-agents.md) |
+| Agent setup, rules and skills, and switching agents | [Working with AI agents](docs/ai-agents.md) · [Switch AI agents](example-vault/How%20To/Switch%20AI%20agents.md) |
 | Tokens, local storage and network access | [Privacy and security](docs/privacy.md) |
 | Running locally, tests and code layout | [Contributing](docs/contributing.md) |
 

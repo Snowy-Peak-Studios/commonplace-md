@@ -46,4 +46,11 @@ Data/Reading list.csv # trying the table on a small screen
 
 ```work-history
 - Opened the app in the phone's browser.
+- **Handoff** (2026-05-02, Your name (Claude) → the next agent)
+  - Done: the first criterion; the app opens in the phone's browser.
+  - Next: make a token for the phone ([Connect to GitHub](../How%20To/Connect%20to%20GitHub.md)), then paste it on the phone.
+  - Open: the question in Comments, about the home screen shortcut, waits for Your name.
+  - Checks: none to run yet; look at the phone after each step.
 ```
+
+**Work History** (folded, at the bottom) ends with a **saved handoff**: an agent stopped this task there, and the next one (another agent, or a new session) starts from its **Next**. [Switch AI agents](../How%20To/Switch%20AI%20agents.md) shows how.

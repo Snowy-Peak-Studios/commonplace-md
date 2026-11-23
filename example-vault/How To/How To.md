@@ -64,3 +64,4 @@ Each opens on its Home page. Edit the notes to make it yours, or use **Download 
 
 - [The guide](../Guide.md): everything a note can hold.
 - [Rules for AI agents](../AGENTS.md): how an AI agent works in these notes.
+- [Switch AI agents](Switch%20AI%20agents.md): the vault as your agents' memory, and a saved handoff.

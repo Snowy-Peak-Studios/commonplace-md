@@ -7,6 +7,8 @@ description: Finish the task you claimed - check every acceptance criterion, run
 
 One task per wrap-up. If your changes cover another task too, stop and ask how to split them. Paths are from the vault's top folder.
 
+**Stopping before it's done** (the session ends, your person switches agents, you wait for an answer)? Don't wrap up: write a **Handoff** in the task's `work-history` (Done, Next, Open, Checks; the format is in `AGENTS.md`, The vault is your memory), set `assignee` to your person's name alone, then commit and push as in step 5. The next agent starts from it.
+
 ## 1. The acceptance criteria
 
 Go through every criterion in the task. Tick the ones that are met, and know how you know (a test passed, you looked at the result). For any that isn't met: finish it now, or split it off (step 3).

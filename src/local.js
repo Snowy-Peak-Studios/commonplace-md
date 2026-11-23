@@ -668,7 +668,7 @@ export const EXAMPLE_FILES = [
   "Data/Reading list.csv", "Data/settings.json", "Data/word_count.py", "Guide.md", "Home.md", "How To/Add a vault.md",
   "How To/Connect to GitHub.md", "How To/How To.md", "How To/Invite someone.md", "How To/Markdown and blocks.md",
   "How To/Run sprints.md",
-  "How To/Save, drafts and conflicts.md", "How To/Use it on a phone.md", "How To/Use your inbox.md",
+  "How To/Save, drafts and conflicts.md", "How To/Switch AI agents.md", "How To/Use it on a phone.md", "How To/Use your inbox.md",
   "How To/Work with tasks.md", "How To/Write and link notes.md", "Notes/Inbox.md", "Notes/Inboxes/Your name.md",
   "Other kinds of files.md", "Set up tasks.md", "Sprints/Sprint 1.md", "Sprints/Sprint 2.md", "Task Board.md",
   "Tasks/Add a reading list.md", "Tasks/Get set up.md", "Tasks/Invite a friend.md", "Tasks/Make a note template.md",

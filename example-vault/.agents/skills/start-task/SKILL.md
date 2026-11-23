@@ -45,6 +45,7 @@ An old task can go stale. See when it was made (`git log --follow --diff-filter=
 
 ## 7. Plan it
 
+- **Work already started** (by another agent, or an earlier session): read the task from the top, then the last **Handoff** in its `work-history` and its commits. Start from its **Next**; where the notes and the code disagree, trust the code and say so on the task (`AGENTS.md`, The vault is your memory).
 - Which current goal it serves, or that it serves none.
 - Its acceptance criteria, and how you'll check each one (a test, a look at the result).
 - What's unclear. A decision that's your person's: ask them now, or on the task (`AGENTS.md`, Questions) if they're away.

@@ -12,6 +12,7 @@ AI agents that can run git (Claude Code, Codex and others) can work in your vaul
 - reads **your inbox**, and every ` ```new-tasks ` block with your name anywhere in the vault, and turns what you wrote there into task notes, with IDs and acceptance criteria;
 - picks a free task and **claims** it (status and assignee, committed and pushed) before it changes anything, so two agents never work on the same task;
 - keeps the Task Board and the other notes up to date, and writes what it did and the commit into the task when it's done;
+- **saves its memory in the vault**: reports, decisions and checks on the task, and a handoff before it stops, so [another agent can carry on](#switch-agents) without its chat;
 - asks you on the task when it needs a decision, with a line under **Needs attention** in your inbox that links to it, and works on something else while it waits.
 - **uses fewer credits** on ordinary work: scripts and fixed commands first, searching instead of reading the whole vault, a code graph before changing code, and bookkeeping handed to a subagent on a smaller model, if your agent has one.
 
@@ -52,3 +53,9 @@ To start a session, open the agent in the notes repo and paste:
 Read AGENTS.md and follow it: pull, read the current goals and my inbox, and sort my new tasks into
 task notes. Then tell me which task you'd pick next and why, and wait for my go-ahead before you start it.
 ```
+
+### Switch agents
+
+*Don't rely on your agent's memory: make your own vault with all the answers.* An agent's chat and its own memory end with the session, and another agent never sees them. So the rules have every agent keep the project's facts in the vault: what it did and found in the task's Work History, what to test in its Review block, questions and decisions on the task, lasting knowledge on the page about the topic. Before it stops in the middle of a task, it writes a **handoff** (Done, Next, Open, Checks) and gives the task back to you; the next agent, Claude Code, Codex or another, reads the task and starts from **Next**.
+
+[Switch AI agents](../example-vault/How%20To/Switch%20AI%20agents.md) shows where each thing goes, the handoff, and what to paste into the new agent; [Try the app on a phone](../example-vault/Tasks/Try%20the%20app%20on%20a%20phone.md) has a saved handoff. Agents save short facts, not chats, and a vault only on one device stays there.
