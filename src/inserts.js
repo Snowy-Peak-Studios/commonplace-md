@@ -42,6 +42,8 @@ export const INSERTS = [
   { id: "commits", group: "Task sections", label: "Commits", about: "A task's commits, from its commits property.", text: "```commits\n```",
     sample: "**Commits**\n\n- `a1b2c3d` Add the guide" },
   // ---- Views: they show the vault's notes ----
+  { id: "rating", group: "Views", label: "Stars", about: "0 to 5 stars for this note, kept in its rating property.", text: "```rating\n```",
+    sample: "**Stars** · 4 of 5 ★★★★☆" },
   { id: "toc", group: "Views", label: "Table of contents", about: "This page's headings, as links.", text: "```toc\n```",
     sample: "**Contents**\n\n- Heading\n  - Smaller heading\n- Another heading" },
   { id: "subpages", group: "Views", label: "Subpages", about: "The pages under this one, from their parent property.", text: "```subpages\ndepth: 1\n```",

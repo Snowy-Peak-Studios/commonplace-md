@@ -4,10 +4,10 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS, reviewLists } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, RATING_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS, reviewLists } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
-export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS, ...ASSET_BLOCKS];
+export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS, ...ASSET_BLOCKS, ...RATING_BLOCKS];
 
 /** Callout kinds and the icon each shows. */
 const CALLOUT_ICONS = {

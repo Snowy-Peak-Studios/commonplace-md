@@ -266,6 +266,8 @@ export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
 export const SPRINT_BLOCKS = ["sprint"];
 /** A task's ```assets block: the files and assets it expects to occupy. Not added to new tasks by itself. */
 export const ASSET_BLOCKS = ["assets"];
+/** A ```rating block: the note's stars (its `rating` property), on any note that has one. No block, no stars. */
+export const RATING_BLOCKS = ["rating"];
 
 /**
  * The assets a task's ```assets block lists, one per line, from the repo's root: `Source/Game/Player.cpp`,

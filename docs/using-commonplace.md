@@ -56,7 +56,7 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Offline:** every GitHub vault is kept on the device too, so it opens with no connection (a line above the note says it's the copy). The copy is kept in the browser, or (Chrome and Edge on a computer) in a folder you pick, like the repo's clone, so other tools and agents read the same files and each commit updates them ([more](getting-started.md#a-copy-on-this-device)).
 - **Up to date:** a Reload button beside Save, and a quiet banner when GitHub has newer notes than the ones you have open (checked when you come back to the tab and every few minutes, cheaply).
 - **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), an Up button to the note's `parent` page, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
-- **Tags and stars:** a note's `tags` show as chips, and every note has 0 to 5 stars (its `rating`) to press in Read mode. **Find**, beside New note in the file list, filters the vault's notes by tags and by at least N stars, the best rated first; the filter is in the address, so it can be linked.
+- **Tags and stars:** a note's `tags` show as chips, and a ` ```rating ` block shows 0 to 5 stars (the note's `rating`) to press in Read mode. **Find**, beside New note in the file list, filters the vault's notes by tags and by at least N stars, the best rated first; the filter is in the address, so it can be linked.
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.

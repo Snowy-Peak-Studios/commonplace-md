@@ -244,6 +244,15 @@ group: area-type
 
 The only supported setting is `group`: `area-type` (default), `area` or `type`. Tasks need the corresponding grouping properties and valid AI time records. The block uses the project's task settings and stays inert in embedded pages.
 
+## rating
+
+Shows the note's stars, 0 to 5, where the block is written. In Read mode, press a star to give the note that many (or **0**), and the same star again to take the rating out; **Save** keeps it, as with a ticked checkbox. It's the note's `rating` property. A read-only vault shows the stars without changing them. The arrow keys move between them.
+
+```rating
+```
+
+No option lines. Without the block a note shows no stars, but its `rating` property still counts: the **Find** page and base views (`rating >= 4`) filter by it either way. Put it in a template (a recipe's, a lesson's) to rate every note made from it. Inside an embedded page it shows its code.
+
 ## toc
 
 Lists the page's headings, each a link to its place, nested as they are on the page. It follows the page as its headings change. The page's title (`#`) is left out.

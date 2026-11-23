@@ -16,7 +16,7 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - `description`, `acceptance-criteria`, `comments` and `work-history` for Markdown task sections. Comments also work on regular notes.
 - a ` ```sprint ` block on any page, with `sprint: current`, `next`, or a sprint's name or link
 - callouts (`> [!note]`, folded with `-` or open with `+`)
-- front matter, shown as properties; `tags` as chips that open **Find**, and `rating` (0 to 5) as stars you can press on every note ([Tags and stars](../example-vault/How%20To/Write%20and%20link%20notes.md#tags-and-stars))
+- front matter, shown as properties; `tags` as chips that open **Find**, and `rating` (0 to 5) as stars you can press where a ```` ```rating ```` block is ([Tags and stars](../example-vault/How%20To/Write%20and%20link%20notes.md#tags-and-stars))
 - bases (`.base` files): table views with filters, formulas, sorting, groups and column widths
 - ` ```mermaid ` diagrams
 - ` ```top-tasks ` blocks: the top tasks to start, on any page

@@ -276,3 +276,8 @@ test("a task's ```review block renders as its Review section, both lists, empty 
   const empty = render("```review\nchanged:\n- Only this\n```");
   assert.match(empty, /What to test<\/strong><\/p>\n<p><em>Not written yet\.<\/em>/);
 });
+
+test("a ```rating block is an app block the app fills with the note's stars; a note without one has none", () => {
+  assert.match(render("# Soup\n\n```rating\n```\n"), /<div class="app-block" data-block="rating"><pre><code>rating<\/code><\/pre><\/div>/);
+  assert.doesNotMatch(render("---\nrating: 4\n---\n# Soup\n"), /data-block="rating"/, "a rating property alone draws no stars");
+});

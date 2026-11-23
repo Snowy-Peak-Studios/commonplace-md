@@ -1255,9 +1255,10 @@ function renderPreview() {
     commits: isTask && (() => commitsBox(f, props)),
     sprint: isSprint && ((d) => sprintBox(f, setup, null, d)),
     assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "", setup)),
+    rating: () => ratingRow(f),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
-  fill(f.dom.preview, ratingRow(f), form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm, f.repo) : "", body);
+  fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm, f.repo) : "", body);
   commentFocus?.focus();
   fitWide(f);
 }
@@ -1436,7 +1437,7 @@ function fitWide(f) {
 }
 
 /**
- * Puts each box where its block is written in the note (```subtasks, ```relations, ```commits, ```sprint).
+ * Puts each box where its block is written in the note (```subtasks, ```relations, ```commits, ```sprint, ```rating).
  * A box with nothing to show leaves no trace; a block on a page that isn't a task (or a sprint), or one
  * inside an embedded page, keeps its code, as it does outside the app. No block, no box.
  */
@@ -4000,7 +4001,7 @@ function starsShown(n) {
 }
 
 /**
- * A note's stars (its `rating` property, 0 to 5), on every note in Read mode. A star sets the rating; the same one
+ * A note's stars (its `rating` property, 0 to 5), where its ```rating block is, in Read mode. A star sets the rating; the same one
  * again takes it out, as does 0 when it's 0. Like ticking a checkbox, it changes the note, and Save keeps it.
  * A read-only vault shows the stars without changing them. The arrow keys move between them.
  */
