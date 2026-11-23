@@ -84,3 +84,10 @@ test('overview owner checks accept name variants but retain exact diagnostics fo
  assert(overviewOwnerProblem({owner:['One','Two']},source).includes('one text name'));
  assert(overviewOwnerProblem({owner:42},source).includes('one text name'));
 });
+
+test('review rows carry the task review summary, or null for an older task without one',()=>{
+ const setup=taskSetup({folder:'Work'});
+ const notes=[task('New',{id:'N-2',status:'Testing',reviewer:'Ana Lee'},'```review\nchanged:\n- A thing\ntest:\n- Open it\n```'),task('Old',{id:'N-1',status:'Testing',reviewer:'Ana Lee'},'```work-history\n- Done.\n```')];
+ const rows=overviewRows({notes,setup,source,options:options()}).filter(r=>r.kind==='reviews');
+ assert.deepEqual(rows.map(r=>[r.label,r.review]),[['N-2 New',{changed:['A thing'],test:['Open it']}],['N-1 Old',null]]);
+});

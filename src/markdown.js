@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS } from "./vault.js";
+import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS, reviewLists } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS, ...ASSET_BLOCKS];
@@ -189,7 +189,7 @@ export function createMarkdown() {
       const title = NOTE_SECTIONS[lang];
       const lineOffset = (env.lineOffset ?? 0) + (token.map?.[0] ?? -1) + 1;
       const inComments = lang === "comments";
-      const body = md.render(token.content, { ...env, lineOffset, inNoteSection: true, inComments });
+      const body = md.render(lang === "review" ? reviewMarkdown(token.content) : token.content, { ...env, lineOffset, inNoteSection: true, inComments });
       const attrs = `class="note-section" data-section="${lang}" data-heading="${title}"`;
       if (lang === "work-history") return `<details ${attrs}><summary>${title}</summary>\n${body}</details>\n`;
       const lines = inComments && token.map ? ` data-start="${token.map[0]}" data-close="${token.map[1] - 1}"` : "";
@@ -396,4 +396,14 @@ export function boardOptions(src) {
   };
   return { columns: list("columns"), areas: list("areas"), assignee: fields.assignee ?? "",
     sprint: fields.sprint ?? "", types: list("type") };
+}
+
+/**
+ * A task's ```review block as Markdown for its Review section: *What changed* and *What to test*, each a list; an
+ * empty one says so rather than leave a gap. The items stay plain list items, never checkboxes.
+ */
+function reviewMarkdown(src) {
+  const { changed, test } = reviewLists(src);
+  const list = (items) => items.length ? items.map((t) => `- ${t}`).join("\n") : "*Not written yet.*";
+  return `**What changed**\n\n${list(changed)}\n\n**What to test**\n\n${list(test)}\n`;
 }

@@ -30,6 +30,7 @@ export const INSERTS = [
   // ---- Task sections: named sections, shown as they are ----
   { id: "description", group: "Task sections", label: "Description", about: "A task's story: who wants what, and why.", text: "```description\n**As** someone, **I want** something **so that** it helps.\n```", select: "**As** someone, **I want** something **so that** it helps." },
   { id: "acceptance-criteria", group: "Task sections", label: "Acceptance criteria", about: "What must be true when the task is done.", text: "```acceptance-criteria\n- [ ] It works\n```", select: "It works" },
+  { id: "review", group: "Task sections", label: "Review", about: "For the reviewer: what changed and what to test, shown in the inbox's For review.", text: "```review\nchanged:\n- What this work changed\ntest:\n- What to check\n```", select: "What this work changed" },
   { id: "comments", group: "Task sections", label: "Comments", about: "The talk about a task, with a box to add a comment.", text: "```comments\n```" },
   { id: "work-history", group: "Task sections", label: "Work history", about: "A log of the work on a task, folded.", text: "```work-history\n- Started.\n```", select: "Started." },
   { id: "subtasks", group: "Task sections", label: "Subtasks", about: "A task's child tasks and their progress, from their parent property.", text: "```subtasks\n```",

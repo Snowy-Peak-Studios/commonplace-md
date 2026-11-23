@@ -266,3 +266,13 @@ test("toc and subpages fences become placeholders for the app, with escaped sour
   assert.match(render("```Subpages\ndepth: 2\n```"), /data-kind="subpages"><pre><code>depth: 2/);
   assert.doesNotMatch(render("```toc\ndepth: <script>\n```"), /<script>/);
 });
+
+test("a task's ```review block renders as its Review section, both lists, empty ones said", () => {
+  const html = render(["# Task", "```review", "changed:", "- The **inbox** shows it.", "test:", "- [ ] Open [[Home]]", "```"].join("\n"));
+  assert.match(html, /data-section="review" data-heading="Review"><h2>Review<\/h2>/);
+  assert.match(html, /<strong>What changed<\/strong>[\s\S]*<li>The <strong>inbox<\/strong> shows it\.<\/li>/);
+  assert.match(html, /<strong>What to test<\/strong>[\s\S]*<li>Open <a class="wikilink"/);
+  assert.doesNotMatch(html, /type="checkbox"/, "checks are plain items, not boxes to tick");
+  const empty = render("```review\nchanged:\n- Only this\n```");
+  assert.match(empty, /What to test<\/strong><\/p>\n<p><em>Not written yet\.<\/em>/);
+});

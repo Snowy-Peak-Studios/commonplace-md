@@ -91,7 +91,7 @@ Tasks that belong here can still be committed with their source cleanup in one s
 
 ### Done
 
-- When your person requires review, finish the criteria and checks, record the work/commit and previous agent assignment, then hand the task to its reviewer in Testing (or the configured review state). They have the final close/rework decision. Do not claim a review handoff as approval.
+- When your person requires review, finish the criteria and checks, record the work/commit and previous agent assignment, write the task's `review` block (what changed and what to test, a few short lines each; [the format](How%20To/Use%20your%20inbox.md#review-completed-work)), then hand the task to its reviewer in Testing (or the configured review state). They have the final close/rework decision. Do not claim a review handoff as approval.
 - Otherwise set `status: Done` only when every criterion is met, or record an explicit decision by your person to close it. Write the work and commit in its notes; keep assignment/history.
 - If part of it is left, narrow the task to what was done (Done) and add a new To Do task for exactly what's left.
 

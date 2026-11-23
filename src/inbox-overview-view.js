@@ -52,7 +52,8 @@ export function mountOverview(el, optionsText, api) {
         h("small", { class: "muted overview-row-source" }, origin(entry)),
         h("a", { class: "suggest-name", href: api.href(entry.repo, row.path, row.heading || null) }, row.label),
         row.status ? h("span", { class: "chip" }, row.status) : null,
-        row.detail ? h("span", { class: "attention-text" }, row.detail) : null));
+        row.kind === "reviews" && api.reviewSummary ? api.reviewSummary(row.review, api.href(entry.repo, row.path))
+          : row.detail ? h("span", { class: "attention-text" }, row.detail) : null));
       sections.push(h("section", { class: "overview-kind", "aria-label": LABELS[kind] }, h("h3", {}, LABELS[kind]), rows));
     }
     fill(list, ...(sections.length ? sections : [h("p", { class: "muted" }, !entries.length ? "No sources selected. Use Settings to choose vaults." : loading ? "Reading the selected sources…" : entries.every((e) => e.state === "current") ? "Nothing waits on you in these sources." : "No items to show. Check each source's status above; unavailable is not empty.")]));

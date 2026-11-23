@@ -1285,3 +1285,20 @@ test("occupied assets: tasks in progress or claimed occupy their assets; overlap
   assert.deepEqual(assetConflicts({ path: "Tasks/T-9.md", assets: null }, tasks, setup), []);
   assert.deepEqual(occupiedAssets([], setup), []);
 });
+
+test("review summary: a task's ```review block gives what changed and what to test; none is null", async () => {
+  const { taskReview } = await import("../src/vault.js");
+  assert.equal(taskReview("# Old task\n```work-history\n- Done.\n```\n"), null, "an older task has no summary");
+  assert.deepEqual(taskReview("```review\n```"), { changed: [], test: [] }, "an empty block is empty, not made up");
+  const text = [
+    "# T", "```review", "Changed:", "- The inbox shows a summary.", "  It wraps long text.", "* A [[Home]] link stays as written.",
+    "", "What to test: open the Inbox", "- [ ] Check phone width", "Fixed: a plain line", "```",
+    "```review", "changed:", "- Second block", "```",
+  ].join("\n");
+  assert.deepEqual(taskReview(text), {
+    changed: ["The inbox shows a summary. It wraps long text.", "A [[Home]] link stays as written."],
+    test: ["open the Inbox", "Check phone width", "Fixed: a plain line"],
+  }, "labels in any case, continuation lines, checkboxes dropped, the first block counts");
+  assert.deepEqual(taskReview("```review\n- Before any label\nto test:\n- One\n```"), { changed: [], test: ["One"] }, "lines before a label are left out");
+  assert.equal(taskReview("````markdown\n```review\nchanged:\n- Example\n```\n````"), null, "an example inside another fence doesn't count");
+});

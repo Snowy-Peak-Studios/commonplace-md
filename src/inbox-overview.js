@@ -2,7 +2,7 @@
 import { yamlLoad } from "../vendor/vendor.js";
 import { reviewTasks, assignmentTasks, sortAssignments, findMentions, sortMentions, assigneeMatches,
   fieldProp, isSetupTask, isDoneStatus, taskAnswer, foldName, newTasksBlock, splitFrontMatter, toLf,
-  NOTE_SECTIONS, fenceLanguage } from "./vault.js";
+  NOTE_SECTIONS, fenceLanguage, taskReview } from "./vault.js";
 
 export const OVERVIEW_KINDS = ["reviews", "questions", "assignments", "mentions", "new-tasks"];
 const plain = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -160,7 +160,9 @@ export function overviewRows({ notes, setup, source, options, inboxProps = {} })
   const reviews = options.show.includes("reviews") ? reviewTasks(tasks, setup, identity, options.reviewStatuses) : [];
   const reviewPaths = new Set(reviews.map((r) => r.path));
   const title = (n) => (n.props.id ? n.props.id + " " : "") + n.path.split("/").at(-1).replace(/\.md$/i, "");
-  for (const t of reviews) add("reviews", t.path, (t.id ? t.id + " " : "") + t.path.split("/").at(-1).replace(/\.md$/i, ""), "Open the task for your close/rework decision.", { status: t.status });
+  const texts = new Map(tasks.map((n) => [n.path, n.text]));
+  for (const t of reviews) add("reviews", t.path, (t.id ? t.id + " " : "") + t.path.split("/").at(-1).replace(/\.md$/i, ""), "Open the task for your close/rework decision.",
+    { status: t.status, review: texts.get(t.path) == null ? null : taskReview(texts.get(t.path)) });
   if (options.show.includes("questions")) for (const n of tasks) {
     const matches = ["requested_by", "reviewer", "assignee"].some((key) => {
       const v = n.props[fieldProp(setup, key)];

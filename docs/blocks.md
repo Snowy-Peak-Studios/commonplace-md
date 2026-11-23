@@ -52,7 +52,7 @@ The box indicates when range, order or fields use defaults. Options belong in th
 
 ## needs-attention
 
-Shows items that wait on a person. Reviews appear first when selected; they remain until the task leaves its review status. Questions come from task `question` properties. Mentions use a GitHub login. Seen can dismiss mentions and assignments, but cannot approve a review.
+Shows items that wait on a person. Reviews appear first when selected, each with its task's [review](#review) summary; they remain until the task leaves its review status. Questions come from task `question` properties. Mentions use a GitHub login. Seen can dismiss mentions and assignments, but cannot approve a review.
 
 ```needs-attention
 show: reviews, questions, mentions, assignments
@@ -346,6 +346,19 @@ A named **Acceptance Criteria** section. Its contents are Markdown; checkboxes c
 
 No block properties or defaults. Place it directly in the note.
 
+## review
+
+A named **Review** section for whoever reviews a finished task: what the work changed and what to check. The inbox's *For review* rows (in `needs-attention` and `inbox-overview`) show the first three lines of each list, with a link to the task for the rest. A task in review without this block says its summary is missing; nothing is made up from its history.
+
+```review
+changed:
+- The settings page saves the theme.
+test:
+- Change the theme, reload: it stays.
+```
+
+Two lists, each under its label: `changed:` (or `what changed:`) and `test:` (or `to test:`, `what to test:`), with `- ` items. A line indented under an item goes on with it. Items are plain text, not checkboxes. Only the first top-level block counts. Write it when you hand a task to review; update it on each later round.
+
 ## comments
 
 A named **Comments** section on any note. In Read mode, a writable note offers a comment form here. New comments are saved with a dated header and the author's identity. The previous commenter's mention can be filled in when their login is known and differs from yours.
@@ -363,4 +376,4 @@ A named **Work History** section for Markdown log entries. It starts folded and 
 - Checked the guide's links and examples.
 ```
 
-No option lines or automatic entries. Put the fence directly in the note. For all four named sections, keep one of each, with `work-history` last, to make notes easy to edit in other tools too. [Task section examples](../example-vault/How%20To/Work%20with%20tasks.md#task-sections).
+No option lines or automatic entries. Put the fence directly in the note. For the named sections, keep one of each, with `work-history` last, to make notes easy to edit in other tools too. [Task section examples](../example-vault/How%20To/Work%20with%20tasks.md#task-sections).

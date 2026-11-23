@@ -12,7 +12,7 @@ import {
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, vaultAgents, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
-  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
+  blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, taskReview, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
   noteTags, tagKey, noteRating, withRating, RATING_MAX, tagCounts, findNotes, findParams, findHref,
 } from "./vault.js";
 import { createMarkdown, renderNote, TOP_TASKS_COUNT, TOP_TASKS_FIELDS, attentionOptions, boardOptions } from "./markdown.js";
@@ -2673,7 +2673,7 @@ function fillInboxOverview(root, f) {
       && overviewPrefs().repo === f.repo.id && overviewPrefs().path === f.path;
     loadOverviewModule().then((mod) => {
       if (!current()) return;
-      mod.mountOverview(el, options, { h, fill, icon, current, repos: () => app.repos, href: hrefFor,
+      mod.mountOverview(el, options, { h, fill, icon, current, repos: () => app.repos, href: hrefFor, reviewSummary,
         read: readOverviewSource,
         prune: (keys) => {
           const kept = store.get("inboxOverviewSourceSettings", {});
@@ -2809,11 +2809,49 @@ async function loadAssignments(repo, name, login) {
   return assignmentTasks(entry.notes ?? [], setup, { name, login });
 }
 
-async function loadReviews(repo, name, login, statuses) {
+async function loadReviews(repo, name, login, statuses, withSummary = false) {
   const setup = await loadTaskSetup(repo);
   const entry = taskNotes(repo, setup);
   await entry.load;
-  return reviewTasks(entry.notes ?? [], setup, { name, login }, statuses);
+  const reviews = reviewTasks(entry.notes ?? [], setup, { name, login }, statuses);
+  const tree = app.trees.get(repo.id);
+  if (!withSummary || !reviews.length || !tree) return reviews;
+  const byPath = await readTaskReviews(repo, tree, reviews.map((t) => t.path));
+  return reviews.map((t) => ({ ...t, review: byPath.get(t.path) ?? null }));
+}
+
+/** Each task's review summary (`taskReview`), from its whole text: cached by blob sha, like `taskAssets`. */
+async function readTaskReviews(repo, tree, paths) {
+  const cache = baseCache("taskReview", repo);
+  const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+  if (missing.length) {
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskReview(text);
+    const live = new Set(tree.files.values());
+    keepBaseCache("taskReview", repo, (sha) => live.has(sha));
+  }
+  return new Map(paths.filter((p) => Object.hasOwn(cache, tree.files.get(p))).map((p) => [p, cache[tree.files.get(p)]]));
+}
+
+/** How many lines of each review list a For review row shows; the rest are on the task. */
+const REVIEW_SHOWN = 3;
+
+/**
+ * A For review row's summary: what changed and what to test, from the task's ```review block (`taskReview`),
+ * the first few lines of each, and a link to the task for the rest. A task without the block says its summary is
+ * missing (older tasks have none), never a made-up one. Also used by the inbox overview.
+ */
+function reviewSummary(review, href) {
+  if (!review || (!review.changed.length && !review.test.length)) {
+    return h("span", { class: "attention-text review-missing" },
+      review ? "Its review summary is empty: " : "No review summary on this task: ", h("a", { href }, "open the task"), " and read its work history.");
+  }
+  const part = (label, items) => h("div", { class: "review-part" }, h("strong", {}, label),
+    items.length
+      ? h("ul", {}, items.slice(0, REVIEW_SHOWN).map((t) => h("li", {}, t)),
+        items.length > REVIEW_SHOWN ? h("li", { class: "muted" }, `and ${items.length - REVIEW_SHOWN} more on the task`) : null)
+      : h("span", { class: "muted" }, " Not written yet."));
+  return h("div", { class: "attention-text review-summary" },
+    part("What changed", review.changed), part("What to test", review.test), h("a", { href, class: "review-more" }, "Full details on the task"));
 }
 
 const ATTENTION_TITLES = { both: ["Needs your attention", "info"], questions: ["Questions for you", "question"], mentions: ["Mentions of you", "info"], assignments: ["Assigned to you", "check"], reviews: ["For review", "check"] };
@@ -2868,7 +2906,7 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     !seen && canMark ? h("button", { class: "btn small ghost attention-seen-btn", type: "button", title: "Mark it as seen: it folds under Seen, and the Inbox dot stops counting it", onclick: () => markSeen([m]) }, icon("check"), "Seen") : null,
     h("span", { class: "attention-text" }, m.text));
   Promise.all([
-    askR ? loadReviews(repo, owner, login, reviewStatuses) : [],
+    askR ? loadReviews(repo, owner, login, reviewStatuses, true) : [],
     askQ && hasTasks ? loadQuestions(repo, owner, login) : [],
     askM ? loadMentions(repo, login) : { found: [], read: 0 },
     askA ? loadAssignments(repo, owner, login) : [],
@@ -2893,7 +2931,8 @@ function attentionBox(repo, { owner = "", login = "", show = ["questions", "ment
     const reviewRow = (t) => h("li", { class: "attention-review" }, kind("review"),
       h("a", { href: hrefFor(repo, t.path), class: "suggest-name" }, t.id ? h("span", { class: "muted" }, `${t.id} `) : null, shownName(t.path)),
       h("span", { class: "chip" }, t.status), h("a", { href: hrefFor(repo, t.path), class: "btn small" }, "Review"),
-      h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path)?.question || "Test, then close or request changes on the task."));
+      tasks.find((q) => q.path === t.path)?.question ? h("span", { class: "attention-text" }, tasks.find((q) => q.path === t.path).question) : null,
+      reviewSummary(t.review, hrefFor(repo, t.path)));
     const rows = [
       reviews.length && show.length > 1 ? h("li", { class: "attention-section" }, h("strong", {}, "For review")) : null,
       ...reviews.map(reviewRow), ...asked.map(questionRow),

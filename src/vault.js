@@ -121,6 +121,7 @@ export function prepareForPreview(text) {
 export const NOTE_SECTIONS = Object.freeze({
   description: "Description",
   "acceptance-criteria": "Acceptance Criteria",
+  review: "Review",
   comments: "Comments",
   "work-history": "Work History",
 });
@@ -307,6 +308,62 @@ export function assetOptions(src) {
     const v = m[2].replace(/^[`"']+|[`"']+$/g, "").trim();
     if (m[1].toLowerCase() === "repo") out.repo = /^[\w.-]+\/[\w.-]+$/.test(v) ? v : "";
     else out.branch = v;
+  }
+  return out;
+}
+
+/** The labels a ```review block's two lists start under (any case, a colon after): what changed, and what to test. */
+const REVIEW_LABELS = { changed: "changed", "what changed": "changed", test: "test", "to test": "test", "what to test": "test" };
+
+/**
+ * A task's review summary, from the first ```review block in its text: { changed, test }, each a list of short lines,
+ * written for whoever reviews the task. The block says `changed:` and `test:` (or `what changed:`, `to test:`),
+ * each followed by `- ` items; a line indented under an item goes on with it, and text after a label is an item too.
+ * Null when the task has no such block, so an older task says its summary is missing instead of making one up.
+ *
+ *     ```review
+ *     changed:
+ *     - The inbox's For review rows show what changed and what to test.
+ *     test:
+ *     - Open your Inbox: a task in Testing shows both lists.
+ *     ```
+ */
+export function taskReview(text) {
+  // Only a top-level block counts: an example of one inside another fence (````markdown) is just text.
+  let open = null, body = null;
+  for (const line of toLf(String(text ?? "")).split("\n")) {
+    if (open) {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close && close[1][0] === open[0] && close[1].length >= open.length) {
+        if (body) return reviewLists(body.join("\n"));
+        open = null;
+      } else body?.push(line);
+      continue;
+    }
+    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) { open = f[1]; body = fenceLanguage(f[2]) === "review" ? [] : null; }
+  }
+  return body ? reviewLists(body.join("\n")) : null;
+}
+
+/** The two lists of a ```review block's contents (`taskReview`): { changed, test }. */
+export function reviewLists(src) {
+  const out = { changed: [], test: [] };
+  let list = null, open = false;
+  for (const raw of toLf(src).split("\n")) {
+    const label = /^ {0,3}([A-Za-z ]+?)[ \t]*:[ \t]*(.*)$/.exec(raw);
+    const kind = label && REVIEW_LABELS[label[1].trim().toLowerCase()];
+    if (kind) {
+      list = out[kind];
+      open = !!label[2].trim();
+      if (open) list.push(label[2].trim());
+      continue;
+    }
+    if (!list || !raw.trim()) { open = false; continue; }
+    const item = /^ {0,3}[-*+][ \t]+(?:\[[ xX]\][ \t]+)?(.*)$/.exec(raw);
+    if (item) { open = !!item[1].trim(); if (open) list.push(item[1].trim()); }
+    else if (open && /^[ \t]+\S/.test(raw)) list[list.length - 1] += " " + raw.trim();
+    else { list.push(raw.trim()); open = true; }
   }
   return out;
 }

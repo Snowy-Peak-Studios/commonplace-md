@@ -74,6 +74,19 @@ Add `reviews` to a needs-attention block's show line. For a review-only panel, u
 
 Reviews come first. A named reviewer takes precedence over an assignee; with no reviewer the assignee identifies the person. A review task appears once within a combined box even when it also has a question or assignment. It stays visible until its status changes, including after Seen on other items.
 
+Each review row shows the task's **review** summary: what changed and what to test, the first three lines of each, with a link to the task for the rest. Whoever hands a task to review writes it in a `review` block on the task:
+
+~~~markdown
+```review
+changed:
+- The settings page saves the theme.
+test:
+- Change the theme, reload: it stays.
+```
+~~~
+
+A task without one says its summary is missing; nothing is made up from its history.
+
 Press **Review** to open the task, check its criteria, then use its Status field to close it as Done or return it to In Progress with a comment explaining changes. Follow your project's review handoff rules. [Review the example vault](../Tasks/Review%20the%20example%20vault.md) demonstrates the Testing state.
 
 ## Tasks for today

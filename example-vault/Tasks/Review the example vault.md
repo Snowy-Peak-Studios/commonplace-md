@@ -20,6 +20,14 @@ As the person using these notes, I want to review the example, so that I decide 
 - [ ] Set this task to Done if ready, or leave a comment and return it to In Progress for changes.
 ```
 
+```review
+changed:
+- The example vault has an Inbox, a Task Board and a few tasks to try.
+test:
+- Open the Inbox: this task is under For review, with these two lists.
+- Open the Task Board and move a task to another column.
+```
+
 ```comments
 ```
 
