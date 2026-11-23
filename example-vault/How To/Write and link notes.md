@@ -25,6 +25,11 @@ A new note: **New note** in the file list or the menu asks for a name and a fold
 
 A link to a page that doesn't exist is marked in red, in the editor and in the preview.
 
+**Drafts that stay on your device** go in a `_local_only` folder, listed in the repo's `.gitignore`. Don't link into it from other notes: no one else has those notes. While you edit, the warning bar above the note names such a link, and this block lists every one in the vault:
+
+```local-only-links
+```
+
 ## Add an image
 
 Open **Edit** and place the cursor where the picture belongs. Paste an image from the clipboard, drop an image onto the editor, or press **Add image** in the top bar to choose a file on your device. The note gets an embed such as `![[screenshot-2026-11-17-12-00-00-abcd1234.png]]`. Press **Save** to keep the link.

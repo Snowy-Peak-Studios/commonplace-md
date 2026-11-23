@@ -62,6 +62,8 @@ export const INSERTS = [
     sample: "**Sprint 3** · 4 of 9 tasks done · 6 of 14 days gone\n\n- [x] Write the outline\n- [ ] Write the guide" },
   { id: "board", group: "Views", label: "Board", about: "Task cards in status columns.", text: "```board\ncolumns: To Do, In Progress, Done\n```", select: "To Do, In Progress, Done",
     sample: "| To Do | In Progress | Done |\n| --- | --- | --- |\n| Write the guide | Fix the save button | Write the outline |" },
+  { id: "local-only-links", group: "Views", label: "Links into _local_only", about: "Links from shared notes into a _local_only folder, which stays on one device.", text: "```local-only-links\n```",
+    sample: "**Links into _local_only** · 1 link\n\n- ⚠ Plan · line 4: `[[Draft]]` → _local_only/Draft.md" },
   { id: "occupied", group: "Views", label: "Occupied assets (all tasks)", about: "The files tasks in progress occupy now, and overlaps.", text: "```occupied\n```",
     sample: "**Occupied assets**\n\n- `Wiki/Page.md` · Write the guide\n- ⚠ `src/app.js` · two tasks" },
   { id: "ai-work-time", group: "Views", label: "AI work time", about: "Recorded AI work time, as a chart by area and type.", text: "```ai-work-time\n```",

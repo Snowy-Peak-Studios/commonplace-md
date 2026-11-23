@@ -11,7 +11,7 @@ import {
   pageListDepth, tocTree, subpagesOf,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, vaultAgents, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
+  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, LOCAL_ONLY, localOnlyLinks, linkCandidates, localOnlyFrom, questionTasks, taskAnswer, findMentions, vaultPeople, vaultAgents, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, taskReview, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
   noteTags, tagKey, noteRating, withRating, RATING_MAX, tagCounts, findNotes, findParams, findHref,
 } from "./vault.js";
@@ -1222,6 +1222,7 @@ function renderPreview() {
   fillBoards(body, f);
   fillAiTime(body, f);
   fillOccupied(body, f);
+  fillLocalOnlyLinks(body, f);
   fillPageLists(body, f);
   if (previousBoards.some(Boolean)) {
     requestAnimationFrame(() => body.querySelectorAll(".board-columns").forEach((board, i) => {
@@ -1309,6 +1310,59 @@ function fillOccupied(root, f) {
         : h("p", { class: "muted sprint-empty" }, onlyConflicts ? "No two tasks in progress plan to change the same asset."
           : "No task in progress lists assets yet. A task's ```assets block lists them; it counts while the task is in progress or claimed, until it goes to Testing or is done."),
       h("p", { class: "muted assets-hint" }, "From the ```assets blocks of tasks in progress or claimed (not in Testing). A warning, not a lock: check with the other task before you change the same file.")));
+  }
+}
+
+/**
+ * Every link from a note into a `_local_only` folder that isn't its own (`localOnlyFrom`), for the vault's notes,
+ * read once per tree version: each note's links are kept by blob sha (`linkCandidates`), and resolved against the
+ * current tree, so a page added later counts. `links` is null until they're in; the open note is drawn again then.
+ */
+const localOnlyLoads = new Map();
+function localOnlyLinksOf(repo) {
+  const tree = app.trees.get(repo.id);
+  if (!tree) return { links: null };
+  const known = localOnlyLoads.get(repo.id);
+  if (known?.version === tree.version) return known;
+  const entry = { version: tree.version, links: known?.links ?? null };
+  const paths = [...tree.files.keys()].filter((p) => /\.md$/i.test(p));
+  entry.load = (async () => {
+    const cache = baseCache("linkCandidates", repo);
+    const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
+    if (missing.length) {
+      for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = linkCandidates(text, p);
+      const live = new Set(tree.files.values());
+      keepBaseCache("linkCandidates", repo, (sha) => live.has(sha));
+    }
+    return paths.flatMap((p) => localOnlyFrom(cache[tree.files.get(p)] ?? [], p, (t, from) => tree.index.resolve(t, from))
+      .map((l) => ({ ...l, from: p })));
+  })().then((links) => { entry.links = links; redrawNote(); }, () => { localOnlyLoads.delete(repo.id); });
+  localOnlyLoads.set(repo.id, entry);
+  return entry;
+}
+
+/**
+ * Each ```local-only-links block becomes the list of links from notes into a `_local_only` folder that isn't their
+ * own: notes there stay on one device (Git ignores the folder), so such a link leads nowhere for everyone else.
+ * Each row names the note (with its line) and the target; a warning, nothing is changed.
+ */
+function fillLocalOnlyLinks(root, f) {
+  const blocks = root.querySelectorAll(".local-only-block");
+  if (!blocks.length) return;
+  const { links } = localOnlyLinksOf(f.repo);
+  for (const el of blocks) {
+    if (el.parentElement.closest(".embed-page")) continue;
+    if (!links) { fill(el, h("p", { class: "muted", role: "status" }, "Looking for links into _local_only…")); continue; }
+    el.replaceWith(h("section", { class: "occupied local-only-links", "aria-label": "Links into _local_only" },
+      h("div", { class: "st-head" }, h("span", { class: "st-title" }, "Links into _local_only"),
+        h("span", { class: "st-count" }, `${links.length} ${links.length === 1 ? "link" : "links"}`)),
+      links.length
+        ? h("ul", { class: "st-list occupied-list" }, links.map((l) => h("li", { class: "conflict" },
+          h("span", { class: "occupied-path" }, icon("warning"),
+            h("a", { href: hrefFor(f.repo, l.from) }, shownName(l.from)), l.line ? h("span", { class: "muted" }, ` · line ${l.line}`) : null),
+          h("span", { class: "occupied-tasks" }, h("code", {}, l.raw), h("span", { class: "muted" }, " → "), l.target))))
+        : h("p", { class: "muted sprint-empty" }, "No note links into a _local_only folder."),
+      h("p", { class: "muted assets-hint" }, `A ${LOCAL_ONLY} folder is for notes that stay on one device (list it in the repo's .gitignore), so a link into it from anywhere else leads nowhere for everyone else. Notes inside one may link to each other.`)));
   }
 }
 
@@ -3975,13 +4029,18 @@ function updateLinkWarning() {
   const el = f.dom.linkWarn;
   if (f.kind !== "md" || (!f.dirty && app.mode !== "edit")) { el.hidden = true; return; }
   const tree = app.trees.get(f.repo.id);
-  const missing = [...new Set(findWikilinks(f.text).filter((l) => l.target && !tree.index.resolve(l.target, f.path)).map((l) => l.target))];
-  el.hidden = !missing.length;
-  if (missing.length) {
+  const local = localOnlyLinks(f.text, f.path, (t, from) => tree.index.resolve(t, from));
+  const missing = [...new Set(findWikilinks(f.text).filter((l) => l.target && !tree.index.resolve(l.target, f.path)
+    && !local.some((o) => o.raw === l.raw)).map((l) => l.target))];
+  el.hidden = !missing.length && !local.length;
+  if (missing.length || local.length) {
     fill(el, icon("warning"), h("span", { class: "text" },
-      `${missing.length === 1 ? "This link leads" : "These links lead"} to no page: `,
-      ...missing.flatMap((t, i) => [i ? ", " : "", h("b", {}, `[[${t}]]`)]),
-      f.repo.vault ? ". This repo's vault rules say every link must lead to a page." : "."));
+      missing.length ? [`${missing.length === 1 ? "This link leads" : "These links lead"} to no page: `,
+        ...missing.flatMap((t, i) => [i ? ", " : "", h("b", {}, `[[${t}]]`)]),
+        f.repo.vault ? ". This repo's vault rules say every link must lead to a page." : ". "] : [],
+      local.length ? [`${local.length === 1 ? "This link leads" : "These links lead"} into ${LOCAL_ONLY}, which stays on one device: `,
+        ...local.flatMap((l, i) => [i ? ", " : "", h("b", {}, l.raw), ` (line ${l.line} → ${l.target})`]),
+        ". Others get a link to nothing: link to a shared note instead, or move the note out of the folder."] : []));
   }
 }
 

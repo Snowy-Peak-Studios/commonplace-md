@@ -1302,3 +1302,29 @@ test("review summary: a task's ```review block gives what changed and what to te
   assert.deepEqual(taskReview("```review\n- Before any label\nto test:\n- One\n```"), { changed: [], test: ["One"] }, "lines before a label are left out");
   assert.equal(taskReview("````markdown\n```review\nchanged:\n- Example\n```\n````"), null, "an example inside another fence doesn't count");
 });
+
+test("local-only links: links from outside a _local_only folder into one are found, in every form; within one they're fine", async () => {
+  const { localOnlyRoot, localOnlyLinks, findMarkdownLinks, LinkIndex } = await import("../src/vault.js");
+  assert.equal(localOnlyRoot("_local_only/Draft.md"), "_local_only/");
+  assert.equal(localOnlyRoot("Team/_Local_Only/Sub/Plan.md"), "team/_local_only/", "any depth, any case");
+  assert.equal(localOnlyRoot("Notes/_local_only.md"), null, "a note named like it isn't a folder");
+  assert.equal(localOnlyRoot("Notes/A.md"), null);
+  assert.deepEqual(findMarkdownLinks("[a](x.md) ![b](<y z.png> \"t\") `[c](no.md)`").map((l) => l.href), ["x.md", "y z.png"]);
+  const idx = new LinkIndex(["_local_only/Draft.md", "_local_only/pic.png", "Team/_local_only/Plan.md", "Notes/A.md", "Notes/B.md"]);
+  const resolve = (t, from) => idx.resolve(t, from);
+  const text = [
+    "[[Draft]] and ![[pic.png]] and [[B]] and [ok](B.md)",
+    "[up](../_local_only/Draft.md) [top](/_local_only/Gone%20one.md) [[_local_only/Missing]]",
+    "`[[Draft]]` and [web](https://example.com/_local_only/x.md)",
+    "```", "[[Plan]]", "```",
+  ].join("\n");
+  assert.deepEqual(localOnlyLinks(text, "Notes/A.md", resolve).map((l) => [l.raw, l.target, l.embed, l.line]), [
+    ["[[Draft]]", "_local_only/Draft.md", false, 1],
+    ["![[pic.png]]", "_local_only/pic.png", true, 1],
+    ["[[_local_only/Missing]]", "_local_only/Missing", false, 2],
+    ["[up](../_local_only/Draft.md)", "_local_only/Draft.md", false, 2],
+    ["[top](/_local_only/Gone%20one.md)", "_local_only/Gone one.md", false, 2],
+  ], "wikilinks, embeds, relative, from the top, encoded and missing; not in code, not web addresses, not shared notes");
+  assert.deepEqual(localOnlyLinks("[[Draft]] [x](pic.png) [[B]]", "_local_only/Other.md", resolve), [], "within the same folder, and out to shared notes, is fine");
+  assert.deepEqual(localOnlyLinks("[[Plan]]", "_local_only/Other.md", resolve).map((l) => l.target), ["Team/_local_only/Plan.md"], "into another _local_only folder isn't");
+});

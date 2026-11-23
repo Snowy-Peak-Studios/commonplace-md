@@ -162,6 +162,7 @@ Then move on to another task while it waits.
 
 - When something changes, change the pages that describe it in the same commit: the task, the page about the topic, and the links and `parent` properties of any page you add, move or rename.
 - Facts come from the notes, the commits and your person's words. Where something isn't known, say so rather than guess.
+- **`_local_only` folders stay on one device** (they're in `.gitignore`): never commit their notes, never copy them elsewhere, and never link into one from a note outside it, since everyone else gets a link to nothing. Before you commit, check the notes you changed: `grep -rn "_local_only" --include=*.md . | grep -v "^\./\(.*/\)\?_local_only/"` lists the lines outside such a folder that name it, and a `[[Name]]` of a note inside one (`find . -path "*_local_only/*" -name "*.md"`) counts too. Link to a shared note instead, or tell your person. The app's ` ```local-only-links ` block lists them all.
 
 ## Use fewer credits
 

@@ -281,3 +281,7 @@ test("a ```rating block is an app block the app fills with the note's stars; a n
   assert.match(render("# Soup\n\n```rating\n```\n"), /<div class="app-block" data-block="rating"><pre><code>rating<\/code><\/pre><\/div>/);
   assert.doesNotMatch(render("---\nrating: 4\n---\n# Soup\n"), /data-block="rating"/, "a rating property alone draws no stars");
 });
+
+test("a ```local-only-links block is a box the app fills", () => {
+  assert.match(render("```local-only-links\n```\n"), /<div class="local-only-block"><pre><code>local-only-links<\/code><\/pre><\/div>/);
+});

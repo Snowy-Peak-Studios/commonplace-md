@@ -60,7 +60,7 @@ That one gives a note 0 to 5 stars. Put it in a template and every note made fro
 | Your inbox and ideas | ` ```needs-attention ` (reviews, questions, mentions, assignments), ` ```top-tasks ` (tasks to start, with Claim), ` ```new-tasks ` (ideas for your agent to sort), ` ```inbox-overview ` (a private overview of several inboxes) |
 | A task | ` ```subtasks `, ` ```relations `, ` ```commits `, ` ```assets ` (the files it will change) |
 | A task's text | ` ```description `, ` ```acceptance-criteria `, ` ```review ` (what changed and what to test), ` ```comments `, ` ```work-history ` |
-| The whole project | ` ```board ` (task cards by status), ` ```sprint ` (a sprint's progress), ` ```occupied ` (files tasks in progress plan to change), ` ```ai-work-time ` (AI time by area and type) |
+| The whole project | ` ```board ` (task cards by status), ` ```sprint ` (a sprint's progress), ` ```occupied ` (files tasks in progress plan to change), ` ```ai-work-time ` (AI time by area and type), ` ```local-only-links ` (links from shared notes into a `_local_only` folder, which stays on one device) |
 | Any page | ` ```rating ` (stars), ` ```base ` (a table of notes), ` ```toc ` (this page's headings), ` ```subpages ` (the pages under this one), ` ```mermaid ` (a diagram) |
 
 Each block's options, with examples: the [block reference](blocks.md).

@@ -17,6 +17,7 @@ In **Edit**, **Insert** in the top bar, next to the page title, lists every bloc
 | [commits](#commits) | A task's saved commit links |
 | [assets](#assets) | The files and assets a task expects to occupy |
 | [occupied](#occupied) | The assets tasks in progress occupy now, and overlaps |
+| [local-only-links](#local-only-links) | Links from shared notes into a `_local_only` folder |
 | [sprint](#sprint) | A sprint's progress and tasks |
 | [board](#board) | Task cards in status columns |
 | [ai-work-time](#ai-work-time) | Recorded AI work time grouped as a chart |
@@ -182,6 +183,15 @@ show: conflicts
 | `show` | `conflicts` lists only the assets more than one task occupies. Default: every occupied asset. |
 
 A task occupies its assets while it's in progress (its status is In Progress, or in a project without that status its second one, like Doing), or while it's claimed (it has an assignee) and not in review (Testing), put off (Waiting) or finished. So a task claimed for an agent that hasn't started yet counts. Handing it to Testing, unclaiming it, putting it off with **Not now** or finishing it frees them, and editing its block changes them: the list is worked out from the saved tasks each time. Paths in different repos (a `repo:` line) never overlap. The same warning shows on a task's *Occupied assets* box and in the **Claim** dialog. It's a warning, not a lock: nothing stops a save.
+
+## local-only-links
+
+Lists every link from a note into a `_local_only` folder that isn't its own, with the note, its line, the link as written and where it leads. A `_local_only` folder (at any depth, in any case) is for notes that stay on one device: list it in the repo's `.gitignore` (`_local_only/`), so its notes are never committed. Other people and devices never have them, so a link into it leads nowhere for them. Notes inside a `_local_only` folder may link to each other.
+
+```local-only-links
+```
+
+No option lines. It finds wikilinks, embeds and Markdown links, with relative paths, a leading `/` or encoded names (`%20`), and also links to a file that isn't there. While you edit a note, the warning bar above it names the same links in that note. A warning, not a lock: nothing stops a save. Agents can run the same check with `grep` (see the example vault's `AGENTS.md`).
 
 ## sprint
 

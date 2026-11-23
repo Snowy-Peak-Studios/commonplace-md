@@ -261,6 +261,68 @@ export function relativeLink(href, fromPath = "") {
   return { path: parts.join("/"), heading: heading || null };
 }
 
+/** The folder name whose notes stay on this device: Git ignores it, so other people and devices never have them. */
+export const LOCAL_ONLY = "_local_only";
+
+/**
+ * The local-only folder a path is in (`Drafts/_local_only/`), the first `_local_only` folder on its way, in any
+ * case, at any depth. Null for a path outside one.
+ */
+export function localOnlyRoot(path) {
+  const parts = String(path ?? "").replace(/^\/+/, "").split("/");
+  const at = parts.slice(0, -1).findIndex((p) => p.toLowerCase() === LOCAL_ONLY);
+  return at < 0 ? null : parts.slice(0, at + 1).join("/").toLowerCase() + "/";
+}
+
+/** Every plain Markdown link and image, `[text](href)` and `![alt](href)`, outside code, with its address as written. */
+export function findMarkdownLinks(text) {
+  const lines = prepareForPreview(text).source.split("\n");
+  const src = [...proseLines(lines)].map((line) => line.text).join("\n").replace(/`[^`\n]*`/g, "");
+  const out = [];
+  for (const m of src.matchAll(/(!?)\[[^\]\n]*\]\(\s*(?:<([^>\n]+)>|([^)\s]+))(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)/g)) {
+    out.push({ embed: m[1] === "!", raw: m[0], href: m[2] ?? m[3] });
+  }
+  return out;
+}
+
+/**
+ * The links in a note at `fromPath` that lead into a local-only folder other than its own: wikilinks, embeds and
+ * Markdown links (relative, from the top with `/`, or encoded), also to a file that isn't there, since on another
+ * device it never is. `resolve(target, fromPath)` finds a wikilink's page (`LinkIndex.resolve`). A note inside a
+ * `_local_only` folder may link anywhere within that same folder. [{ raw, target, embed, line }], `line` from 1.
+ */
+export function localOnlyLinks(text, fromPath, resolve = () => null) {
+  return localOnlyFrom(linkCandidates(text, fromPath), fromPath, resolve);
+}
+
+/**
+ * A note's links, read once from its text, for `localOnlyFrom`: [{ raw, embed, line, target }] where `target` is a
+ * wikilink's target as written, or [{ ..., path }] for a Markdown link's relative path. Kept per file by the app.
+ */
+export function linkCandidates(text, fromPath) {
+  const lines = toLf(String(text ?? "")).split("\n");
+  const lineOf = (raw) => lines.findIndex((l) => l.includes(raw)) + 1 || null;
+  const out = [];
+  for (const l of findWikilinks(text)) if (l.target) out.push({ raw: l.raw, embed: l.embed, line: lineOf(l.raw), target: l.target });
+  for (const l of findMarkdownLinks(text)) {
+    const rel = relativeLink(l.href, fromPath);
+    if (rel) out.push({ raw: l.raw, embed: l.embed, line: lineOf(l.raw), path: rel.path });
+  }
+  return out;
+}
+
+/** The candidates (`linkCandidates`) that lead into a local-only folder other than the note's own: `localOnlyLinks`. */
+export function localOnlyFrom(candidates, fromPath, resolve = () => null) {
+  const own = localOnlyRoot(fromPath);
+  const out = [];
+  for (const c of candidates) {
+    const target = c.path ?? resolve(c.target, fromPath) ?? c.target.trim().replace(/^\/+/, "");
+    const root = localOnlyRoot(target);
+    if (root && root !== own && !out.some((o) => o.raw === c.raw)) out.push({ raw: c.raw, target, embed: c.embed, line: c.line });
+  }
+  return out;
+}
+
 /** The blocks a task's page shows its boxes in, and a sprint's: the app adds no box a note doesn't ask for. */
 export const TASK_BLOCKS = ["subtasks", "relations", "commits"];
 export const SPRINT_BLOCKS = ["sprint"];
