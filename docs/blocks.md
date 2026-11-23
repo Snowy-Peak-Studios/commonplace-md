@@ -21,9 +21,11 @@ In **Edit**, **Insert** in the top bar, next to the page title, lists every bloc
 | [board](#board) | Task cards in status columns |
 | [ai-work-time](#ai-work-time) | Recorded AI work time grouped as a chart |
 | [base](#base) | Tables with filters, formulas and views |
+| [rating](#rating) | The note's 0 to 5 stars, to press |
 | [toc](#toc) | The page's headings, as links |
 | [subpages](#subpages) | The pages under this one, from their `parent` property |
 | [mermaid](#mermaid) | A diagram written as text |
+| [review](#review) | What a task changed and what to test, for its reviewer |
 | [description](#description), [acceptance-criteria](#acceptance-criteria), [comments](#comments), [work-history](#work-history) | Named sections containing Markdown |
 
 ## top-tasks

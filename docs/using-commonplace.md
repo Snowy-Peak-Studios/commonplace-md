@@ -9,6 +9,7 @@
 - 🗂️ **Your vault for everything**: a project's wiki, your own notes, your recipes.
 - 🤖 **Your agents' rules and reports** live in the project, as notes you own.
 - ✅ **A task board** for you and your agent, or a whole team.
+- 🧩 **Built from blocks**: every feature that lives in a note (a task list, your inbox, stars, a sprint's progress) is a block you put where you want it. A note shows only the blocks you write in it ([below](#blocks-you-choose-what-a-note-shows)).
 - 🛠️ **Yours to change**: the rules, skills, task fields and code. Choose the views a note shows through its blocks and properties ([block reference](blocks.md); [Markdown examples](markdown-and-blocks.md)).
 - 🆓 **Free, and only yours**: no account of ours, no payments. You need only GitHub and a token you make.
 
@@ -43,6 +44,27 @@ Don't set anything up yet.
 
 I was frustrated with the work tools I had to use, so I started making this for my own daily use. It grew until it became my main focus. Now I'm sharing it with everyone who has struggled with those tools like I did.
 
+## Blocks: you choose what a note shows
+
+Every feature that lives inside a note is a **block**: three backticks, its name, and a closing line of three backticks. Put it where you want it, on any page, and the app draws the feature there in **Read** mode. A note shows only the blocks written in it; the app adds nothing to every note by itself. In **Edit**, **Insert** lists every block with a preview. On GitHub and in other Markdown editors a block shows as its source, so your notes stay plain Markdown.
+
+~~~markdown
+```rating
+```
+~~~
+
+That one gives a note 0 to 5 stars. Put it in a template and every note made from it has them; leave it out and none do.
+
+| For | Blocks |
+| --- | --- |
+| Your inbox and ideas | ` ```needs-attention ` (reviews, questions, mentions, assignments), ` ```top-tasks ` (tasks to start, with Claim), ` ```new-tasks ` (ideas for your agent to sort), ` ```inbox-overview ` (a private overview of several inboxes) |
+| A task | ` ```subtasks `, ` ```relations `, ` ```commits `, ` ```assets ` (the files it will change) |
+| A task's text | ` ```description `, ` ```acceptance-criteria `, ` ```review ` (what changed and what to test), ` ```comments `, ` ```work-history ` |
+| The whole project | ` ```board ` (task cards by status), ` ```sprint ` (a sprint's progress), ` ```occupied ` (files tasks in progress plan to change), ` ```ai-work-time ` (AI time by area and type) |
+| Any page | ` ```rating ` (stars), ` ```base ` (a table of notes), ` ```toc ` (this page's headings), ` ```subpages ` (the pages under this one), ` ```mermaid ` (a diagram) |
+
+Each block's options, with examples: the [block reference](blocks.md).
+
 ## What it does
 
 - Your notes are plain Markdown files in your own GitHub repo or locally on your PC.
@@ -56,16 +78,12 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Offline:** every GitHub vault is kept on the device too, so it opens with no connection (a line above the note says it's the copy). The copy is kept in the browser, or (Chrome and Edge on a computer) in a folder you pick, like the repo's clone, so other tools and agents read the same files and each commit updates them ([more](getting-started.md#a-copy-on-this-device)).
 - **Up to date:** a Reload button beside Save, and a quiet banner when GitHub has newer notes than the ones you have open (checked when you come back to the tab and every few minutes, cheaply).
 - **Files:** a folder tree of the chosen repo, a Back button (also in the installed app, which has no browser buttons), an Up button to the note's `parent` page, shortcuts to the Inbox and start page, recent files, a file-name filter, and a search inside notes (GitHub's code search).
-- **Tags and stars:** a note's `tags` show as chips, and a ` ```rating ` block shows 0 to 5 stars (the note's `rating`) to press in Read mode. **Find**, beside New note in the file list, filters the vault's notes by tags and by at least N stars, the best rated first; the filter is in the address, so it can be linked.
+- **Tags and stars:** a note's `tags` show as chips, and a ` ```rating ` block shows 0 to 5 stars (the note's `rating`) to press in Read mode; a note without the block shows no stars. **Find**, beside New note in the file list, filters the vault's notes by tags and by at least N stars, the best rated first; the filter is in the address, so it can be linked.
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
   - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add image** in the top bar on a phone.
-  - ` ```mermaid ` blocks are drawn as diagrams (flowcharts and the rest), in the light or dark scheme.
-  - A ` ```top-tasks ` block shows the top tasks to start on any page, an inbox too, with everything it shows written in the block.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).
-  - A ` ```new-tasks ` block catches ideas on any page, with an **Add** field, and each item can be changed or taken out right in the box; your agent finds every one in the vault and turns them into tasks.
-  - A ` ```needs-attention ` block shows what waits on you: the tasks with a question for you, and the places that mention you, in one box or two.
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.
   - A point with subpoints (bullets, numbers or checkboxes) has an arrow in Read mode that folds them away; only the view changes, never the note.
@@ -82,12 +100,12 @@ I was frustrated with the work tools I had to use, so I started making this for 
 - **Keys:** Ctrl+S saves, Ctrl+E switches between Read and Edit, Ctrl+K searches the files.
 - **Vault rules (optional, per repo):** a generated navigation box shows folded and can't be edited, and a link to no page is warned about.
 - **Task fields per project:** turn task fields on and off (status, priority, assignee, type, parent task, relations, sprint, estimate, due date), change their lists and property names, and add fields of your own; kept in the repo, so the whole team shares them ([more](settings.md#task-fields)).
-- **Subtasks:** a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
-- **Relations:** a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
-- **Commits:** a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](settings.md#task-fields)).
-- **Sprints:** a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
+- **Subtasks** (` ```subtasks `): a task lists the tasks under it with their status and a progress bar, and **Add subtask** makes a new one under it.
+- **Relations** (` ```relations `): a task can be *blocked by*, *related to*, or *come after* or *before* other tasks; each shows on both tasks, and a task blocked by an open one isn't suggested.
+- **Commits** (` ```commits `): a task lists the commits made for it, each linking to GitHub; a GitHub Action adds every commit whose message starts with the task's ID ([more](settings.md#task-fields)).
+- **Sprints** (` ```sprint `): a sprint's page lists its tasks by status with how much is done, and **Start the next sprint** moves what's left into the next one.
 - **Optional inbox overview:** off by default in Settings → This device. Select vaults and per-vault identities in a private browser-local dashboard; **All inboxes** shows source-labelled reviews, questions, assignments, mentions and captures. Open an item to act in its source. Manual refresh, per-source access/offline states, no source writes or global capture. The dashboard needs its own backup and setup on each device. [Set it up](../example-vault/How%20To/Use%20your%20inbox.md#one-overview-of-selected-inboxes).
-- **Inboxes:** an Inbox button opens your own inbox. Needs attention can show **For review** first with `show: reviews`: tasks in Testing for the named reviewer, falling back to the assignee when no reviewer is declared. Use `review-statuses:` for custom review states. Reviews stay until the task leaves that state, and are not dismissed with Seen. **Tasks for today** keeps the existing `top-tasks` block and its Claim action. A dot says something waits on you.
+- **Inboxes:** an Inbox button opens your own inbox. Needs attention can show **For review** first with `show: reviews`: tasks in Testing for the named reviewer, falling back to the assignee when no reviewer is declared, each with what changed and what to test from the task's ` ```review ` block. Use `review-statuses:` for custom review states. Reviews stay until the task leaves that state, and are not dismissed with Seen. **Tasks for today** keeps the existing `top-tasks` block and its Claim action. A dot says something waits on you.
 - **AI agents (optional):** rules and step-by-step skills in the example vault for agents that sort your inbox into tasks, work on them and keep the board up to date ([more](ai-agents.md#working-with-ai-agents-optional)). A declared sibling registry can route an item to another authorized vault: the agent verifies the saved destination task before clearing the source ([how](../example-vault/How%20To/Use%20your%20inbox.md#an-item-for-another-vault)).
 - **Sharing:** invite links that set up a repo on someone else's device; a `.commonplace.json` in a repo that adds it by itself for everyone who can save to it; read-only mode for people who can't push.
 
