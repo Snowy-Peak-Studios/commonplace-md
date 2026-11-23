@@ -12,6 +12,29 @@ The app opens as many repos as you add, and you switch between them at the top o
 
 A fine-grained token has one resource owner. Select only the repositories you want it to open. For repos owned by another account or organization, add that owner's token in **Settings › Tokens for other owners** ([token setup](getting-started.md#3-make-a-token)).
 
+## Lay out a team vault
+
+A small layout that works for most teams: shared notes in a folder per topic, and each person's drafts in a `_local_only` folder that stays on their own device.
+
+```text
+Home.md               the shared start page: a link to each topic
+Task Board.md
+Product/              one folder per topic, shared with the whole team
+Design/
+Engineering/
+Notes/Inboxes/        one inbox per person
+Tasks/
+Templates/
+_local_only/          drafts, work in progress, notes that needn't be shared
+.gitignore            holds the line _local_only/
+```
+
+- **Topic folders** hold what the team shares. Give each one a page that `Home.md` links to, and give each note in it a `parent` property, so everyone finds their way from the start page.
+- **`_local_only/`** is for your drafts, work in progress and notes no one else needs. Put the line `_local_only/` in the repo's `.gitignore`, so Git never commits it. Its notes stay on the device that has them: they don't go to GitHub or to anyone else's devices, and a new device starts without them. A `_local_only` folder can also sit inside a topic (`Design/_local_only/`), with the same rules.
+- **Where it works:** in your clone of the repo, with your editor or your AI agent, and in the app when you open that clone's folder as a local vault (Chrome or Edge on a computer: **Add a vault on this device › Open a folder as a vault**). A GitHub vault in the app shows only what's in the repo, and saves every note as a commit through GitHub, which `.gitignore` doesn't stop. So don't make local-only notes in the app's GitHub vault.
+- **No links into it from shared notes.** For everyone else such a link leads nowhere. While you edit a note, the warning bar above it names any link into a `_local_only` folder, and a [` ```local-only-links ` block](blocks.md#local-only-links) lists every one in the vault. Agents run the same check before they commit (the example vault's [`AGENTS.md`](../example-vault/AGENTS.md#keep-the-vault-in-step)). Notes inside one `_local_only` folder may link to each other.
+- **Ready to share?** Move the note out of `_local_only` into its topic folder, then link to it.
+
 ## Sharing
 
 Notes are shared the GitHub way: whoever can open the repo on GitHub can open it in the app.

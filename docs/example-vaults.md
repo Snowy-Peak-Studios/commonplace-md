@@ -25,7 +25,7 @@ Open Commonplace.md and choose **On this device** › **Start on this device** (
 | Plan a demo across roles, epics and sprints | [Large team · Signal Station](../examples/large-team/Home.md) |
 | Keep recipes, a meal plan and a pantry list | [Personal notes · Kitchen Notebook](../examples/personal-notes/Home.md) |
 
-Use **Download a copy** for a ZIP of your local vault. You can also copy the contents of any starter folder, including its hidden `.commonplace.json`, to the root of a new GitHub repo. Keep the folder structure and change the sample names and dates to suit your project.
+Use **Download a copy** for a ZIP of your local vault. You can also copy the contents of any starter folder, including its hidden `.commonplace.json` (and, in the small team's, the `.gitignore` that keeps `_local_only/` drafts out of the repo; [team layout](collaboration.md#lay-out-a-team-vault)), to the root of a new GitHub repo. Keep the folder structure and change the sample names and dates to suit your project.
 
 ### Explore the features
 

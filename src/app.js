@@ -1343,7 +1343,7 @@ function localOnlyLinksOf(repo) {
 
 /**
  * Each ```local-only-links block becomes the list of links from notes into a `_local_only` folder that isn't their
- * own: notes there stay on one device (Git ignores the folder), so such a link leads nowhere for everyone else.
+ * own: notes there stay on one device (the folder is listed in .gitignore), so such a link leads nowhere for everyone else.
  * Each row names the note (with its line) and the target; a warning, nothing is changed.
  */
 function fillLocalOnlyLinks(root, f) {

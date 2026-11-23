@@ -702,6 +702,7 @@ export const EXAMPLE_VAULTS = [
     key: "small-team", label: "Small team · Pocket Garden", name: "Pocket Garden", directory: "examples/small-team",
     files: [
       ".commonplace.json",
+      ".gitignore",
       "Home.md",
       "Notes/Inboxes/Miro Finch.md",
       "Notes/Inboxes/Neri Holt.md",
