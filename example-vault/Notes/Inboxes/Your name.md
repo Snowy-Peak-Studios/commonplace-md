@@ -2,11 +2,12 @@
 parent: "[[Inbox]]"
 owner: Your name
 github: your-github-login
+agent_mention: your-agent
 ---
 
 # Your name's inbox
 
-One inbox per person: copy this note, name it after yourself, and put your GitHub login in `github`. When you're signed in with that login, the Inbox button opens this note instead of the shared [[Inbox]].
+One inbox per person: copy this note, name it after yourself, and put your GitHub login in `github`. `agent_mention` is the name your AI agent answers to: `@your-agent` in any note leaves it a note to act on when it sorts this inbox. When you're signed in with that login, the Inbox button opens this note instead of the shared [[Inbox]].
 
 ## Top tasks
 

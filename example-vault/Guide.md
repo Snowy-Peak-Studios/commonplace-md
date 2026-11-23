@@ -36,9 +36,13 @@ What a note can hold. Open this page in Edit mode to see how each part is writte
 
 Write `@` and someone's GitHub login to mention them. In Edit mode, typing `@` offers everyone who has an inbox. A mention links to their inbox, and their `needs-attention` block lists the places that mention them. In code, like `@this`, and in an email address it stays plain text. A reply on the next line, starting with `@` and the other person's login, clears it from the inbox. **Seen** clears it too.
 
+Your AI agent can be mentioned the same way, by the name in your inbox's `agent_mention` (here `@your-agent`): it finds every mention of it, in a note's text or its comments, when it sorts your inbox, does what it asks, and replies under it. Your own inbox doesn't list these: they're for the agent.
+
 ```comments
 @your-github-login, have a look at this part.
 ```
+
+For example: @your-agent, add a picture to this part.
 
 ## New tasks anywhere
 

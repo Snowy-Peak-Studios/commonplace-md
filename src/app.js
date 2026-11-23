@@ -11,7 +11,7 @@ import {
   pageListDepth, tocTree, subpagesOf,
   fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
-  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
+  hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, questionTasks, taskAnswer, findMentions, vaultPeople, vaultAgents, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
   noteTags, tagKey, noteRating, withRating, RATING_MAX, tagCounts, findNotes, findParams, findHref,
 } from "./vault.js";
@@ -988,7 +988,7 @@ function applyMode(focus = false) {
       language: f.kind === "text" ? languageFor(f.path) : null,
       vault: f.repo.vault && f.kind === "md",
       readOnly: !canWrite(f.repo),
-      people: () => loadPeople(f.repo),
+      people: () => loadMentionable(f.repo),
     });
   }
   if (f.editor) setEditorText(f.editor, f.text);
@@ -2282,30 +2282,42 @@ function assigneeList(repo, id) {
   loadCollaborators(repo).then((known) => { collaborators = known; draw(); });
   return list;
 }
-function loadPeople(repo) {
+/** The vault's inbox notes, read once per tree version: the people and their agents come from them. */
+function loadInboxNotes(repo) {
   const tree = app.trees.get(repo.id);
   if (!tree) return Promise.resolve([]);
   const key = `${repo.id}:${tree.version}`;
   if (!peopleLoads.has(key)) {
     for (const k of peopleLoads.keys()) if (k.startsWith(`${repo.id}:`)) peopleLoads.delete(k);
     const paths = inboxCandidates([...tree.files.keys()], repo.inbox, repo.inboxes || "");
-    const load = paths.length ? baseNotes(repo, tree, paths).then(vaultPeople) : Promise.resolve([]);
+    const load = paths.length ? baseNotes(repo, tree, paths) : Promise.resolve([]);
     peopleLoads.set(key, load);
     load.catch(() => peopleLoads.delete(key));
   }
   return peopleLoads.get(key);
 }
+function loadPeople(repo) {
+  return loadInboxNotes(repo).then(vaultPeople);
+}
+/** Everyone `@` can mention: the people, then their agents (`agent_mention`). Not for assignees. */
+function loadMentionable(repo) {
+  return loadInboxNotes(repo).then((notes) => [...vaultPeople(notes), ...vaultAgents(notes)]);
+}
 
-/** Each `@login` of a person with an inbox becomes a link to that inbox; any other stays plain text. */
+/**
+ * Each `@login` of a person with an inbox becomes a link to that inbox, and each `@name` of their agent
+ * (`agent_mention`) a link to the same inbox, which the agent sorts; any other stays plain text.
+ */
 function fillMentions(root, repo) {
   const spans = [...root.querySelectorAll("span.mention")];
   if (!spans.length) return;
-  loadPeople(repo).then((people) => {
+  loadMentionable(repo).then((people) => {
     const byLogin = new Map(people.map((p) => [p.login.toLowerCase(), p]));
     for (const span of spans) {
       const p = byLogin.get(String(span.dataset.login).toLowerCase());
       if (!p || !span.isConnected) continue;
-      span.replaceWith(h("a", { class: "mention", href: hrefFor(repo, p.path), title: `${p.name}'s inbox` }, `@${span.dataset.login}`));
+      const title = p.agent ? `${p.name}: it finds this when it sorts ${p.owner}'s inbox` : `${p.name}'s inbox`;
+      span.replaceWith(h("a", { class: p.agent ? "mention agent" : "mention", href: hrefFor(repo, p.path), title }, `@${span.dataset.login}`));
     }
   }, () => {});
 }
@@ -2528,7 +2540,7 @@ function fillComments(root, f) {
     const suggested = commentReply(lines.slice(start + 1, close).join("\n"), login);
     const old = previous[index];
     const field = old?.field ?? h("div", { class: "input comment-input" });
-    const view = old?.view ?? createCommentEditor(field, suggested, () => loadPeople(f.repo));
+    const view = old?.view ?? createCommentEditor(field, suggested, () => loadMentionable(f.repo));
     if (old && view.state.doc.toString() === old.suggested) setEditorText(view, suggested);
     if (view.hasFocus) focused = view;
     f.commentEditors.push({ field, view, suggested });

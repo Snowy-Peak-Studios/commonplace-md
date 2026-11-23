@@ -127,6 +127,7 @@ Then move on to another task while it waits.
 - To point someone to a place, write `@` and their GitHub login there (the `github` of their inbox). The ` ```needs-attention ` block in their inbox lists it; nothing else needs writing.
 - To answer a mention, reply on the very next line, starting with `@` and the login of who wrote it: that clears it from your person's box. In a Comments block, the next dated comment starting with `@` and their login counts the same.
 - A question for your own person still goes on its task (see Questions).
+- **Mentions of you, the agent**: your person's inbox may name you in `agent_mention` (e.g. `your-agent`). When you sort the inbox, find every `@` and that name in the vault, in any note's text or Comments block (`grep -rn "@your-agent" --include=*.md .`; not in front matter or code). One with no reply right under it is open: do what it asks (a task, an edit, an answer), then reply on the very next line, or as the next comment, starting with `@` and your person's login and saying what you did. That reply marks it handled, so it isn't done twice. Another person's agent name isn't yours.
 
 ## Keep the vault in step
 

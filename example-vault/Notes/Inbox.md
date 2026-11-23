@@ -2,6 +2,7 @@
 parent: "[[Home]]"
 owner: Your name
 github: your-github-login
+agent_mention: your-agent
 ---
 
 # Inbox

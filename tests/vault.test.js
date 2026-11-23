@@ -918,6 +918,42 @@ test("a vault's people come from its inboxes' github and owner, each login once"
   ]);
 });
 
+test("a vault's agents come from its inboxes' agent_mention, never taking a person's login", async () => {
+  const { vaultAgents, vaultPeople } = await import("../src/vault.js");
+  const notes = [
+    { path: "Notes/Inbox.md", props: { owner: "Zed Q", github: "zedq", agent_mention: "@zedsAgent" } },
+    { path: "Notes/Inboxes/Ann.md", props: { owner: "Ann Lee", github: "ann-lee", agent_mention: "zedq" } },
+    { path: "Notes/Inboxes/Bob.md", props: { github: "bob", agent_mention: "ZEDSAGENT" } },
+    { path: "Notes/Inboxes/Cy.md", props: { owner: "Cy", agent_mention: "cys-bot" } },
+    { path: "Notes/Inboxes/Bad.md", props: { owner: "Bad", agent_mention: "not a name" } },
+  ];
+  assert.deepEqual(vaultAgents(notes), [
+    { login: "cys-bot", name: "Cy's agent", owner: "Cy", path: "Notes/Inboxes/Cy.md", agent: true },
+    { login: "zedsAgent", name: "Zed Q's agent", owner: "Zed Q", path: "Notes/Inbox.md", agent: true },
+  ], "a person's login and a name used twice are left out");
+  assert.equal(vaultPeople(notes).some((p) => p.agent), false, "the people (and assignees) have no agents");
+});
+
+test("an agent's mentions in any note: open, handled by key, or answered by a reply; a changed line is open again", async () => {
+  const { findMentions, mentionKey, sortAgentMentions } = await import("../src/vault.js");
+  const text = [
+    "---", "status: To Do", "note: \"@annsAgent in front matter\"", "---",
+    "# Plan", "@annsAgent please tidy this page.", "Ask @annsAgent about `@annsAgent in code`.",
+    "@annsAgent move the old notes.", "@ann-lee done, moved them.",
+    "```", "@annsAgent in a fence", "```",
+    "```comments", "- **ann-lee** · 2026-11-23", "  @annsAgent sort these comments too.", "```",
+  ].join("\n");
+  const found = findMentions(text).filter((m) => m.login.toLowerCase() === "annsagent").map((m) => ({ ...m, path: "Notes/Plan.md" }));
+  assert.deepEqual(found.map((m) => m.line), [6, 7, 8, 15], "text and comments count; front matter, code and fences don't");
+  const handled = [mentionKey("Notes/Plan.md", found[0])];
+  const sorted = sortAgentMentions(found, handled);
+  assert.deepEqual(sorted.handled.map((m) => m.line), [6]);
+  assert.deepEqual(sorted.answered.map((m) => m.line), [8]);
+  assert.deepEqual(sorted.open.map((m) => m.line), [7, 15]);
+  const changed = findMentions(text.replace("please tidy", "please, tidy")).filter((m) => m.line === 6).map((m) => ({ ...m, path: "Notes/Plan.md" }));
+  assert.deepEqual(sortAgentMentions(changed, handled).open.length, 1, "a changed line is open again");
+});
+
 test("a new-tasks block: its owner and its items, list marks and checkboxes taken off", async () => {
   const { newTasksBlock } = await import("../src/vault.js");
   assert.deepEqual(newTasksBlock("owner: Ann Lee\n- Buy milk\n\n* [ ] Fix the [[Home]] page\n2. Call @bob\nPlain line: with a colon\n"),

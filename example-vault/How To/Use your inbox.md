@@ -38,6 +38,8 @@ A ` ```needs-attention ` block in your inbox, under the top tasks, shows what wa
 - **Questions**: the tasks with a question for you. Your agent gives a task one with a `question` property (the question in a few words) and a *Question* part with the options and an **Answer:** line. Each row links to the task and says *Waiting for your answer*. Once you've written something under **Answer:**, it folds under *Answered, waiting for the agent*, until your agent acts on it.
 - **Mentions**: every place in the vault that says `@` and your GitHub login (in Edit mode, typing `@` offers the people with an inbox). Each row links to the heading it's under, with the line and when the note last changed, newest first.
 
+**Mention your agent.** Put a name for your AI agent in your inbox's `agent_mention` property, like `agent_mention: your-agent`. Then `@your-agent` in any note's text or comments is a note for it: typing `@` offers it too, as *Your name's agent*, and in Read mode it links to your inbox. Your agent finds these when it sorts your inbox, does what they ask and replies under them. Your own Needs attention leaves them out. Pick a name that isn't anyone's GitHub login.
+
 Everything it shows is written in the block, one line each:
 
 ```text

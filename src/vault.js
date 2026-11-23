@@ -681,10 +681,51 @@ export function vaultPeople(notes) {
   const seen = new Map();
   for (const n of notes) {
     const login = String(n.props?.github ?? "").trim().replace(/^@/, "");
-    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login) || seen.has(login.toLowerCase())) continue;
+    if (!MENTION_NAME.test(login) || seen.has(login.toLowerCase())) continue;
     seen.set(login.toLowerCase(), { login, name: String(n.props.owner ?? "").trim() || login, path: n.path });
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name) || a.login.localeCompare(b.login));
+}
+
+/** A name `@` can mention: a GitHub login's letters, digits and hyphens, up to 39. */
+const MENTION_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+
+/**
+ * The inbox property naming its person's agent for mentions: `agent_mention: annsAgent`, written
+ * `@annsAgent` in any note's text or comments. It's not a GitHub login: the person's agent finds these when it
+ * sorts their inbox, and the person's own Needs attention leaves them out.
+ */
+export const AGENT_MENTION = "agent_mention";
+/** The inbox property with the agent mentions its agent has handled: one `mentionKey` each, like `seen_mentions`. */
+export const AGENT_HANDLED = "agent_handled";
+
+/**
+ * The agents of a vault, from its inboxes ([{ path, props }]): each inbox with an `agent_mention` gives
+ * { login, name, owner, path, agent: true }, `login` being the mention name and `name` "<owner>'s agent". A name
+ * that is already a person's login (from `vaultPeople`) or an earlier inbox's agent is left out, so a mention
+ * always means one of them. Sorted by name.
+ */
+export function vaultAgents(notes) {
+  const taken = new Set(vaultPeople(notes).map((p) => p.login.toLowerCase()));
+  const out = [];
+  for (const n of notes) {
+    const login = String(n.props?.[AGENT_MENTION] ?? "").trim().replace(/^@/, "");
+    if (!MENTION_NAME.test(login) || taken.has(login.toLowerCase())) continue;
+    taken.add(login.toLowerCase());
+    const owner = String(n.props.owner ?? "").trim() || String(n.props.github ?? "").trim().replace(/^@/, "") || login;
+    out.push({ login, name: `${owner}'s agent`, owner, path: n.path, agent: true });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.login.localeCompare(b.login));
+}
+
+/**
+ * An agent's mentions (each with its `path`, from `findMentions`) sorted for its inbox sorting: `open` (to act on),
+ * `handled` (its key is in `handled`, the inbox's `agent_handled`) and `answered` (someone replied right under it,
+ * which counts as handled too). A mention whose line is changed is open again, as with `seen_mentions`.
+ */
+export function sortAgentMentions(found, handled = []) {
+  const { open, seen, answered } = sortMentions(found, handled);
+  return { open, handled: seen, answered };
 }
 
 // ================================================================
