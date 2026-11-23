@@ -65,7 +65,9 @@ example-vault/
 │   └── word_count.py            a Python script, opened as text with colours
 └── Attachments/
     ├── commonplace.svg          an image, embedded with ![[commonplace.svg|160]]
-    └── An example PDF.pdf       a PDF, shown in the page, with Open in a new tab and Download
+    ├── An example PDF.pdf       a PDF, shown in the page, with Open in a new tab and Download
+    ├── A short chime.mp3        audio, embedded with ![[A short chime.mp3]]: a small player
+    └── A test pattern.mp4       video, in the same player
 ```
 
 Every page but `Home.md` has a `parent` property that links to the page above it.

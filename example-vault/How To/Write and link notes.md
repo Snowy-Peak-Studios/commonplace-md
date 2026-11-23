@@ -32,13 +32,15 @@ A link to a page that doesn't exist is marked in red, in the editor and in the p
 
 ## Add an image
 
-Open **Edit** and place the cursor where the picture belongs. Paste an image from the clipboard, drop an image onto the editor, or press **Add image** in the top bar to choose a file on your device. The note gets an embed such as `![[screenshot-2026-11-17-12-00-00-abcd1234.png]]`. Press **Save** to keep the link.
+Open **Edit** and place the cursor where the picture belongs. Paste an image from the clipboard, drop an image onto the editor, or press **Add media** in the top bar to choose a file on your device. The note gets an embed such as `![[screenshot-2026-11-17-12-00-00-abcd1234.png]]`. Press **Save** to keep the link.
 
 The file goes into **Attachments folder** in vault Settings, or next to the note if that setting is empty. GitHub saves the image in its own commit. To upload to GitHub, the app needs a connection and write access. You can also add images to a local vault. Images may be up to 10 MiB.
 
+**Audio and video** work the same way: drop or choose an `.mp3`, `.m4a`, `.wav`, `.mp4`, `.webm` or another recording, up to 25 MiB. The note gets `![[lesson-2026-11-23-12-00-00-abcd1234.mp3]]`, which shows a small player with 5 seconds back and on, the speed and Repeat ([[Other kinds of files#Audio and video in a note]]).
+
 ## Insert Markdown or a block
 
-In **Edit**, press **Insert** in the top bar, next to the page title (on a phone, the plus icon; **Add image** is the picture icon beside it). It lists common Markdown (a heading, a list, a checklist, a callout, a table, a diagram) and every block the app draws (task sections, the top tasks, a sprint, a board and more). Search by a word, such as *list* or *sprint*.
+In **Edit**, press **Insert** in the top bar, next to the page title (on a phone, the plus icon; **Add media** is the picture icon beside it). It lists common Markdown (a heading, a list, a checklist, a callout, a table, a diagram) and every block the app draws (task sections, the top tasks, a sprint, a board and more). Search by a word, such as *list* or *sprint*.
 
 - Hover an entry, move to it with the arrow keys, or tap it on a phone, to see a small preview of how it looks in **Read**, and the Markdown it adds.
 - Press **Insert**, Enter, or double-click it to add it at the cursor. A block goes on lines of its own, after the line the cursor is on; text such as **Bold** goes in the line, around the words you selected.

@@ -282,6 +282,30 @@ test("images get dated safe names that resolve from the note and avoid collision
   assert.throws(() => imageAttachment({...image, type: "text/plain"}, "Home.md", "", []), /Choose a PNG/);
 });
 
+test("audio and video files are told by their name, and get image-like attachment names and embeds", async () => {
+  const { mediaAttachment, mediaKind, mediaType, isMediaPath, isMediaFile, captureAttachment } = await import("../src/vault.js");
+  assert.equal(mediaKind("Attachments/Lektion 3.MP3"), "audio");
+  assert.equal(mediaType("a.m4a"), "audio/mp4");
+  assert.equal(mediaKind("clip.webm"), "video");
+  assert.equal(mediaType("clip.mov"), "video/quicktime");
+  assert.equal(isMediaPath("notes.md"), false);
+  assert.equal(isMediaPath("picture.png"), false);
+  assert.equal(isMediaFile({ name: "", type: "audio/mpeg" }), true);
+  const now = new Date("2026-11-23T12:00:00Z");
+  const audio = { name: "Lektion 3 (Hören).mp3", type: "audio/mpeg", size: 2048 };
+  const upload = mediaAttachment(audio, "Notes/German.md", "Attachments", [], now, "deadbeef");
+  assert.equal(upload.path, "Attachments/Lektion-3-Horen-2026-11-23-12-00-00-deadbeef.mp3");
+  assert.equal(upload.link, "![[Lektion-3-Horen-2026-11-23-12-00-00-deadbeef.mp3]]");
+  // No name ending: the type gives one. No Attachments folder: next to the note.
+  assert.equal(mediaAttachment({ name: "", type: "video/webm", size: 9 }, "Notes/German.md", "", [], now, "deadbeef").path,
+    "Notes/media-2026-11-23-12-00-00-deadbeef.webm");
+  assert.throws(() => mediaAttachment({ ...audio, size: 25 * 1024 * 1024 + 1 }, "Home.md", "", []), /25 MiB/);
+  assert.throws(() => mediaAttachment({ ...audio, size: 0 }, "Home.md", "", []), /empty/);
+  assert.throws(() => mediaAttachment({ name: "notes.txt", type: "text/plain", size: 3 }, "Home.md", "", []), /audio or video/);
+  // A capture's recording is embedded, so it plays in the note.
+  assert.equal(captureAttachment(audio, "Notes/Inbox.md", "Attachments", [], now, "deadbeef").link, upload.link);
+});
+
 test("an image inserts at the cursor or after the note's properties", () => {
   const link = "![[picture.png]]";
   const front = "---\nowner: Alex\n---";

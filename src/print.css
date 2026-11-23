@@ -27,6 +27,8 @@
   #print-note thead { display: table-header-group; }
   #print-note tr, #print-note img, #print-note .callout { break-inside: avoid; }
   #print-note img, #print-note svg { max-width: 100% !important; min-width: 0 !important; height: auto; }
+  /* A player prints as its name only */
+  #print-note .player audio, #print-note .player video, #print-note .player-tools > :not(.player-name) { display: none !important; }
   #print-note h1, #print-note h2, #print-note h3, #print-note summary { break-after: avoid; }
   #print-note a { color: #222; text-decoration: underline; }
   #print-note .callout, #print-note .embed-page { border-color: #aaa; background: #fafafa; }

@@ -4,7 +4,7 @@ import { createMarkdown, renderNote, topTasksOptions, attentionOptions, appBlock
 import { LinkIndex } from "../src/vault.js";
 
 const md = createMarkdown();
-const idx = new LinkIndex(["Home.md", "Notes/Inbox.md", "Attachments/pic.png", "Task Board.md", "Bases/Task Board.base"]);
+const idx = new LinkIndex(["Home.md", "Notes/Inbox.md", "Attachments/pic.png", "Attachments/Lektion 3.mp3", "Attachments/clip.mp4", "Task Board.md", "Bases/Task Board.base"]);
 const env = {
   fromPath: "Notes/Inbox.md",
   resolve: (t) => idx.resolve(t, "Notes/Inbox.md"),
@@ -29,6 +29,14 @@ test("image embeds, .base views and page embeds", () => {
   assert.match(html, /<span class="embed-page" data-path="Task Board.md" data-heading="Goals"><span class="embed-head"><a class="wikilink"/);
   // Inside an embedded page, embeds stay links, so pages can't embed each other forever.
   assert.match(renderNote(md, "![[Task Board]]", { ...env, depth: 1 }).html, /<span class="embed-note"><a class="wikilink"/);
+});
+
+test("audio and video embeds become player placeholders, with a name from the alias", () => {
+  assert.match(render("![[Lektion 3.mp3]]"), /<span class="embed-media" data-path="Attachments\/Lektion 3.mp3" data-kind="audio" data-alt="Lektion 3.mp3"><\/span>/);
+  assert.match(render("![[clip.mp4|The clip]]"), /<span class="embed-media" data-path="Attachments\/clip.mp4" data-kind="video" data-alt="The clip"><\/span>/);
+  assert.match(render("![[gone.ogg]]"), /<span class="embed-note missing">Missing audio: gone.ogg<\/span>/);
+  // A plain link to a recording stays a link.
+  assert.match(render("[[Lektion 3.mp3]]"), /<a class="wikilink" href="#\/vault\/Attachments\/Lektion 3.mp3"/);
 });
 
 test("callouts render as boxes, foldable ones as details", () => {

@@ -45,8 +45,10 @@ let fakeLogin = null; // answer "who is signed in?" with this login, to be the e
 
 const CSV_PATH = "Data/Test table.csv";
 const CSV_TEXT = 'Name,Price,Note\nApples,3,\nPears,5,"the best, by far"\n';
-const MP3_PATH = "Data/Test song.mp3"; // a file the app can't show: offered as a download
+const MP3_PATH = "Data/Test song.mp3"; // audio with no sound in it: a player that says it can't play it, and Download
 const MP3_BYTES = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+const ZIP_PATH = "Data/Test archive.zip"; // a file the app can't show: offered as a download
+const ZIP_BYTES = Buffer.from([0x50, 0x4b, 0x05, 0x06, ...new Array(18).fill(0)]);
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
 const json = (status, body) => ({ status, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(body) });
 
@@ -112,11 +114,12 @@ page.on("request", async (req) => {
   if (readOnlyRepo && req.method() === "GET" && url === REPO_API) {
     return req.respond(json(200, { full_name: `${OWNER}/${REPO}`, permissions: { pull: true, push: false, admin: false } }));
   }
-  // A CSV file and an MP3 added to the example vault's tree, served from here.
+  // A CSV file, an MP3 and a ZIP added to the example vault's tree, served from here.
   if (url.startsWith(`${REPO_API}/git/trees/`)) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" } });
     const data = await res.json();
-    data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" }, { path: PRE + MP3_PATH, type: "blob", sha: "mp3sha" });
+    data.tree.push({ path: PRE + CSV_PATH, type: "blob", sha: "csvsha" }, { path: PRE + MP3_PATH, type: "blob", sha: "mp3sha" },
+      { path: PRE + ZIP_PATH, type: "blob", sha: "zipsha" });
     return req.respond(json(200, data));
   }
   // The copy on the device asks for the test table by its sha too.
@@ -127,6 +130,9 @@ page.on("request", async (req) => {
   }
   if (url.startsWith(`${REPO_API}/git/blobs/mp3sha`)) {
     return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: MP3_BYTES });
+  }
+  if (url.startsWith(`${REPO_API}/git/blobs/zipsha`)) {
+    return req.respond({ status: 200, contentType: "application/octet-stream", headers: { "Access-Control-Allow-Origin": "*" }, body: ZIP_BYTES });
   }
   if (boardState && req.method() === "GET" && url.split("?")[0] === contentsUrl(boardState.path)) {
     return req.respond(json(200, { sha: boardState.sha, size: boardState.text.length, content: b64(boardState.text) }));
@@ -196,7 +202,7 @@ check(await backHidden(), "no Back button on the first page (the invite link was
 const realTree = await ghGet(`/repos/${OWNER}/${REPO}/git/trees/${encodeURIComponent(BRANCH)}?recursive=1`);
 const realFiles = realTree.tree.filter((e) => e.type === "blob" && e.path.startsWith(PRE) && !e.path.slice(PRE.length).split("/").some((s) => s.startsWith(".")));
 const treeCount = await page.$$eval("#tree a.file", (a) => a.length);
-check(treeCount === realFiles.length + 2, `tree lists the example vault: ${treeCount} files (${realFiles.length} on GitHub, plus the test CSV and MP3)`);
+check(treeCount === realFiles.length + 3, `tree lists the example vault: ${treeCount} files (${realFiles.length} on GitHub, plus the test CSV, MP3 and ZIP)`);
 check(!(await page.$("#tree [data-path^='.']")), "no dot-files in the tree");
 await page.waitForFunction(() => document.querySelector(".embed-page .embed-body")?.innerText.trim().length > 20, { timeout: 10000 }).catch(() => {});
 check(await page.$eval(".embed-page .embed-body", (b) => b.innerText.trim().length > 20).catch(() => false), "![[Task Board#Current goals]] shows that section inside Home");
@@ -908,11 +914,28 @@ const pdf = await page.evaluate(() => ({
 check(pdf?.download === "An example PDF.pdf" && pdf.open, "a PDF has Download and Open in a new tab: " + JSON.stringify(pdf));
 check(pdf && (pdf.viewer ? pdf.frame?.startsWith("blob:") : pdf.frame === null), "and shows in the page where the browser has a PDF viewer: " + JSON.stringify(pdf));
 await shot("5c-pdf");
-await page.goto(at(MP3_PATH), { waitUntil: "networkidle0" });
+await page.goto(at(ZIP_PATH), { waitUntil: "networkidle0" });
 await until(() => !!document.querySelector(".empty .file-actions a[download]")?.href.startsWith("blob:"));
-const mp3 = await page.$eval(".empty .file-actions a[download]", (a) => a.getAttribute("download")).catch(() => null);
-check(mp3 === "Test song.mp3", "a file the app can't show offers a Download: " + mp3);
+const zip = await page.$eval(".empty .file-actions a[download]", (a) => a.getAttribute("download")).catch(() => null);
+check(zip === "Test archive.zip", "a file the app can't show offers a Download: " + zip);
 check(await page.$eval("#save-btn", (b) => b.hidden), "and has no Save button");
+// Audio opens in a small player. This MP3 has no sound in it, so the player says so and keeps Download.
+await page.goto(at(MP3_PATH), { waitUntil: "networkidle0" });
+await until(() => !!document.querySelector(".media-wrap .player-note")?.textContent);
+const player = await page.evaluate(() => {
+  const box = document.querySelector(".media-wrap .player");
+  return box && {
+    audio: !!box.querySelector("audio[controls]")?.src.startsWith("blob:"),
+    tools: [...box.querySelectorAll(".player-tools button")].map((b) => b.getAttribute("aria-label")),
+    speed: !!box.querySelector("select.player-speed"),
+    download: box.querySelector("a[download]")?.getAttribute("download"),
+    note: box.querySelector(".player-note").textContent,
+  };
+});
+check(player?.audio && player.speed && player.tools.join() === "Back 5 seconds,On 5 seconds,Repeat: play it again and again",
+  "an MP3 opens in a player with 5 seconds back and on, the speed and Repeat: " + JSON.stringify(player));
+check(player?.download === "Test song.mp3" && /can't play/.test(player.note), "one the browser can't play says so and keeps Download: " + JSON.stringify(player));
+await shot("5d-audio");
 
 // 9b. Base views: the Task Board's table, checked against the real notes and the real Bases/Tasks.base.
 const gql = async (query) => (await (await fetch(`${API}/graphql`, {

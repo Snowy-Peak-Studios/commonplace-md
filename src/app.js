@@ -5,7 +5,7 @@ import { GitHub, newTokenUrl } from "./github.js";
 import { LocalSource, withLocal, isLocal, canPickFolder, isBrave, fetchExample, emptyVault, EXAMPLE_VAULTS, packedFiles, readZip, restoredSettings, nameFromZip, ZIP_LIMITS } from "./local.js";
 import { Mirror } from "./mirror.js";
 import {
-  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
+  LinkIndex, findWikilinks, findNavBlock, isImagePath, imageAttachment, isMediaPath, isMediaFile, mediaKind, mediaType, mediaAttachment, MEDIA_ACCEPT, captureAttachment, captureAttachmentText, imageInsertion, IMAGE_ACCEPT, defaultNote, fillTemplate, isoDate, splitFrontMatter, titleProblem, toLf,
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
@@ -101,6 +101,7 @@ const BINARY = new RegExp("\\.(zip|7z|rar|gz|tgz|bz2|xz|tar|jar|apk|dmg|iso|msi|
   + "|doc|docx|xls|xlsx|xlsm|ppt|pptx|odt|ods|odp|epub|psd|ai|sketch|fig|xcf|kra|blend|fbx|glb|ico|sqlite|db|pck)$", "i");
 function kindOf(path) {
   if (isImagePath(path)) return "image";
+  if (isMediaPath(path)) return "media";
   if (BINARY.test(path)) return "binary";
   return TEXT_KINDS[(/\.(\w+)$/.exec(path)?.[1] || "").toLowerCase()] || "text";
 }
@@ -110,7 +111,7 @@ function iconFor(path) {
   return { md: "file", csv: "table", base: "table", image: "image", pdf: "file" }[kind] || "blank";
 }
 /** Files the app shows but never edits. */
-const viewOnly = (kind) => kind === "image" || kind === "binary" || kind === "pdf" || kind === "base";
+const viewOnly = (kind) => kind === "image" || kind === "media" || kind === "binary" || kind === "pdf" || kind === "base";
 
 function emptyState(iconName, title, text, ...actions) {
   return h("div", { class: "empty" }, icon(iconName, "big"), h("h2", {}, title), text ? h("p", {}, text) : null, ...actions);
@@ -647,13 +648,13 @@ function renderHeader() {
       b.title = modes[i][1];
     });
   }
-  // Insert and Add image: in the top bar, next to the title, while a note is edited.
+  // Insert and Add media: in the top bar, next to the title, while a note is edited.
   $("#edit-tools").hidden = !(f?.kind === "md" && f.editor && app.mode === "edit" && writable);
   const image = $("#image-btn");
   image.disabled = !!f?.imageUpload;
   image.classList.toggle("busy", !!f?.imageUpload);
-  fill(image, icon(f?.imageUpload ? "spinner" : "image"), h("span", { class: "label" }, f?.imageUpload ? "Uploading…" : "Add image"));
-  image.title = f?.imageUpload ? "Uploading the image…" : "Add an image at the cursor";
+  fill(image, icon(f?.imageUpload ? "spinner" : "image"), h("span", { class: "label" }, f?.imageUpload ? "Uploading…" : "Add media"));
+  image.title = f?.imageUpload ? "Uploading the file…" : "Add an image, audio or video at the cursor";
   const save = $("#save-btn");
   save.hidden = !f || viewOnly(f.kind) || !writable;
   save.disabled = !(f?.dirty || uploadable(f)) || app.saving || !!f?.imageUpload;
@@ -888,9 +889,10 @@ async function openFile(repo, tree, path, heading, nav) {
   if (!tree.files.has(path)) return showProblem("No such file", `There's no ${path} in ${repo.label}.`);
   const kind = kindOf(path);
   markActive(path);
-  if (kind === "image" || kind === "binary" || kind === "pdf") {
+  if (kind === "image" || kind === "media" || kind === "binary" || kind === "pdf") {
     app.file = { repo, path, kind, sha: tree.files.get(path) };
     renderHeader();
+    if (kind === "media") return showMain(h("div", { class: "media-wrap" }, mediaPlayer(repo, path, mediaKind(path))));
     if (kind !== "image") return showMain(fileView(repo, path, tree.files.get(path), kind));
     const img = h("img", { class: "image-view", alt: path });
     showMain(h("div", { class: "image-wrap" }, img));
@@ -1019,13 +1021,14 @@ function onTextChanged(text, changes) {
 }
 
 /**
- * The chooser (**Add image** in the top bar), the clipboard and an editor drop all go through the same image
- * action. Here: the paste and the drop on the editor.
+ * The chooser (**Add media** in the top bar), the clipboard and an editor drop all go through the same action,
+ * for an image, an audio or a video file. Here: the paste and the drop on the editor.
  */
 function setupImageTools(f) {
   const pane = f.dom.editorPane;
-  const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => file.type.startsWith("image/") || isImagePath(file.name))
-    || [...(transfer.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile());
+  const media = (type) => /^(image|audio|video)\//.test(type);
+  const imageFile = (transfer) => transfer && ([...transfer.files].find((file) => media(file.type) || isImagePath(file.name) || isMediaFile(file))
+    || [...(transfer.items ?? [])].find((item) => item.kind === "file" && media(item.type))?.getAsFile());
   const handle = (event, transfer, at) => {
     const file = imageFile(transfer);
     if (!file) return;
@@ -1035,7 +1038,7 @@ function setupImageTools(f) {
   };
   pane.addEventListener("paste", (event) => handle(event, event.clipboardData), true);
   pane.addEventListener("dragover", (event) => {
-    if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === "file" && (!item.type || item.type.startsWith("image/")))) {
+    if ([...(event.dataTransfer?.items ?? [])].some((item) => item.kind === "file" && (!item.type || media(item.type)))) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     }
@@ -1044,23 +1047,29 @@ function setupImageTools(f) {
     f.editor?.posAtCoords({ x: event.clientX, y: event.clientY }) ?? undefined), true);
 }
 
+const upper = (word) => word[0].toUpperCase() + word.slice(1);
+
 async function addImage(f, file, at = f.editor?.state.selection.main.head) {
   if (app.file !== f || app.mode !== "edit" || !canWrite(f.repo) || at == null) return;
   if (f.imageUpload || app.saving) return toast("Wait for the current save or upload to finish.", "info");
-  if (!isLocal(f.repo) && navigator.onLine === false) return toast("Connect to GitHub before adding an image.", "error");
+  // An image, or an audio or video file: each is named and embedded the same way.
+  const what = !isImagePath(file.name) && !file.type.startsWith("image/") && isMediaFile(file)
+    ? mediaKind(file.name) || file.type.split("/")[0] : "image";
+  const a = what === "image" ? "an image" : `a ${what} file`;
+  if (!isLocal(f.repo) && navigator.onLine === false) return toast(`Connect to GitHub before adding ${a}.`, "error");
   const nav = f.repo.vault && findNavBlock(f.text);
-  if (nav && at >= nav.from && at <= nav.to) return toast("Move the cursor outside the navigation box to add an image.", "info");
+  if (nav && at >= nav.from && at <= nav.to) return toast(`Move the cursor outside the navigation box to add ${a}.`, "info");
 
   const tree = app.trees.get(f.repo.id);
   f.imageUpload = { at };
   renderHeader();
   try {
-    const image = imageAttachment(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
+    const image = (what === "image" ? imageAttachment : mediaAttachment)(file, f.path, f.repo.attachments, tree?.files.keys() ?? []);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const saved = await gh.writeBytes(f.repo, fullPath(f.repo, image.path), bytes, `Add ${image.path} from ${APP_NAME}`);
     wroteCommit(f.repo, saved);
     treeChanged(f.repo, image.path, saved.sha);
-    if (app.file !== f) return toast(`Image saved to ${image.path}.`, "ok");
+    if (app.file !== f) return toast(`${upper(what)} saved to ${image.path}.`, "ok");
     const { at: cursor, insert } = imageInsertion(f.text, f.imageUpload.at, image.link);
     const currentNav = f.repo.vault && findNavBlock(f.text);
     if (currentNav && cursor >= currentNav.from && cursor <= currentNav.to) {
@@ -1072,9 +1081,9 @@ async function addImage(f, file, at = f.editor?.state.selection.main.head) {
     }
     if (app.mode === "edit") f.editor.focus();
     else renderPreview();
-    toast("Image added. Save the note to keep the link.", "ok");
+    toast(`${upper(what)} added. Save the note to keep the link.`, "ok");
   } catch (e) {
-    toast(`Image not added: ${e.message}`, "error");
+    toast(`${upper(what)} not added: ${e.message}`, "error");
   } finally {
     f.imageUpload = null;
     renderHeader();
@@ -2488,6 +2497,7 @@ function fillNewTasks(root, f) {
       const links = (draft.files ?? []).filter((file) => input.value.includes(file.link)).map((file) => file.link);
       attachments.innerHTML = sanitize(md.renderInline(links.join(" "), linkEnv(f.repo, f.path)));
       fillImages(attachments, f.repo, f.path);
+      fillMedia(attachments, f.repo);
       status.textContent = draft.upload ? "Uploading attachment…" : draft.error || "";
       status.setAttribute("role", draft.error ? "alert" : "status");
     };
@@ -3320,6 +3330,7 @@ function decorate(root, repo, fromPath) {
   for (const a of root.querySelectorAll('a[href^="http"]')) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
   fillLinks(root, repo, fromPath);
   fillImages(root, repo, fromPath);
+  fillMedia(root, repo);
   fillDiagrams(root);
   fillFolds(root, fromPath);
   fillMentions(root, repo);
@@ -3463,7 +3474,8 @@ const blobUrls = new Map();
 function blobUrl(repo, sha, path = "") {
   const key = `${repo.id}:${sha}`;
   // GitHub sends the bytes untyped; browsers guess PNG or JPEG, but draw an SVG (or show a PDF) only when it says it is one.
-  const type = /\.svg$/i.test(path) ? "image/svg+xml" : /\.pdf$/i.test(path) ? "application/pdf" : "";
+  // Audio and video need their type too, or some browsers won't play them.
+  const type = /\.svg$/i.test(path) ? "image/svg+xml" : /\.pdf$/i.test(path) ? "application/pdf" : mediaType(path);
   const typed = (b) => (type ? new Blob([b], { type }) : b);
   if (!blobUrls.has(key)) {
     blobUrls.set(key, gh.readBlob(repo, sha).then((b) => URL.createObjectURL(typed(b)), (e) => { blobUrls.delete(key); throw e; }));
@@ -3493,9 +3505,98 @@ function fillImages(root, repo, fromPath) {
     try { rel = decodeURIComponent(src); } catch { rel = src; }
     const dir = fromPath.slice(0, fromPath.lastIndexOf("/") + 1);
     const path = tree.index.has(dir + rel) ? tree.index.resolve(dir + rel) : tree.index.resolve(rel, fromPath);
+    // ![](Attachments/lesson.mp3): a player, as for ![[lesson.mp3]].
+    if (isMediaPath(rel)) { img.replaceWith(mediaPlayer(repo, path, mediaKind(rel), img.alt || rel)); continue; }
     img.removeAttribute("src");
     show(img, path, img.parentElement);
   }
+}
+
+// ---- audio and video: ![[lesson.mp3]] and ![[clip.mp4]] ----
+
+const SPEEDS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2];
+const SKIP_SECONDS = 5;
+
+/** Puts a player where each audio or video embed is. */
+function fillMedia(root, repo) {
+  for (const el of root.querySelectorAll(".embed-media")) {
+    if (el.firstChild) continue;
+    el.append(mediaPlayer(repo, el.dataset.path, el.dataset.kind, el.dataset.alt));
+  }
+}
+
+/**
+ * A small player for an audio or video file in the vault: the browser's own controls (play, pause, the time bar,
+ * the volume), and what helps when learning from a recording: 5 seconds back or on, the speed (remembered on this
+ * device) and Repeat. The file is fetched with the token, like an image, when the player comes into view. If the
+ * browser can't play it (a codec it lacks), a line says so and Download stays.
+ */
+function mediaPlayer(repo, path, kind, label) {
+  label ||= baseName(path || "");
+  const sha = path && app.trees.get(repo.id)?.files.get(path);
+  const box = h("span", { class: `player player-${kind}`, role: "group", "aria-label": `${kind === "video" ? "Video" : "Audio"}: ${label}` });
+  if (!sha) {
+    box.classList.add("missing");
+    box.append(`Missing ${kind}: ${label}`);
+    return box;
+  }
+  const media = h(kind, { controls: true, preload: "metadata", playsinline: kind === "video", title: label });
+  const note = h("span", { class: "player-note", role: "status" });
+  const setRate = (rate) => { media.defaultPlaybackRate = rate; media.playbackRate = rate; };
+  const speed = Number(store.get("mediaSpeed", 1));
+  const speedPick = h("select", { class: "player-speed", title: "Speed", "aria-label": "Speed" },
+    SPEEDS.map((s) => h("option", { value: String(s), selected: s === speed }, `${s}×`)));
+  speedPick.addEventListener("change", () => {
+    const rate = Number(speedPick.value) || 1;
+    setRate(rate);
+    store.set("mediaSpeed", rate);
+  });
+  media.addEventListener("loadedmetadata", () => setRate(Number(speedPick.value) || 1));
+  media.addEventListener("error", () => {
+    if (!media.getAttribute("src")) return;
+    note.textContent = "This browser can't play this file. Download it to play it in another app.";
+  });
+  // One recording at a time: starting one pauses the others on the page.
+  media.addEventListener("play", () => {
+    for (const other of document.querySelectorAll(".player audio, .player video")) if (other !== media) other.pause();
+  });
+  const skip = (by) => {
+    if (!Number.isFinite(media.duration)) return;
+    media.currentTime = Math.min(Math.max(0, media.currentTime + by), media.duration);
+  };
+  const button = (text, title, onclick, extra = {}) =>
+    h("button", { type: "button", class: "btn small player-btn", title, "aria-label": title, onclick, ...extra }, text);
+  const repeat = button("Repeat", "Repeat: play it again and again", () => {
+    media.loop = !media.loop;
+    repeat.setAttribute("aria-pressed", String(media.loop));
+    repeat.classList.toggle("on", media.loop);
+  }, { "aria-pressed": "false" });
+  const download = h("a", { class: "btn small player-btn", download: baseName(path), "aria-disabled": "true",
+    title: `Download ${label}`, "aria-label": `Download ${label}` }, icon("download"));
+  const tools = h("span", { class: "player-tools" },
+    button(`−${SKIP_SECONDS} s`, `Back ${SKIP_SECONDS} seconds`, () => skip(-SKIP_SECONDS)),
+    button(`+${SKIP_SECONDS} s`, `On ${SKIP_SECONDS} seconds`, () => skip(SKIP_SECONDS)),
+    speedPick, repeat, download, h("span", { class: "player-name" }, label));
+  box.append(media, tools, note);
+  let loading = false;
+  const load = () => {
+    if (loading) return;
+    loading = true;
+    blobUrl(repo, sha, path).then((url) => {
+      media.src = url;
+      download.href = url;
+      download.removeAttribute("aria-disabled");
+    }, (e) => { note.textContent = `Couldn't load ${label}: ${e.message}`; });
+  };
+  if ("IntersectionObserver" in window) {
+    const watch = new IntersectionObserver((seen) => {
+      if (seen.some((entry) => entry.isIntersecting)) { watch.disconnect(); load(); }
+    }, { rootMargin: "300px" });
+    watch.observe(box);
+    // A keyboard user can reach it before it scrolls into view.
+    box.addEventListener("focusin", () => { watch.disconnect(); load(); }, { once: true });
+  } else load();
+  return box;
 }
 
 // ---- embedded pages: ![[Page]] and ![[Page#Heading]] ----
@@ -5896,7 +5997,7 @@ function start() {
   $("#save-btn").addEventListener("click", save);
   $("#insert-btn").addEventListener("click", () => { if (app.file) openInsertMenu(app.file); });
   const imageInput = $("#image-input");
-  imageInput.accept = IMAGE_ACCEPT;
+  imageInput.accept = `${IMAGE_ACCEPT},${MEDIA_ACCEPT}`;
   $("#image-btn").addEventListener("click", () => imageInput.click());
   imageInput.addEventListener("change", () => {
     const file = imageInput.files[0];

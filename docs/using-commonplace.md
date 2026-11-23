@@ -82,7 +82,7 @@ Each block's options, with examples: the [block reference](blocks.md).
 - **Markdown:**
   - Read and Edit modes. On a wide screen, Edit shows the preview beside the editor (CodeMirror 6).
   - `[[Wikilinks]]` work, with headings and aliases. A bare name finds the page in any folder.
-  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add image** in the top bar on a phone.
+  - `![[image.png]]` embeds show, and so do callouts and the front matter as properties. In **Edit**, paste or drop an image, or use **Add media** in the top bar on a phone. `![[lesson.mp3]]` or `![[clip.mp4]]` shows a small player for audio or video kept in Attachments: play and pause, 5 seconds back and on, the speed and Repeat.
   - `@login` mentions a person (typing `@` offers everyone with an inbox).
   - `![[Page]]` and `![[Page#Heading]]` show that page, or that heading's section, inside the note.
   - Checkboxes can be ticked in Read mode.

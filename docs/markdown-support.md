@@ -8,8 +8,8 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 
 - `[[wikilinks]]`, with `#Heading` and `|alias`, found by bare name in any folder
 - plain Markdown links to other files in the repo, `[Add a vault](How%20To/Add%20a%20vault.md)`, relative to the note (or from the top with `/`), as GitHub reads them
-- embeds: `![[image.png]]` (with `|width`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
-- In **Edit**, paste or drop an image or press **Add image** in the top bar to choose one. The image has its own commit on GitHub, or is saved in a local vault. The editor inserts its embed at the cursor. **Save** keeps the link in the note. Images up to 10 MiB are accepted. See [Write and link notes](../example-vault/How%20To/Write%20and%20link%20notes.md#add-an-image).
+- embeds: `![[image.png]]` (with `|width`), `![[lesson.mp3]]` and `![[clip.mp4]]` (a small player, with `|name`), `![[Page]]`, `![[Page#Heading]]`, `![[X.base]]`
+- In **Edit**, paste or drop an image or press **Add media** in the top bar to choose one. The image has its own commit on GitHub, or is saved in a local vault. The editor inserts its embed at the cursor. **Save** keeps the link in the note. Images up to 10 MiB are accepted. See [Write and link notes](../example-vault/How%20To/Write%20and%20link%20notes.md#add-an-image).
 - In **Edit**, **Insert** lists common Markdown and every app block with a read-mode preview, and adds the chosen one at the cursor. See [Write and link notes](../example-vault/How%20To/Write%20and%20link%20notes.md#insert-markdown-or-a-block).
 - ` ```base ` blocks: a base view written in the page
 - a task's ` ```subtasks `, ` ```relations ` and ` ```commits ` blocks on any page, with `task:` and the task's ID, name or link

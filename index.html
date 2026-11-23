@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; media-src 'self' blob:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src blob:">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1b1b1f" media="(prefers-color-scheme: dark)">
@@ -51,8 +51,8 @@
       <div id="title" class="title"></div>
       <div id="edit-tools" class="edit-tools" hidden role="group" aria-label="Add to the note">
         <button id="insert-btn" class="btn ghost" data-icon="plus" title="Insert Markdown or an app block at the cursor" aria-haspopup="dialog"><span class="label">Insert</span></button>
-        <button id="image-btn" class="btn ghost" title="Add an image at the cursor"><span class="label">Add image</span></button>
-        <input id="image-input" type="file" hidden aria-label="Choose an image">
+        <button id="image-btn" class="btn ghost" title="Add an image, audio or video at the cursor"><span class="label">Add media</span></button>
+        <input id="image-input" type="file" hidden aria-label="Choose an image, audio or video">
       </div>
       <div class="bar-actions">
         <button id="inbox-btn" class="btn ghost" data-icon="inbox" hidden title="Inbox"><span class="label">Inbox</span></button>

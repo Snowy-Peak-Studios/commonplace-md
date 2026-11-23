@@ -4,7 +4,7 @@
 // `.mermaid-diagram`, `.top-tasks-block`, `.app-block`) for the app to fill.
 
 import { MarkdownIt } from "../vendor/vendor.js";
-import { parseWikilink, isImagePath, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, RATING_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS, reviewLists } from "./vault.js";
+import { parseWikilink, isImagePath, mediaKind, prepareForPreview, TASK_BLOCKS, SPRINT_BLOCKS, ASSET_BLOCKS, RATING_BLOCKS, taskOrder, MENTION, newTasksBlock, NOTE_SECTIONS, fenceLanguage, commentHeader, PAGE_LIST_BLOCKS, reviewLists } from "./vault.js";
 
 /** The blocks the app draws a box in, besides ```top-tasks and ```mermaid: each box shows only where its block is. */
 export const APP_BLOCKS = [...TASK_BLOCKS, ...SPRINT_BLOCKS, ...ASSET_BLOCKS, ...RATING_BLOCKS];
@@ -156,6 +156,13 @@ export function createMarkdown() {
       if (!path) return `<span class="embed-note missing">Missing image: ${esc(link.target)}</span>`;
       const width = /^(\d+)(?:x\d+)?$/.exec(link.alias || "")?.[1] || "";
       return `<span class="embed-img" data-path="${esc(path)}" data-width="${width}" data-alt="${esc(link.target)}"></span>`;
+    }
+    if (mediaKind(link.target)) {
+      // Audio or video: the app puts a small player there (`fillMedia`), with the file fetched like an image.
+      const path = env.resolve(link.target);
+      const kind = mediaKind(link.target);
+      if (!path) return `<span class="embed-note missing">Missing ${kind}: ${esc(link.target)}</span>`;
+      return `<span class="embed-media" data-path="${esc(path)}" data-kind="${kind}" data-alt="${esc(link.alias || link.target)}"></span>`;
     }
     if (/\.base$/i.test(link.target)) {
       // A base: the app fills the placeholder with its table. Inside an embedded page it stays a link.

@@ -663,7 +663,8 @@ export const nameFromZip = (fileName) => String(fileName || "").replace(/\.zip$/
 export const EXAMPLE_FILES = [
   ".agents/skills/public-check/SKILL.md", ".agents/skills/sort-inbox/SKILL.md", ".agents/skills/start-task/SKILL.md",
   ".agents/skills/wrap-up-task/SKILL.md", ".claude/skills/public-check/SKILL.md", ".claude/skills/sort-inbox/SKILL.md",
-  ".claude/skills/start-task/SKILL.md", ".claude/skills/wrap-up-task/SKILL.md", "AGENTS.md", "Attachments/An example PDF.pdf",
+  ".claude/skills/start-task/SKILL.md", ".claude/skills/wrap-up-task/SKILL.md", "AGENTS.md", "Attachments/A short chime.mp3",
+  "Attachments/A test pattern.mp4", "Attachments/An example PDF.pdf",
   "Attachments/commonplace.svg", "Bases/Sprints.base", "Bases/Tasks.base", "CLAUDE.md", "Data/Pantry.tsv",
   "Data/Reading list.csv", "Data/settings.json", "Data/word_count.py", "Guide.md", "Home.md", "How To/Add a vault.md",
   "How To/Connect to GitHub.md", "How To/How To.md", "How To/Invite someone.md", "How To/Markdown and blocks.md",

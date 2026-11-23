@@ -15,6 +15,30 @@ const IMAGE_TYPES = new Map([
 export const IMAGE_ACCEPT = [...IMAGE_TYPES.keys(), ...[...IMAGE_TYPES.values(), "jpeg"].map((ext) => "." + ext)].join(",");
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+// Audio and video the app plays inside a note. GitHub sends a file's bytes untyped, so the name gives the type.
+const MEDIA_TYPES = new Map([
+  ["mp3", "audio/mpeg"], ["m4a", "audio/mp4"], ["aac", "audio/aac"], ["wav", "audio/wav"], ["ogg", "audio/ogg"],
+  ["oga", "audio/ogg"], ["opus", "audio/ogg"], ["flac", "audio/flac"], ["weba", "audio/webm"],
+  ["mp4", "video/mp4"], ["m4v", "video/mp4"], ["webm", "video/webm"], ["ogv", "video/ogg"], ["mov", "video/quicktime"],
+]);
+// A file picked or dropped without a name ending: its type gives one.
+const MEDIA_EXTENSIONS = new Map([
+  ["audio/mpeg", "mp3"], ["audio/mp3", "mp3"], ["audio/mp4", "m4a"], ["audio/x-m4a", "m4a"], ["audio/aac", "aac"],
+  ["audio/wav", "wav"], ["audio/x-wav", "wav"], ["audio/wave", "wav"], ["audio/ogg", "ogg"], ["audio/flac", "flac"],
+  ["audio/x-flac", "flac"], ["audio/webm", "weba"], ["video/mp4", "mp4"], ["video/webm", "webm"], ["video/ogg", "ogv"],
+  ["video/quicktime", "mov"],
+]);
+const extensionOf = (path) => (/\.([a-z0-9]+)$/i.exec(path)?.[1] || "").toLowerCase();
+/** The MIME type of an audio or video file by its name (`audio/mpeg`), or "" for any other file. */
+export const mediaType = (path) => MEDIA_TYPES.get(extensionOf(path)) || "";
+/** "audio", "video" or "". */
+export const mediaKind = (path) => mediaType(path).split("/")[0];
+export const isMediaPath = (path) => !!mediaType(path);
+/** A picked, pasted or dropped File the app can keep as audio or video. */
+export const isMediaFile = (file) => isMediaPath(file.name || "") || MEDIA_EXTENSIONS.has(file.type);
+export const MEDIA_ACCEPT = ["audio/*", "video/*", ...[...MEDIA_TYPES.keys()].map((ext) => "." + ext)].join(",");
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
 /** Pick a safe, vault-wide unique basename so the inserted wikilink resolves from any note. */
 export function imageAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
   const extension = IMAGE_TYPES.get(file.type) ?? ((!file.type || file.type === "application/octet-stream")
@@ -22,18 +46,35 @@ export function imageAttachment(file, notePath, settings, paths, now = new Date(
   if (!extension) throw new Error("Choose a PNG, JPEG, GIF, WebP, SVG, BMP or AVIF image.");
   if (!file.size) throw new Error("This image is empty.");
   if (file.size > MAX_IMAGE_BYTES) throw new Error("This image is over 10 MiB. Resize it before adding it.");
+  const { name, path } = attachmentName(file.name, extension, "image", notePath, settings, paths, now, key);
+  return { name, path, link: `![[${name}]]` };
+}
+
+/** An audio or video file, named like an image and embedded the same way: `![[name.mp3]]` shows a player. */
+export function mediaAttachment(file, notePath, settings, paths, now = new Date(), key = crypto.randomUUID()) {
+  const extension = isMediaPath(file.name) ? extensionOf(file.name) : MEDIA_EXTENSIONS.get(file.type) || "";
+  if (!extension) throw new Error("Choose an audio or video file: MP3, M4A, WAV, OGG, FLAC, MP4, WebM or MOV.");
+  if (!file.size) throw new Error("This file is empty.");
+  if (file.size > MAX_MEDIA_BYTES) throw new Error("This file is over 25 MiB. Choose a shorter or smaller recording.");
+  const { name, path } = attachmentName(file.name, extension, "media", notePath, settings, paths, now, key);
+  return { name, path, link: `![[${name}]]` };
+}
+
+/** A safe name in the Attachments folder (or the note's), unique in the whole vault. */
+function attachmentName(fileName, extension, fallback, notePath, settings, paths, now, key) {
   const directory = markerDir(settings) || notePath.split("/").slice(0, -1).join("/");
   if (directory && directory.split("/").some((part) => !part || part.startsWith(".") || part.includes("\\") || /[<>:"|?*\x00-\x1f]/.test(part)
     || /[. ]$/.test(part))) throw new Error("Choose a valid Attachments folder in Settings.");
-  const dot = file.name.lastIndexOf(".");
-  const stem = (dot > 0 ? file.name.slice(0, dot) : file.name).normalize("NFKD").replace(/[^A-Za-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "").slice(0, 60) || "image";
+  const dot = fileName.lastIndexOf(".");
+  // Accents are dropped (Hören: Horen), not turned into dashes.
+  const stem = (dot > 0 ? fileName.slice(0, dot) : fileName).normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60) || fallback;
   const date = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
   const base = `${stem}-${date}-${key.slice(0, 8)}`;
   const used = new Set([...paths].map((path) => path.split("/").at(-1).toLowerCase()));
   let name = `${base}.${extension}`;
   for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base}-${n}.${extension}`;
-  return { name, path: directory ? `${directory}/${name}` : name, link: `![[${name}]]` };
+  return { name, path: directory ? `${directory}/${name}` : name };
 }
 
 /** A capture accepts images and other files, with a stable vault-wide name that survives moving its item. */
@@ -41,6 +82,7 @@ export function captureAttachment(file, notePath, settings, paths, now = new Dat
   if (IMAGE_TYPES.has(file.type) || ((!file.type || file.type === "application/octet-stream") && isImagePath(file.name))) {
     return imageAttachment(file, notePath, settings, paths, now, key);
   }
+  if (isMediaFile(file) && file.size <= MAX_MEDIA_BYTES) return mediaAttachment(file, notePath, settings, paths, now, key);
   if (!file.size) throw new Error("This file is empty.");
   if (file.size > MAX_IMAGE_BYTES) throw new Error("This file is over 10 MiB. Choose a smaller file.");
   const extension = /\.([a-z0-9]{1,16})$/i.exec(file.name)?.[1].toLowerCase() || "bin";
