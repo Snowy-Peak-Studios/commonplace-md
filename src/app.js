@@ -9,7 +9,7 @@ import {
   inboxCandidates, ownInboxPath, isTaskPath, MARKER, parseMarker, mergeMarker, reposToCheck, repoKey,
   CUSTOM_KINDS, ESTIMATE_UNITS, taskSetup, taskSetupJson, taskSetupProblem, isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer, suggestTasks, claimedTasks, waitingTasks, WAITING, waitingDays, waitingReady, taskState, claimTask, setProps, taskAreas, PRIORITIES, listProp, parentTarget,
   pageListDepth, tocTree, subpagesOf,
-  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
+  fieldProp, linkTarget, subtasksOf, parentProblem, findTask, sprints, sprintChoices, nextSprint, sprintTasks, sprintTime, sprintCapacity, sprintBacklogPlan, githubFileUrl, assetList, assetOptions, taskAssets, occupiedAssets, assetConflicts,
   sprintSuggestions, taskCommitLinks, linkList, relationFields, taskRelations, blockedTasks,
   hasBlock, withBlocks, SPRINT_BLOCKS, relativeLink, LOCAL_ONLY, localOnlyLinks, linkCandidates, localOnlyFrom, questionTasks, taskAnswer, findMentions, vaultPeople, vaultAgents, newTasksBlock, newTaskItems, replaceNewTasks, editNewTask, addComment, commentReply,
   blockContents, SEEN_MENTIONS, sortMentions, withSeenMentions, pickSprint, NOTE_SECTIONS, fenceLanguage, withTaskLayout, boardColumns, assigneeOptions, foldName, assignmentTasks, reviewTasks, taskReview, sortAssignments, withSeenAssignments, SEEN_ASSIGNMENTS, ASSIGNMENT_ID, SEEN_RESOLVED, shownSeen, resolveAllSeen, keptResolved,
@@ -1961,7 +1961,7 @@ function sprintBox(f, setup, path = null, opts = {}) {
   const owner = opts.owner || opts.login ? { name: opts.owner ?? "", login: opts.login ?? "" } : null;
   const s = sprintTasks(tasks, me.path, { setup, resolve: (t, from) => tree.index.resolve(t, from), owner });
   const start = !progressOnly && !away && canWrite(f.repo) && list[0]?.path === f.path
-    ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open) }, icon("plus"), "Start the next sprint") : null;
+    ? h("button", { class: "btn small", onclick: () => startNextSprint(f, setup, me, s.open, tasks, all) }, icon("plus"), "Start the next sprint") : null;
   const dates = me.start ? `${shortDay(me.start)} – ${shortDay(me.end, true) || "?"}` : "No dates yet: set start and end";
   const count = (x) => `${x.done} of ${x.total} task${x.total === 1 ? "" : "s"} done`
     + (x.points ? ` · ${x.points.done} of ${amount(x.points.total, x.points.unit)}` : "");
@@ -2005,17 +2005,26 @@ function sprintBox(f, setup, path = null, opts = {}) {
  * Makes the sprint after this one (its name counted on, its dates from the setup's length) and moves the
  * unfinished tasks the person keeps ticked into it: all in one commit.
  */
-async function startNextSprint(f, setup, current, open) {
+async function startNextSprint(f, setup, current, open, tasks, sprintList) {
   const { repo } = f;
   const field = sprintField(setup);
   const tree = await loadTree(repo);
   const plan = nextSprint(current, field.length_days, isoDate());
+  const resolve = (target, from) => tree.index.resolve(target, from);
+  const sprintProp = fieldProp(setup, "sprint"), statusProp = fieldProp(setup, "status");
+  const estimateProp = fieldProp(setup, "estimate"), assigneeProp = fieldProp(setup, "assignee");
+  const capacity = sprintCapacity(sprintList, tasks, { today: isoDate(), sprintProp, statusProp, estimateProp, resolve, setup });
+  const carried = open.map((t) => tasks.find((n) => n.path === t.path)).filter(Boolean);
+  const backlog = sprintBacklogPlan(tasks, { capacity, sprintProp, statusProp, assigneeProp, estimateProp,
+    typeProp: fieldProp(setup, "type"), priorityProp: fieldProp(setup, "priority"), setup, carried });
   const name = h("input", { class: "input", value: plan.name, autocomplete: "off" });
   const start = h("input", { class: "input", type: "date", value: plan.start });
   const end = h("input", { class: "input", type: "date", value: plan.end });
   const goal = h("input", { class: "input", autocomplete: "off", placeholder: "What should this sprint get done?" });
   const hint = h("small", {});
-  const boxes = open.map((t) => h("input", { type: "checkbox", checked: true, value: t.path }));
+  const boxes = [...open.map((t) => ({ ...t, recommended: true, carried: true })), ...backlog]
+    .map((t) => h("input", { type: "checkbox", checked: t.recommended, value: t.path }));
+  const total = h("small", { class: "muted" });
   let createBtn;
   const pathOf = () => `${field.folder}/${name.value.trim()}.md`;
   const problem = () => {
@@ -2034,16 +2043,38 @@ async function startNextSprint(f, setup, current, open) {
     if (createBtn) createBtn.disabled = !!p;
   };
   for (const el of [name, start, end]) el.addEventListener("input", update);
+  const selectedTasks = () => boxes.map((box, i) => box.checked ? (i < open.length ? carried[i] : backlog[i - open.length]) : null).filter(Boolean);
+  const pickedSize = (task) => capacity && capacity.unit !== "tasks" && String(task.props[estimateProp] ?? "").trim() && Number.isFinite(Number(task.props[estimateProp]))
+    ? Number(task.props[estimateProp]) : 1;
+  const updateTotal = () => {
+    const selected = selectedTasks();
+    const size = selected.reduce((sum, task) => sum + pickedSize(task), 0);
+    total.textContent = capacity && capacity.unit !== "tasks"
+      ? `Selected: ${amount(Number(size.toFixed(1)), capacity.unit)} across ${selected.length} task${selected.length === 1 ? "" : "s"}`
+      : `Selected: ${selected.length} task${selected.length === 1 ? "" : "s"}`;
+  };
+  boxes.forEach((box) => box.addEventListener("change", updateTotal));
+  const historyText = capacity
+    ? `About ${amount(Number(capacity.average.toFixed(1)), capacity.unit)}: the last ${capacity.samples.length} finished sprint${capacity.samples.length === 1 ? "" : "s"} did ${capacity.samples.map((x) => amount(x.value, capacity.unit)).join(", ")}.`
+    : "No finished sprints to learn from yet, so no backlog tasks are suggested.";
   const body = [
     h("label", { class: "field" }, h("span", {}, "Name"), name),
     h("div", { class: "sprint-dates" }, h("label", { class: "field" }, h("span", {}, "Start"), start), h("label", { class: "field" }, h("span", {}, "End"), end)),
     h("label", { class: "field" }, h("span", {}, "Goal"), goal),
     h("div", { class: "field" }, hint),
+    h("div", { class: "field sprint-plan" }, h("p", { class: "muted" }, historyText), total),
   ];
   if (open.length) {
     body.push(h("div", { class: "field" }, h("span", {}, `Move the unfinished tasks from ${current.name}`),
-      h("div", { class: "sprint-move" }, open.map((t, i) => h("label", { class: "check-line" }, boxes[i],
+        h("div", { class: "sprint-move" }, open.map((t, i) => h("label", { class: "check-line" }, boxes[i],
         t.id ? h("span", { class: "st-id" }, t.id) : null, shownName(t.path), t.status ? h("span", { class: "muted" }, ` · ${t.status}`) : null)))));
+  }
+  if (backlog.length) {
+    body.push(h("div", { class: "field" }, h("span", {}, "Free backlog tasks"),
+      h("div", { class: "sprint-move" }, backlog.map((t, i) => h("label", { class: "check-line" }, boxes[open.length + i],
+        t.props.id ? h("span", { class: "st-id" }, String(t.props.id)) : null, shownName(t.path),
+        t.props.priority ? h("span", { class: "muted" }, ` · ${t.props.priority}`) : null,
+        capacity && capacity.unit !== "tasks" ? h("span", { class: "muted" }, ` · ${pickedSize(t)} ${capacity.unit}`) : null)))));
   }
   const created = await modal({
     title: "Start the next sprint",
@@ -2084,7 +2115,7 @@ async function startNextSprint(f, setup, current, open) {
         }
       } },
     ],
-    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); name.focus(); },
+    onOpen: ({ buttons }) => { createBtn = buttons[1]; update(); updateTotal(); name.focus(); },
   });
   if (!created) return;
   location.hash = hrefFor(repo, created);

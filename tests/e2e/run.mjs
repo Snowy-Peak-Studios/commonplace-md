@@ -1341,9 +1341,16 @@ const startDialog = await page.evaluate(() => ({
   name: document.querySelector("dialog[open] input").value,
   dates: [...document.querySelectorAll('dialog[open] input[type="date"]')].map((d) => d.value),
   move: [...document.querySelectorAll('dialog[open] input[type="checkbox"]')].map((b) => b.checked && b.value),
+  capacity: document.querySelector("dialog[open] .sprint-plan")?.innerText,
 }));
 check(startDialog.name === "Sprint 3" && startDialog.dates[0] >= "2026-11-30" && startDialog.move.join() === "Tasks/Add a reading list.md",
   "it suggests Sprint 3 after Sprint 2, with Sprint 2's unfinished task ticked: " + JSON.stringify(startDialog));
+check(startDialog.capacity.includes("About 2 points") && startDialog.capacity.includes("Selected: 2 points across 1 task"),
+  "the dialog explains past capacity and shows the selected total: " + startDialog.capacity);
+await page.evaluate(() => document.querySelector('dialog[open] input[type="checkbox"]').click());
+check(await until(() => document.querySelector("dialog[open] .sprint-plan")?.innerText.includes("Selected: 0 points across 0 tasks")),
+  "changing a task checkmark updates the selected total");
+await page.evaluate(() => document.querySelector('dialog[open] input[type="checkbox"]').click());
 await shot("8g-start-sprint");
 const putsBeforeSprint = puts.length;
 await page.evaluate(() => [...document.querySelectorAll("dialog[open] button")].find((b) => b.textContent.trim() === "Start sprint").click());

@@ -19,7 +19,9 @@ A sprint's page shows its box where the note has a ` ```sprint ` block: its date
 
 ## Start the next one
 
-On the latest sprint, press **Start the next sprint**. It makes the next sprint note (its dates follow from the sprint length) and moves the unfinished tasks you keep ticked into it, all in one commit.
+On the latest sprint, press **Start the next sprint**. The dialog starts with the unfinished tasks ticked, then uses up to the three most recent ended sprints to estimate how much work fits. It uses the estimate unit when every completed task has an estimate; otherwise it uses task counts. Free backlog tasks are sorted by priority, then oldest, and preselected while they fit the remaining average. Tasks with no estimate count as one unit when the history uses estimates. You can change any checkmark and see the selected total update. With no ended sprints, no backlog tasks start ticked and the dialog explains why.
+
+Change the name, dates, goal or task selections, then press **Start sprint**. The new sprint note and every selected task move are saved in one commit.
 
 ## In your inbox
 

@@ -6,7 +6,7 @@ import {
   TASK_FIELDS, taskSetup, taskSetupJson, taskSetupProblem, isFieldProp, mergeMarker,
   isSetupTask, withProps, linkName, fieldValue, newTaskProps, withReviewer,
   fieldProp, linkTarget, isDoneStatus, subtasksOf, parentProblem, findTask,
-  isoDay, addDays, sprintTime, githubFileUrl, sprints, sprintChoices, nextSprint, sprintTasks, sprintSuggestions, taskCommitLinks,
+  isoDay, addDays, sprintTime, githubFileUrl, sprints, sprintChoices, nextSprint, sprintCapacity, sprintBacklogPlan, sprintTasks, sprintSuggestions, taskCommitLinks,
   linkList, relationFields, taskRelations, blockedTasks, setProps, suggestTasks,
   pageListDepth, tocTree, subpagesOf,
   hasBlock, withBlocks, withTaskLayout, addComment, commentReply, blockContents, TASK_BLOCKS, SPRINT_BLOCKS, taskOrder, relativeLink, boardColumns, assigneeOptions, assigneeMatches, assignmentTasks, reviewTasks, sortAssignments, withSeenAssignments,
@@ -572,6 +572,67 @@ test("the next sprint counts on, starts after the last ends (or today), and last
   assert.deepEqual(nextSprint(last, 7, "2027-01-05"), { name: "Sprint 4", start: "2027-01-05", end: "2027-01-11" });
   assert.deepEqual(nextSprint({ name: "Autumn", end: "" }, 14, "2026-11-14"), { name: "Autumn 2", start: "2026-11-14", end: "2026-11-27" });
   assert.equal(nextSprint(null, 14, "2026-11-14").name, "Sprint 1");
+});
+
+test("sprint capacity averages completed work from the three latest ended sprints", () => {
+  const sprintNotes = [
+    { path: "Sprints/Sprint 1.md", props: { start: "2026-01-01", end: "2026-01-14" } },
+    { path: "Sprints/Sprint 2.md", props: { start: "2026-01-15", end: "2026-01-28" } },
+    { path: "Sprints/Sprint 3.md", props: { start: "2026-01-29", end: "2026-02-11" } },
+    { path: "Sprints/Sprint 4.md", props: { start: "2026-02-12", end: "2026-02-25" } },
+    { path: "Sprints/Sprint 5.md", props: { start: "2026-03-15", end: "2026-03-28" } },
+  ];
+  const tasks = [
+    { path: "Tasks/Old.md", props: { sprint: "[[Sprint 1]]", status: "Done", estimate: 99 } },
+    { path: "Tasks/Two.md", props: { sprint: "[[Sprint 2]]", status: "Done", estimate: 10 } },
+    { path: "Tasks/Three.md", props: { sprint: "[[Sprint 3]]", status: "Done", estimate: 12 } },
+    { path: "Tasks/Four.md", props: { sprint: "[[Sprint 4]]", status: "Done", estimate: 14 } },
+    { path: "Tasks/Cancelled.md", props: { sprint: "[[Sprint 4]]", status: "Cancelled", estimate: 90 } },
+    { path: "Tasks/Still open.md", props: { sprint: "[[Sprint 4]]", status: "To Do", estimate: 80 } },
+  ];
+  const resolve = (target) => `Sprints/${target}.md`;
+  assert.deepEqual(sprintCapacity(sprintNotes, tasks, { today: "2026-03-15", resolve }), {
+    unit: "points", average: 12,
+    samples: [{ name: "Sprint 4", value: 14 }, { name: "Sprint 3", value: 12 }, { name: "Sprint 2", value: 10 }],
+  });
+  assert.equal(sprintCapacity(sprintNotes, tasks, { today: "2026-01-10", resolve }), null, "no ended sprint yet");
+});
+
+test("sprint capacity falls back to task counts when completed tasks lack estimates", () => {
+  const sprintNotes = [
+    { path: "Sprints/Sprint 1.md", props: { start: "2026-01-01", end: "2026-01-07" } },
+    { path: "Sprints/Sprint 2.md", props: { start: "2026-01-08", end: "2026-01-14" } },
+  ];
+  const tasks = [
+    { path: "Tasks/A.md", props: { sprint: "[[Sprint 1]]", status: "Done", estimate: 5 } },
+    { path: "Tasks/B.md", props: { sprint: "[[Sprint 2]]", status: "Done" } },
+    { path: "Tasks/C.md", props: { sprint: "[[Sprint 2]]", status: "Done" } },
+  ];
+  assert.deepEqual(sprintCapacity(sprintNotes, tasks, { today: "2026-01-16", resolve: (target) => `Sprints/${target}.md` }), {
+    unit: "tasks", average: 1.5,
+    samples: [{ name: "Sprint 2", value: 2 }, { name: "Sprint 1", value: 1 }],
+  });
+});
+
+test("the sprint planner picks free backlog tasks by priority then age within remaining capacity", () => {
+  const capacity = { unit: "points", average: 5 };
+  const carried = [{ path: "Tasks/Carry.md", props: { estimate: 2 } }];
+  const tasks = [
+    { path: "Tasks/High.md", props: { id: "C-1", priority: "High", estimate: 4 } },
+    { path: "Tasks/Medium old.md", props: { id: "C-2", priority: "Medium", estimate: 2 } },
+    { path: "Tasks/Medium newer.md", props: { id: "C-3", priority: "Medium", estimate: 1 } },
+    { path: "Tasks/Low.md", props: { id: "C-4", priority: "Low", estimate: 1 } },
+    { path: "Tasks/Assigned.md", props: { assignee: "Ann" } },
+    { path: "Tasks/Blocked.md", props: { status: "Blocked" } },
+    { path: "Tasks/Waiting.md", props: { status: "Waiting" } },
+    { path: "Tasks/Done.md", props: { status: "Done" } },
+    { path: "Tasks/Epic.md", props: { type: "Epic" } },
+    { path: "Tasks/Already planned.md", props: { sprint: "[[Sprint 9]]" } },
+  ];
+  assert.deepEqual(sprintBacklogPlan(tasks, { capacity, carried }).map(({ path, recommended }) => [path, recommended]), [
+    ["Tasks/High.md", false], ["Tasks/Medium old.md", true], ["Tasks/Medium newer.md", true], ["Tasks/Low.md", false],
+  ]);
+  assert.ok(sprintBacklogPlan(tasks, { capacity: null, carried }).every((task) => !task.recommended), "no history preselects nothing");
 });
 
 test("a sprint's tasks by status in the setup's order, with how many are done and how many points", () => {

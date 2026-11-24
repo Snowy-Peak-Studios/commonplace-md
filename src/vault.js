@@ -1767,6 +1767,53 @@ export function nextSprint(last, days, today) {
 }
 
 /**
+ * The average completed work in the three most recent ended sprints, or fewer when that's all the vault has.
+ * Estimates are used only when every completed task in those sprints has one; otherwise the unit is tasks.
+ */
+export function sprintCapacity(sprintNotes, tasks, { today, sprintProp = "sprint", statusProp = "status", estimateProp = "estimate", resolve, setup = null } = {}) {
+  const past = sprints(sprintNotes, today).filter((s) => s.end && s.end < today)
+    .sort((a, b) => b.end.localeCompare(a.end) || b.start.localeCompare(a.start) || a.path.localeCompare(b.path)).slice(0, 3);
+  const finalStatus = String(setup?.fields.find((f) => f.key === "status")?.values?.at(-1) ?? "Done").toLowerCase();
+  const doneBySprint = past.map((s) => ({ sprint: s, tasks: tasks.filter((n) => {
+    const target = linkTarget(n.props[sprintProp]);
+    const done = String(n.props[statusProp] ?? "").trim().toLowerCase();
+    return target && resolve(target, n.path) === s.path && done === finalStatus;
+  }) }));
+  const completed = doneBySprint.flatMap((x) => x.tasks);
+  const hasEstimates = completed.length > 0 && completed.every((n) => !blank(n.props[estimateProp]) && Number.isFinite(Number(n.props[estimateProp])));
+  const unit = hasEstimates ? (setup?.fields.find((f) => f.key === "estimate")?.unit || "points") : "tasks";
+  const value = (n) => hasEstimates ? Number(n.props[estimateProp]) : 1;
+  const samples = doneBySprint.map(({ sprint, tasks: done }) => ({ name: sprint.name, value: done.reduce((sum, n) => sum + value(n), 0) }));
+  return samples.length ? { unit, samples, average: samples.reduce((sum, x) => sum + x.value, 0) / samples.length } : null;
+}
+
+/** The free, oldest-first backlog tasks to offer for a sprint, with the capacity-fit suggestions preselected. */
+export function sprintBacklogPlan(tasks, { capacity = null, sprintProp = "sprint", statusProp = "status", assigneeProp = "assignee", typeProp = "type", priorityProp = "priority", estimateProp = "estimate", setup = null, carried = [] } = {}) {
+  const configured = setup?.fields.find((f) => f.key === "priority")?.values?.map((v) => String(v).toLowerCase());
+  const rankOf = (n) => {
+    const priority = String(n.props[priorityProp] ?? "").trim().toLowerCase();
+    return configured?.length ? (configured.indexOf(priority) < 0 ? configured.length : configured.indexOf(priority))
+      : rank({ props: { priority } });
+  };
+  const candidates = tasks.filter((n) => blank(n.props[sprintProp]) && blank(n.props[assigneeProp])
+    && !NOT_FREE.test(String(n.props[statusProp] ?? "").trim()) && !isDoneStatus(n.props[statusProp], setup)
+    && String(n.props[typeProp] ?? "").trim().toLowerCase() !== "epic")
+    .sort((a, b) => {
+      return rankOf(a) - rankOf(b) || idNum(a) - idNum(b) || a.path.localeCompare(b.path);
+    });
+  if (!capacity) return candidates.map((note) => ({ ...note, recommended: false }));
+  const cost = (n) => capacity.unit !== "tasks" && !blank(n.props[estimateProp]) && Number.isFinite(Number(n.props[estimateProp]))
+    ? Number(n.props[estimateProp]) : 1;
+  let used = carried.reduce((sum, n) => sum + cost(n), 0);
+  return candidates.map((note) => {
+    const size = cost(note);
+    const recommended = used + size <= capacity.average;
+    if (recommended) used += size;
+    return { ...note, recommended, planCost: size };
+  });
+}
+
+/**
  * The top tasks to start when sprints are in use, from [{ path, props }]: the free tasks (as `suggestTasks`
  * picks them) whose sprint property (`prop`) links to the current sprint's note (`now`, a path); when it has
  * none left, a few from the next sprint's (`next`), each with `nextSprint: true`. Null when there's neither
