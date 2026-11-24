@@ -655,7 +655,7 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
 .preview .fold-count { margin-left: 0.25em; font-size: 0.72em; font-weight: 500; white-space: nowrap; }
 .preview :is(h1, h2, h3, h4, h5, h6).has-fold { scroll-margin-top: 1rem; }
 .preview .heading-fold-hidden { display: none !important; }
-.preview :is(.note-section, .board-block, .task-board, .top-tasks-block, .newtasks, .attention-block, .attention, .inbox-overview-block, .ai-time-block, .ai-time-chart, .occupied-block, .occupied, .assets, .local-only-block, .page-list-block, .page-list, .base-block, .app-block, .subtasks, .sprint-box, .note-rating, .mermaid-diagram, .callout, pre, .base-view).folded > :not(.fold-part) { display: none !important; }
+.preview :is(.note-section, .board-block, .task-board, .top-tasks-block, .newtasks, .attention-block, .attention, .inbox-overview-block, .ai-time-block, .ai-time-chart, .occupied-block, .occupied, .assets, .local-only-block, .page-list-block, .page-list, .base-block, .app-block, .subtasks, .sprint-box, .note-rating, .mermaid-diagram, .callout, pre, .base-view).folded > :not(.fold-part):not(summary) { display: none !important; }
 .preview :is(h1, h2, h3, h4, h5, h6).folded > :not(.fold-part) { display: none; }
 .preview .has-fold > .fold-part { flex: none; }
 .preview :is(h1, h2, h3, h4, h5, h6) > .fold-part { font-size: 0.7em; vertical-align: middle; }

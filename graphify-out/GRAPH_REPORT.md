@@ -1,7 +1,7 @@
 # Graph Report - NotesApp  (2026-11-24)
 
 ## Corpus Check
-- 57 files · ~149,653 words
+- 57 files · ~149,685 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: (none) 5, .css 2, .base 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `62f9b80f`
+- Built from commit: `5f053858`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

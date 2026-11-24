@@ -1413,6 +1413,10 @@ await page.evaluate(() => document.querySelectorAll(".note-body .task-board, .no
   const button = block.querySelector(":scope > .fold-part");
   if (button?.getAttribute("aria-expanded") === "false") button.click();
 }));
+check(await page.evaluate(() => {
+  const base = document.querySelectorAll(".note-body .base-view")[1];
+  return !!base && !base.classList.contains("folded") && [...base.querySelectorAll("table")].some((table) => table.getClientRects().length > 0);
+}), "the filled sprint base table is visible again when its block unfolds");
 
 // 10a. The inbox's ```new-tasks block: a box with its items; Add puts one in the block, and Save would commit it.
 await page.goto(at("Notes/Inbox.md"), { waitUntil: "networkidle0" });
