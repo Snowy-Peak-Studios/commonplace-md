@@ -647,8 +647,18 @@ a.btn[aria-disabled] { opacity: 0.5; pointer-events: none; }
 }
 .preview .fold:hover { color: var(--accent); background: var(--bg-soft); }
 .preview .fold .icon { width: 0.95em; height: 0.95em; transform: rotate(90deg); transition: transform 0.15s; }
+@media (max-width: 700px) { .preview .fold { min-width: 28px; min-height: 28px; } }
 .preview li.folded > .fold .icon, .preview li.folded > p > .fold .icon { transform: none; }
 .preview li.folded > .fold, .preview li.folded > p > .fold { color: var(--accent); }
+.preview .fold-part { width: auto; height: auto; min-width: 28px; min-height: 28px; margin: 0 0.15em 0 0; padding: 0 0.25em; gap: 0.15em; }
+.preview .has-fold.folded > .fold-part .icon { transform: none; }
+.preview .fold-count { margin-left: 0.25em; font-size: 0.72em; font-weight: 500; white-space: nowrap; }
+.preview :is(h1, h2, h3, h4, h5, h6).has-fold { scroll-margin-top: 1rem; }
+.preview .heading-fold-hidden { display: none !important; }
+.preview :is(.note-section, .board-block, .task-board, .top-tasks-block, .newtasks, .attention-block, .attention, .inbox-overview-block, .ai-time-block, .ai-time-chart, .occupied-block, .occupied, .assets, .local-only-block, .page-list-block, .page-list, .base-block, .app-block, .subtasks, .sprint-box, .note-rating, .mermaid-diagram, .callout, pre, .base-view).folded > :not(.fold-part) { display: none !important; }
+.preview :is(h1, h2, h3, h4, h5, h6).folded > :not(.fold-part) { display: none; }
+.preview .has-fold > .fold-part { flex: none; }
+.preview :is(h1, h2, h3, h4, h5, h6) > .fold-part { font-size: 0.7em; vertical-align: middle; }
 .preview ul > li.has-fold:not(.task-item) { list-style: none; }
 .preview ul > li.has-fold:not(.task-item) > .fold, .preview ul > li.has-fold:not(.task-item) > p > .fold {
   position: absolute;

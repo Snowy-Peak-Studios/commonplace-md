@@ -4,7 +4,7 @@ parent: "[[Home]]"
 
 # Task Board
 
-Every task is a note in `Tasks/` with properties (`id`, `status`, `priority`, `area`, `assignee`, `requested_by`). The table below is [[Tasks.base]]: its views are tabs.
+Every task is a note in `Tasks/` with properties (`id`, `status`, `priority`, `area`, `assignee`, `requested_by`). The table below is [[Tasks.base]]: its views are tabs. In Read mode, fold any heading or block with its arrow; the folded board, sprint and occupied-assets sections stay on this device.
 
 Which fields a task has is set up per project: **[Set up task fields](#/settings?fields)** to turn on a type, a parent task, a sprint, an estimate or a due date, or to add fields of your own. The setup is kept in the repo, so everyone shares it. How it works: [[Set up tasks]].
 

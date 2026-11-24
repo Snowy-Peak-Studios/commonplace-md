@@ -1298,6 +1298,7 @@ function renderPreview() {
     assets: isTask && ((d, el) => assetsBox(f, d.empty ? "" : el.querySelector("code")?.textContent ?? "", setup)),
     rating: () => ratingRow(f),
   }, setup && ((kind, d) => kind === "sprint" ? otherSprintBox(f, setup, d.sprint, d) : otherTaskBox(f, setup, kind, d.task, isTask ? props : null)));
+  fillFolds(body, f.repo, f.path);
   const aiEstimate = isTask ? aiEstimateField(f, setup) : null;
   fill(f.dom.preview, form, aiEstimate, frontMatter ? propertiesBox(frontMatter, env, inForm, f.repo) : "", body);
   commentFocus?.focus();
@@ -3397,7 +3398,6 @@ function decorate(root, repo, fromPath) {
   fillImages(root, repo, fromPath);
   fillMedia(root, repo);
   fillDiagrams(root);
-  fillFolds(root, fromPath);
   fillMentions(root, repo);
 }
 
@@ -3414,10 +3414,17 @@ function fillLinks(root, repo, fromPath) {
   }
 }
 
-// ---- folding a list's subpoints ----
+// ---- folding headings, blocks and list subpoints ----
 
-/** The folded list items of the open note, by `listItemKey`: kept while it's open, so a redraw keeps them; never saved. */
-const foldsOf = (f) => (f.folds ||= new Set());
+/** Fold state stays on this device, scoped to a repo and note. */
+function foldsOf(repo, path) {
+  const saved = store.get(`folds:${repo.id}:${path}`, []);
+  return new Set(Array.isArray(saved) ? saved.filter((x) => typeof x === "string") : []);
+}
+
+function saveFolds(repo, path, folds) {
+  store.set(`folds:${repo.id}:${path}`, [...folds]);
+}
 
 /** A list item's own text (without its subpoints) and the page it's from: what a fold is remembered by, so typing above it doesn't move it. */
 function listItemKey(li, fromPath) {
@@ -3431,12 +3438,81 @@ function listItemKey(li, fromPath) {
  * the view: the note's text stays as it is. A bullet's arrow takes the bullet's place; a numbered or task
  * item's sits at the start of its line.
  */
-function fillFolds(root, fromPath) {
-  const f = app.file;
+function fillFolds(root, repo, fromPath) {
+  const folds = foldsOf(repo, fromPath);
+  const headings = [...root.querySelectorAll("h1, h2, h3, h4, h5, h6")];
+  const headingCounts = new Map();
+  const headingRows = headings.map((heading) => {
+    const level = Number(heading.tagName.slice(1));
+    const text = heading.dataset.heading || heading.textContent.trim();
+    const name = `${level}:${text}`;
+    const occurrence = headingCounts.get(name) || 0;
+    headingCounts.set(name, occurrence + 1);
+    const hidden = [];
+    for (let node = heading.nextElementSibling; node && !( /^H[1-6]$/.test(node.tagName) && Number(node.tagName.slice(1)) <= level); node = node.nextElementSibling) hidden.push(node);
+    return { heading, level, text, key: `heading:${name}:${occurrence}`, hidden };
+  });
+  const blockSelector = ".note-section, .board-block, .task-board, .top-tasks-block, .newtasks, .attention-block, .attention, .inbox-overview-block, .ai-time-block, .ai-time-chart, .occupied-block, .occupied, .assets, .local-only-block, .page-list-block, .page-list, .base-block, .app-block, .subtasks, .sprint-box, .note-rating, .mermaid-diagram, .callout, pre, .base-view";
+  const blocks = [...root.querySelectorAll(blockSelector)].filter((el) => !el.parentElement.closest(blockSelector));
+  const blockCounts = new Map();
+  const blockRows = blocks.map((block) => {
+    const type = [...block.classList].sort().join(".") || block.tagName.toLowerCase();
+    const occurrence = blockCounts.get(type) || 0;
+    blockCounts.set(type, occurrence + 1);
+    return { block, key: `block:${type}:${occurrence}` };
+  });
+  const buttonFor = (key, label, count, apply) => {
+    const badge = h("span", { class: "fold-count", "aria-hidden": "true" });
+    const button = h("button", { type: "button", class: "fold fold-part" }, icon("chevron"), badge);
+    const show = (folded) => {
+      button.setAttribute("aria-expanded", String(!folded));
+      button.setAttribute("aria-label", folded ? `Show ${label} (${count} ${count === 1 ? "item" : "items"} hidden)` : `Fold ${label} (${count} ${count === 1 ? "item" : "items"})`);
+      button.title = button.getAttribute("aria-label");
+      badge.textContent = folded ? `${count} hidden` : "";
+      apply(folded);
+    };
+    button.showFoldState = show;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      const folded = !folds.has(key);
+      if (folded) folds.add(key); else folds.delete(key);
+      saveFolds(repo, fromPath, folds);
+      show(folded);
+      refreshHidden();
+    });
+    show(folds.has(key));
+    return button;
+  };
+  for (const row of headingRows) {
+    row.heading.classList.add("has-fold");
+    row.heading.prepend(buttonFor(row.key, `section ${row.text}`, row.hidden.length, (folded) => row.heading.classList.toggle("folded", folded)));
+  }
+  for (const row of blockRows) {
+    if (row.block.tagName === "DETAILS" && !folds.has(row.key) && !folds.has(`open:${row.key}`) && !row.block.open) folds.add(row.key);
+    const count = [...row.block.children].length;
+    row.block.classList.add("has-fold");
+    const button = buttonFor(row.key, "block", count, (folded) => {
+      row.block.classList.toggle("folded", folded);
+      if (row.block.tagName === "DETAILS") row.block.open = !folded;
+    });
+    if (row.block.tagName === "DETAILS" && row.block.querySelector(":scope > summary")) row.block.querySelector(":scope > summary").after(button);
+    else row.block.prepend(button);
+    if (row.block.tagName === "DETAILS") {
+      button.showFoldState(folds.has(row.key));
+      row.block.addEventListener("toggle", () => {
+        const folded = !row.block.open;
+        if (folded) { folds.add(row.key); folds.delete(`open:${row.key}`); }
+        else { folds.delete(row.key); folds.add(`open:${row.key}`); }
+        row.block.classList.toggle("folded", folded);
+        saveFolds(repo, fromPath, folds);
+        button.showFoldState(folded);
+        refreshHidden();
+      });
+    }
+  }
   for (const li of root.querySelectorAll("li")) {
     if (![...li.children].some((c) => c.tagName === "UL" || c.tagName === "OL") || li.querySelector(":scope > .fold, :scope > p > .fold")) continue;
     const key = listItemKey(li, fromPath);
-    const folds = f ? foldsOf(f) : new Set();
     const button = h("button", { type: "button", class: "fold" }, icon("chevron"));
     const show = (folded) => {
       li.classList.toggle("folded", folded);
@@ -3448,6 +3524,7 @@ function fillFolds(root, fromPath) {
       e.preventDefault();
       const folded = !li.classList.contains("folded");
       if (folded) folds.add(key); else folds.delete(key);
+      saveFolds(repo, fromPath, folds);
       show(folded);
     });
     li.classList.add("has-fold");
@@ -3459,6 +3536,11 @@ function fillFolds(root, fromPath) {
     if (box?.nextSibling?.nodeType === Node.TEXT_NODE) box.nextSibling.textContent = box.nextSibling.textContent.replace(/^\s+/, "");
     if (box) box.after(button); else line.prepend(button);
   }
+  function refreshHidden() {
+    root.querySelectorAll(".heading-fold-hidden").forEach((el) => el.classList.remove("heading-fold-hidden"));
+    for (const row of headingRows) if (folds.has(row.key)) row.hidden.forEach((el) => el.classList.add("heading-fold-hidden"));
+  }
+  refreshHidden();
 }
 
 // ---- Mermaid diagrams: ```mermaid blocks ----

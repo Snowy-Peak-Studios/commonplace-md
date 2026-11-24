@@ -24,7 +24,8 @@ The notes are plain Markdown files, so the same folder opens in any Markdown edi
 - ` ```new-tasks ` blocks: ideas to turn into tasks, on any page
 - ` ```needs-attention ` blocks: the questions waiting for someone and the places that mention them
 - checkboxes, ticked in Read mode
-- lists whose subpoints fold away in Read mode
+- lists whose subpoints fold away in Read mode, with the folded state saved per note on this device
+- headings fold the following section, and each fenced block folds by itself. The folded state stays on this device for each note; PDF export includes folded content.
 - `%% comments %%`, hidden in the preview
 - note templates with `{{title}}` and `{{date}}`
 

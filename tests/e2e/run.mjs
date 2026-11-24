@@ -1377,6 +1377,42 @@ const currentShown = await page.evaluate(() => {
   return { tab: v.querySelector('.base-tab[aria-selected="true"]')?.textContent, count: parseInt(v.querySelector(".base-count").textContent, 10) };
 });
 check(currentShown.tab === "Current sprint" && currentShown.count === currentView.count, "its Current sprint view shows the sprint going on today: " + JSON.stringify(currentShown));
+const foldedBoard = await page.evaluate(() => {
+  const heading = [...document.querySelectorAll(".note-body h2")].find((el) => el.textContent.includes("Current goals"));
+  const base = document.querySelectorAll(".note-body .base-view")[1];
+  heading?.querySelector(":scope > .fold-part")?.click();
+  base?.querySelector(":scope > .fold-part")?.click();
+  const savedKey = Object.keys(localStorage).find((key) => key.includes(":folds:") && key.endsWith(":Task Board.md"));
+  return { heading: heading?.classList.contains("folded"), base: base?.classList.contains("folded"), saved: JSON.parse(localStorage.getItem(savedKey) || "[]").length };
+});
+check(foldedBoard.heading && foldedBoard.base && foldedBoard.saved >= 2, "Task Board headings and a filled base fold independently and save per-page state");
+await page.reload({ waitUntil: "networkidle0" });
+check(await until(() => {
+  const heading = [...document.querySelectorAll(".note-body h2")].find((el) => el.textContent.includes("Current goals"));
+  const base = document.querySelectorAll(".note-body .base-view")[1];
+  return heading?.classList.contains("folded") && base?.classList.contains("folded");
+}, 20000), "folds return after reopening the same page");
+await page.evaluate(() => {
+  const heading = [...document.querySelectorAll(".note-body h2")].find((el) => el.textContent.includes("Current goals"));
+  heading?.querySelector(":scope > .fold-part")?.click();
+  document.querySelectorAll(".note-body .base-view")[1]?.querySelector(":scope > .fold-part")?.click();
+});
+await page.focus(".note-body h2 .fold-part");
+await page.keyboard.press("Enter");
+check(await page.$eval('.note-body h2 .fold-part', (button) => button.getAttribute("aria-expanded") === "false"), "fold buttons toggle from the keyboard");
+await page.keyboard.press("Enter");
+const taskBoardBlocks = await page.evaluate(() => {
+  const blocks = [...document.querySelectorAll(".note-body .task-board, .note-body .sprint-box, .note-body .base-view, .note-body .occupied, .note-body .ai-time-chart")];
+  blocks.forEach((block) => block.querySelector(":scope > .fold-part")?.click());
+  return { count: blocks.length, folded: blocks.every((block) => block.classList.contains("folded")), buttons: blocks.filter((block) => !block.querySelector(":scope > .fold-part")).length };
+});
+check(taskBoardBlocks.count >= 4 && taskBoardBlocks.folded && !taskBoardBlocks.buttons, "sprint, board, bases, history and occupied blocks each have an independent fold button");
+await page.reload({ waitUntil: "networkidle0" });
+check(await until(() => [...document.querySelectorAll(".note-body .task-board, .note-body .sprint-box, .note-body .base-view, .note-body .occupied, .note-body .ai-time-chart")].every((block) => block.classList.contains("folded")), 20000), "each Task Board block fold stays saved on this device");
+await page.evaluate(() => document.querySelectorAll(".note-body .task-board, .note-body .sprint-box, .note-body .base-view, .note-body .occupied, .note-body .ai-time-chart").forEach((block) => {
+  const button = block.querySelector(":scope > .fold-part");
+  if (button?.getAttribute("aria-expanded") === "false") button.click();
+}));
 
 // 10a. The inbox's ```new-tasks block: a box with its items; Add puts one in the block, and Save would commit it.
 await page.goto(at("Notes/Inbox.md"), { waitUntil: "networkidle0" });

@@ -31,6 +31,7 @@ export function createPrintView(preview, title) {
   root.querySelectorAll("img").forEach(image => { image.loading = "eager"; });
   root.querySelectorAll("details").forEach(el => { el.open = true; });
   root.querySelectorAll(".folded").forEach(el => el.classList.remove("folded"));
+  root.querySelectorAll(".heading-fold-hidden").forEach(el => el.classList.remove("heading-fold-hidden"));
   root.querySelectorAll("form, button, textarea, .cm-editor, .newtasks-tools, .board-edit").forEach(el => el.remove());
   root.querySelectorAll("input, select").forEach(el => {
     if (el.type === "checkbox") {

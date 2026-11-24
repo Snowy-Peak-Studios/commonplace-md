@@ -11,7 +11,7 @@ page.on("pageerror",e=>errors.push(e.message));await page.setBypassServiceWorker
 await page.setRequestInterception(true);page.on("request",r=>{if(r.url().startsWith(BASE)||r.url().startsWith("blob:")||r.url().startsWith("data:"))return r.continue();requests.push(r.url());return r.abort();});
 await page.evaluateOnNewDocument(()=>{window.__prints=0;window.print=()=>{window.__prints++;};});
 const docs={
- "Print.md":"# Print sample\n\n> [!tip] Keep this callout\n> Its content stays visible on paper.\n\n<details><summary>Closed section</summary>\n\nFOLDED DETAIL CONTENT\n\n</details>\n\n- Parent item\n  - FOLDED LIST CONTENT\n\n```mermaid\nflowchart LR\n  A[Write] --> B[Share]\n```\n\n![[Embedded]]\n\n![[mark.svg]]\n\n| Item | Amount |\n| --- | --- |\n"+Array.from({length:65},(_,i)=>`| Row ${i+1} | ${i+1} |`).join("\n")+"\n\nEND OF PRINT SAMPLE\n",
+ "Print.md":"# Print sample\n\n## Folded heading\n\nFOLDED HEADING CONTENT\n\n```text\nFOLDED BLOCK CONTENT\n```\n\n> [!tip] Keep this callout\n> Its content stays visible on paper.\n\n<details><summary>Closed section</summary>\n\nFOLDED DETAIL CONTENT\n\n</details>\n\n- Parent item\n  - FOLDED LIST CONTENT\n\n```mermaid\nflowchart LR\n  A[Write] --> B[Share]\n```\n\n![[Embedded]]\n\n![[mark.svg]]\n\n| Item | Amount |\n| --- | --- |\n"+Array.from({length:65},(_,i)=>`| Row ${i+1} | ${i+1} |`).join("\n")+"\n\nEND OF PRINT SAMPLE\n",
  "Embedded.md":"# Embedded note\n\nEMBEDDED CONTENT\n",
  "mark.svg":'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="45"><rect width="120" height="45" fill="#ddd"/><text x="10" y="28" fill="#111">Example image</text></svg>',
  "Tasks/Example.md":"---\nstatus: In Progress\npriority: High\nassignee: Example Reader\narea: Setup\n---\n# Example task\n\n```description\nA task to print.\n```\n\n```acceptance-criteria\n- [x] Completed check\n- [ ] Remaining check\n```\n\n```comments\nA saved comment.\n```\n\n```work-history\nSAVED HISTORY CONTENT\n```\n",
@@ -24,13 +24,21 @@ try{
  await page.setViewport({width:1280,height:900});await page.goto(BASE,{waitUntil:'networkidle0'});
  await page.evaluate(async docs=>{const {LocalSource}=await import('./src/local.js');localStorage.clear();const repo={id:'print-local',label:'Print example',local:'browser',home:'Print.md',notes:'Tasks',folder:'',owner:'',repo:'',branch:''};const source=new LocalSource();await source.create(repo,{seed:Object.entries(docs).map(([path,text])=>({path,bytes:new TextEncoder().encode(text)}))});localStorage.setItem('commonplace:repos',JSON.stringify([repo]));localStorage.setItem('commonplace:discovery',JSON.stringify({at:Date.now()}));},docs);
  for(const [width,scheme] of [[1280,'light'],[1280,'dark'],[390,'light'],[390,'dark']]){
-  await page.setViewport({width,height:900});await page.emulateMediaFeatures([{name:'prefers-color-scheme',value:scheme}]);await page.emulateMediaType('screen');
+  await page.setViewport({width,height:900});await page.emulateMediaType('screen');await page.emulateMediaFeatures([{name:'prefers-color-scheme',value:scheme}]);
   await go('Print.md');await page.waitForSelector('.mermaid-diagram.drawn');
+  await page.evaluate(()=>localStorage.removeItem('commonplace:folds:print-local:Print.md'));await page.reload({waitUntil:'networkidle0'});await page.waitForSelector('.mermaid-diagram.drawn');
+  assert.equal(await page.evaluate(()=>matchMedia('(prefers-color-scheme: dark)').matches),scheme==='dark','screen uses the requested colour scheme');
   if(width<700)await page.evaluate(()=>document.getElementById('side-close')?.click());
+  await page.focus('.note-body h2 .fold-part');await page.keyboard.press('Enter');assert(await page.$eval('.note-body h2',e=>e.classList.contains('folded')),'heading folds with Enter');await page.keyboard.press('Enter');
+  await page.$eval('.note-body pre .fold-part',e=>e.click());assert(await page.$eval('.note-body pre',e=>e.classList.contains('folded')),'fenced block folds independently');
+  await page.reload({waitUntil:'networkidle0'});await page.waitForSelector('.mermaid-diagram.drawn');assert(await page.$eval('.note-body pre',e=>e.classList.contains('folded')),'block fold stays after reopening the page');
+  await page.$eval('.note-body pre .fold-part',e=>e.click());assert.equal(await page.$eval('.note-body pre',e=>e.classList.contains('folded')),false);
   await page.$eval('.note-body li.has-fold > .fold',e=>e.click());
+  await page.$$eval('.note-body .fold-part',buttons=>{buttons.find(b=>b.getAttribute('aria-label').startsWith('Fold block'))?.click();buttons.find(b=>b.getAttribute('aria-label').startsWith('Fold section Folded heading'))?.click();});
+  await page.screenshot({path:`${OUT}/folds-${width}-${scheme}.png`,fullPage:true});
   await exportPage();
   const snapshot=await page.$eval('#print-note',e=>({details:[...e.querySelectorAll('details')].every(d=>d.open),folded:e.querySelectorAll('.folded').length,buttons:e.querySelectorAll('button,form').length,text:e.textContent,diagram:!!e.querySelector('.mermaid-diagram svg'),image:e.querySelector('img')?.complete}));
-  assert(snapshot.details&&snapshot.folded===0&&snapshot.buttons===0&&snapshot.diagram&&snapshot.image,JSON.stringify({...snapshot,text:undefined}));assert(snapshot.text.includes('EMBEDDED CONTENT'));assert(snapshot.text.includes('END OF PRINT SAMPLE'));
+  assert(snapshot.details&&snapshot.folded===0&&snapshot.buttons===0&&snapshot.diagram&&snapshot.image,JSON.stringify({...snapshot,text:undefined}));assert(snapshot.text.includes('EMBEDDED CONTENT'));assert(snapshot.text.includes('FOLDED HEADING CONTENT'));assert(snapshot.text.includes('FOLDED BLOCK CONTENT'));assert(snapshot.text.includes('END OF PRINT SAMPLE'));
   assert.equal(await page.$eval('.doc .note-body details',e=>e.open),false);assert(await page.$('.doc .note-body li.folded'));
   await page.emulateMediaType('print');
   assert.equal(await page.$eval('body',e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');assert.equal(await page.$eval('.bar',e=>e.getClientRects().length),0);

@@ -10,6 +10,7 @@
 - 🤖 **Your agents' rules and reports** live in the project, as notes you own.
 - ✅ **A task board** for you and your agent, or a whole team.
 - 🧩 **Built from blocks**: every feature that lives in a note (a task list, your inbox, stars, a sprint's progress) is a block you put where you want it. A note shows only the blocks you write in it ([below](#blocks-you-choose-what-a-note-shows)).
+- **Fold long notes as you read**: fold any heading's section or a block with its arrow. Your device remembers each note's folds; PDF export prints the full note.
 - 🛠️ **Yours to change**: the rules, skills, task fields and code. Choose the views a note shows through its blocks and properties ([block reference](blocks.md); [Markdown examples](markdown-and-blocks.md)).
 - 🆓 **Free, and only yours**: no account of ours, no payments. You need only GitHub and a token you make.
 

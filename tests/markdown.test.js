@@ -12,6 +12,14 @@ const env = {
 };
 const render = (text) => renderNote(md, text, env).html;
 
+test("headings and every fenced block render stable fold targets", () => {
+  const html = render("# Title\n\n## Section\n\n```sprint\nsprint: current\n```\n\n```text\nexample\n```");
+  assert.match(html, /<h1 data-heading="Title">Title<\/h1>/);
+  assert.match(html, /<h2 data-heading="Section">Section<\/h2>/);
+  assert.match(html, /class="app-block" data-block="sprint"/);
+  assert.match(html, /<pre><code class="language-text">example/);
+});
+
 test("wikilinks become links, and missing ones are marked", () => {
   const html = render("See [[Home]], [[Task Board#Goals|the goals]] and [[Nowhere]].");
   assert.match(html, /<a class="wikilink" href="#\/vault\/Home.md"[^>]*>Home<\/a>/);
