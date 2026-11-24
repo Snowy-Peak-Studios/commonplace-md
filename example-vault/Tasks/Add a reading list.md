@@ -42,3 +42,7 @@ As a reader, I want a list of books to read, so that I can pick the next one qui
 
 - [ ] Fill in [[Reading list.csv|the reading list]]
 - [ ] Mark the ones already read
+
+```comments
+- You can answer the question above under **Answer:**, or post a comment starting with `@your-agent` after configuring `github` and `agent_mention` in your inbox. The app keeps that posted reply with this question and shows it as answered until the agent follows up.
+```

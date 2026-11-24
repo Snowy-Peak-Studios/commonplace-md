@@ -785,6 +785,52 @@ test("the tasks with an open question, for their person: asked for, reviewing, o
   assert.equal(questionOf({}), "");
 });
 
+test("posted answers belong to the current question and configured person and agent", async () => {
+  const { taskAnswer, taskCommentAnswer, findMentions, setProps, mentionKey, sortAgentMentions } = await import("../src/vault.js");
+  const identity = { login: "ann-example", agent: "anns-agent" };
+  const original = '---\nid: X-1\nquestion: "Which format?"\nstatus: To Do\n---\n# Task\n\n## ❓ Question\n\n*(Agent, 2026-11-24)* Which format?\n\n**Answer:**\n\n```comments\n```\n';
+  const post = (src, message, login = identity.login) => {
+    const lines = src.split("\n"), start = lines.indexOf("```comments"), close = lines.indexOf("```", start + 1);
+    return addComment(src, start, close, message, login, new Date("2026-11-24T10:00:00Z"));
+  };
+  const answered = post(original, "@anns-agent Use Markdown.\nKeep the links.");
+  assert.match(answered, /<!-- question-id: /);
+  assert.equal(taskAnswer(answered, identity), "@anns-agent Use Markdown.\nKeep the links.");
+  assert.equal(taskCommentAnswer(answered, identity).author, "ann-example");
+  assert.equal(taskCommentAnswer(answered, identity).time, "2026-11-24 10:00 UTC");
+  assert.match(taskCommentAnswer(answered, identity).question, /Which format/);
+  assert.equal(taskAnswer(answered), "", "no configured identity means no comment answer");
+  assert.equal(taskAnswer(answered, { ...identity, agent: "other-agent" }), "");
+  assert.equal(taskAnswer(answered, { ...identity, login: "bob-example" }), "");
+  for (const message of ["An unrelated note about @anns-agent.", "`@anns-agent` Use text.", "```md\n@anns-agent Use text.\n```", "@anns-agent"]) {
+    assert.equal(taskAnswer(post(original, message), identity), "", message);
+  }
+  assert.equal(taskAnswer(post(original, "@anns-agent Use text.", "bob-example"), identity), "");
+  assert.equal(taskAnswer(post(original, "@anns-agent Use text.", ""), identity), "");
+  assert.equal(taskAnswer(answered.replace(/    <!-- answer-to: .* -->\n/, ""), identity), "", "older mentions without a question link are ignored");
+  assert.equal(taskAnswer(answered.replace('question: "Which format?"', 'question: "Which colour?"'), identity), "", "a different question invalidates the reply");
+  assert.equal(taskAnswer(answered.replace("Which format?\n\n**Answer", "Different prompt?\n\n**Answer"), identity), "");
+  assert.equal(taskAnswer(setProps(answered, [["question", ""]]), identity), "", "cleared questions cannot be answered");
+  const reasked = answered.replace(/## ❓ Question[\s\S]*?\*\*Answer:\*\*/, '## ❓ Question\n\n*(Agent, 2026-11-24)* Which format?\n\n**Answer:**');
+  assert.equal(taskAnswer(reasked, identity), "", "a recreated section does not inherit even the same question's old answer");
+  const fresh = post(reasked, "@anns-agent Use CSV this time.");
+  assert.equal(taskAnswer(fresh, identity), "@anns-agent Use CSV this time.");
+  const oldMention = { ...findMentions(answered).find((m) => m.login === identity.agent), path: "Tasks/Format.md" };
+  const repeated = post(reasked, "@anns-agent Use Markdown.\nKeep the links.");
+  const repeatedMentions = findMentions(repeated).filter((m) => m.login === identity.agent).map((m) => ({ ...m, path: oldMention.path }));
+  const handled = [mentionKey(oldMention.path, oldMention)];
+  assert.equal(sortAgentMentions(repeatedMentions, handled).open.length, 1, "the same reply to a later question still reaches the agent");
+  const nextKey = mentionKey(oldMention.path, repeatedMentions.at(-1));
+  assert.notEqual(nextKey, handled[0]);
+  assert.equal(sortAgentMentions(repeatedMentions, [...handled, nextKey]).open.length, 0, "repeated sorting after handling is quiet");
+  const latest = post(post(answered, "Unrelated follow-up."), "@anns-agent Use plain text instead.");
+  assert.equal(taskAnswer(latest, identity), "@anns-agent Use plain text instead.");
+  assert.equal(taskAnswer(latest, identity), taskAnswer(latest, identity), "repeated sorting is read-only");
+  assert.equal(taskAnswer(answered.replace("**Answer:**", "**Answer:** Use the Answer line."), identity), "Use the Answer line.");
+  const mention = post(original, "@ann-example Which one?", "bob-example");
+  assert.equal(findMentions(post(mention, "@bob-example This one.")).find((m) => m.login === "ann-example").answered, true, "question metadata does not hide a posted mention reply");
+});
+
 test("the answer written on a task: after its Answer line or heading, up to the next heading", async () => {
   const { taskAnswer } = await import("../src/vault.js");
   const task = (answer) => `---\nid: T-1\nquestion: "Books only?"\n---\n\n# Reading list\n\n## ❓ Question\n\n- **(a) Books only**\n\n${answer}\n## Acceptance criteria\n\n- [ ] Done\n`;

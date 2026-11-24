@@ -35,8 +35,11 @@ question: "${question}"
 \`\`\`acceptance-criteria
 - [ ] Decided with Ann
 \`\`\`
+
+\`\`\`comments
+\`\`\`
 `;
-const inbox = '---\nowner: Ann Example\n---\n\n# Inbox\n\n```needs-attention\nshow: questions, mentions\nowner: Ann Example\nlogin: ann-example\n```\n';
+const inbox = '---\nowner: Ann Example\ngithub: ann-example\nagent_mention: anns-agent\n---\n\n# Inbox\n\n```needs-attention\nshow: questions, mentions\nowner: Ann Example\nlogin: ann-example\n```\n';
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
 const page = await browser.newPage();
@@ -81,12 +84,14 @@ try {
   assert.equal(seen.state, 'Answered, waiting for the agent');
   console.log('PASS an answered question folds under "Answered, waiting for the agent" and is not counted as waiting');
 
-  // Ann answers the other one on its task: after saving and coming back, nothing waits on her any more.
+  // The same attributed insertion that Post uses binds Ann's reply to the open question.
   await page.evaluate(async () => {
     const { LocalSource } = await import('./src/local.js');
+    const { addComment } = await import('./src/vault.js');
     const src = new LocalSource(), repo = JSON.parse(localStorage.getItem('commonplace:repos'))[0];
     const { text, sha } = await src.readText(repo, 'Tasks/Open one.md');
-    await src.writeText(repo, 'Tasks/Open one.md', text.replace('**Answer:**', '**Answer:** The first way.'), sha);
+    const lines = text.split('\n'), start = lines.indexOf('```comments');
+    await src.writeText(repo, 'Tasks/Open one.md', addComment(text, start, start + 1, '@anns-agent The first way.', 'ann-example'), sha);
   });
   await page.reload({ waitUntil: 'networkidle0' });
   await ready();
@@ -112,6 +117,43 @@ try {
   seen = await box();
   assert.deepEqual(seen.answered, ['X-001 Open one']);
   console.log('PASS a question the agent cleared leaves the list');
+
+  await page.evaluate(async () => {
+    const { LocalSource } = await import('./src/local.js');
+    const src = new LocalSource(), repo = JSON.parse(localStorage.getItem('commonplace:repos'))[0];
+    const { text, sha } = await src.readText(repo, 'Tasks/Open one.md');
+    await src.writeText(repo, 'Tasks/Open one.md', text.replace(/^<!-- question-id: .* -->\n/m, ''), sha);
+  });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await ready();
+  seen = await box();
+  assert.deepEqual(seen.open, ['X-001 Open one']);
+  assert.deepEqual(seen.answered, []);
+  console.log('PASS a later question with identical wording does not inherit the older comment answer');
+
+  await page.evaluate(async () => {
+    const { LocalSource } = await import('./src/local.js');
+    const { addComment } = await import('./src/vault.js');
+    const src = new LocalSource(), repo = JSON.parse(localStorage.getItem('commonplace:repos'))[0];
+    const { text, sha } = await src.readText(repo, 'Tasks/Open one.md');
+    const lines = text.split('\n'), start = lines.indexOf('```comments'), close = lines.indexOf('```', start + 1);
+    await src.writeText(repo, 'Tasks/Open one.md', addComment(text, start, close, '@anns-agent The second way this time.', 'ann-example'), sha);
+  });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await ready();
+  assert.deepEqual((await box()).answered, ['X-001 Open one']);
+  console.log('PASS a fresh comment answers the later question');
+
+  await page.evaluate(() => { location.hash = '#/answers/Tasks/Open%20one.md'; });
+  await page.waitForFunction(() => document.querySelector('.note-body h1')?.textContent.includes('Open one'));
+  const visible = await page.$eval('.note-body', (e) => e.innerText);
+  assert.match(visible, /ann-example/);
+  assert.match(visible, /The second way this time/);
+  assert.doesNotMatch(visible, /answer-to:|question-id:/);
+  await page.screenshot({ path: `${OUT}/task-replies.png` });
+  await page.evaluate(() => { location.hash = '#/answers/Inbox.md'; });
+  await ready();
+  console.log('PASS the task preserves the attributed replies without showing association metadata');
 
   for (const [width, scheme] of [[1280, 'light'], [1280, 'dark'], [390, 'light'], [390, 'dark']]) {
     await page.setViewport({ width, height: 800 });

@@ -726,6 +726,14 @@ export function addComment(text, start, close, body, login, now = new Date()) {
   const content = message.split("\n").map((line) => line.trim() ? `${indent}    ${line}` : "");
   const entry = [`${indent}- **${author}** · ${time}`, "", ...content];
   if (close > start + 1 && lines[close - 1].trim()) entry.unshift("");
+  const pending = pendingQuestion(text);
+  if (pending) {
+    const id = pending.id || crypto.randomUUID();
+    entry.splice(entry.length - content.length, 0, `${indent}    <!-- answer-to: ${id} ${encodeURIComponent(pending.context)} -->`, "");
+    lines.splice(close, 0, ...entry);
+    if (!pending.id) lines.splice(pending.line + 1, 0, `<!-- question-id: ${id} -->`);
+    return lines.join("\n");
+  }
   lines.splice(close, 0, ...entry);
   return lines.join("\n");
 }
@@ -754,11 +762,11 @@ const seenList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]
 
 /**
  * A mention's key for the seen list: the note's path, `#`, and a short hash of the login and the line's words,
- * so a mention stays seen while its line stays the same, and shows again when the line is changed.
+ * so a mention stays seen while its line stays the same. Linked replies also include their question's identity.
  */
 export function mentionKey(path, m) {
   let h = 0x811c9dc5;
-  for (const ch of `${String(m.login).toLowerCase()}\n${m.text}`) {
+  for (const ch of `${String(m.login).toLowerCase()}\n${m.text}${m.questionId ? "\n" + m.questionId : ""}`) {
     h ^= ch.codePointAt(0);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
@@ -796,7 +804,7 @@ function nextCommentReply(prose, at) {
     const { text } = prose[i];
     if (!/^ {0,3}- /.test(text) || !commentHeader(text.trimStart().slice(2))) continue;
     let j = i + 1;
-    while (inComments(prose[j]) && !prose[j].text.trim()) j++;
+    while (inComments(prose[j]) && (!prose[j].text.trim() || /^\s*<!-- answer-to: .* -->\s*$/.test(prose[j].text))) j++;
     return inComments(prose[j]) ? REPLY.exec(prose[j].text) : null;
   }
   return null;
@@ -817,8 +825,11 @@ export function findMentions(text) {
   const lines = (fm ? src.slice(fm.length) : src).split("\n");
   const prose = [...proseLines(lines)];
   const out = [];
-  let heading = "";
+  let heading = "", questionId = "";
   for (const [at, { line, text: saidLine, section }] of prose.entries()) {
+    if (section !== "comments" || /^ {0,3}- /.test(saidLine) && commentHeader(saidLine.trimStart().slice(2))) questionId = "";
+    const association = section === "comments" && /^\s*<!-- answer-to: ([\w-]+ \S+) -->\s*$/.exec(saidLine);
+    if (association) questionId = association[1];
     const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(saidLine);
     if (h && !section) heading = h[1];
     const plain = saidLine.replace(/`[^`\n]*`/g, (s) => " ".repeat(s.length));
@@ -829,6 +840,7 @@ export function findMentions(text) {
       const said = saidLine.trim();
       const reply = REPLY.exec(lines[line + 1] ?? "") || (section === "comments" ? nextCommentReply(prose, at) : null);
       out.push({ login: m[2], line: skipped + line + 1, heading: section ? NOTE_SECTIONS[section] : heading,
+        ...(questionId ? { questionId } : {}),
         text: said.length > 160 ? said.slice(0, 157).trimEnd() + "..." : said,
         answered: !!reply && reply[1].toLowerCase() !== m[2].toLowerCase() });
     }
@@ -1035,9 +1047,13 @@ export function questionTasks(notes, owner = "", login = "") {
 /**
  * The answer written on a task: what follows its `**Answer:**` line (or an *Answer* heading), up to the next
  * heading, a `---` line or the acceptance criteria (a checkbox line, for a task with no heading over them),
- * trimmed; "" when nothing is written there yet, or there's no such line.
+ * trimmed. With a configured { login, agent }, a linked posted reply is the fallback; otherwise "".
  */
-export function taskAnswer(text) {
+export function taskAnswer(text, identity = {}) {
+  return writtenTaskAnswer(text) || taskCommentAnswer(text, identity)?.text || "";
+}
+
+function writtenTaskAnswer(text) {
   const src = toLf(text);
   const fm = splitFrontMatter(src);
   const original = (fm ? src.slice(fm.length) : src).split("\n");
@@ -1049,6 +1065,51 @@ export function taskAnswer(text) {
   const end = lines.slice(at + 1).find(({ text, boundary }) => boundary
     || /^#{1,6}\s|^\s*(?:-{3,}|\*{3,})\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(text));
   return [first, ...original.slice(lines[at].line + 1, end?.line)].join("\n").trim();
+}
+
+/** The current Question section, bound to both its prompt and its lifetime in the task. */
+function pendingQuestion(text) {
+  const src = toLf(text), fm = splitFrontMatter(src);
+  const question = fm && /^question:[ \t]*(.+)$/m.exec(fm.raw)?.[1]?.trim();
+  if (!question || /^(?:"\s*"|'\s*'|null|~)$/i.test(question)) return null;
+  const lines = src.split("\n"), prose = [...proseLines(lines)];
+  const at = prose.findIndex((p) => (!p.section || p.section === "description") && /^#{2,6}\s+(?:\S+\s+)?Question\s*$/i.test(p.text));
+  if (at < 0) return null;
+  const start = prose[at].line;
+  const end = prose.slice(at + 1).find((p) => p.boundary || /^#{1,6}\s|^\s*\*\*Answer:?\*\*:?/i.test(p.text))?.line ?? lines.length;
+  const prompt = lines.slice(start + 1, end);
+  const marker = /^<!-- question-id: ([\w-]+) -->$/;
+  const id = prompt.map((l) => marker.exec(l)?.[1]).find(Boolean) || "";
+  const context = question + "\n" + prompt.filter((l) => !marker.test(l)).join("\n").trim();
+  return { line: start, id, context };
+}
+
+/** Latest attributed reply to this question, from the configured person to their agent. */
+export function taskCommentAnswer(text, { login = "", agent = "" } = {}) {
+  if (!COMMENT_LOGIN.test(login) || !MENTION_NAME.test(agent)) return null;
+  const pending = pendingQuestion(text);
+  if (!pending?.id) return null;
+  const expected = `<!-- answer-to: ${pending.id} ${encodeURIComponent(pending.context)} -->`;
+  const prose = [...proseLines(toLf(text).split("\n"))];
+  let answer = null;
+  for (let i = 0; i < prose.length; i++) {
+    const p = prose[i];
+    const header = p.section === "comments" && /^ {0,3}- /.test(p.text) && commentHeader(p.text.trimStart().slice(2));
+    if (!header || header.login.toLowerCase() !== login.toLowerCase()) continue;
+    const body = [];
+    for (let j = i + 1; j < prose.length && prose[j].section === "comments" && !prose[j].boundary; j++) {
+      if (/^ {0,3}- /.test(prose[j].text) && commentHeader(prose[j].text.trimStart().slice(2))) break;
+      body.push(prose[j].text);
+    }
+    const linked = body.some((l) => l.trim() === expected);
+    const message = body.filter((l) => !/^\s*<!--.*-->\s*$/.test(l)).map((l) => l.replace(/^ {4}/, "")).join("\n").trim();
+    const directed = REPLY.exec(message);
+    if (linked && directed?.[1].toLowerCase() === agent.toLowerCase()
+      && message.slice(directed[0].length).trim()) {
+      answer = { author: header.login, time: header.time, question: pending.context, text: message };
+    }
+  }
+  return answer;
 }
 
 /** The areas the task notes use, from [{ path, props }]: each once (any case), sorted. */

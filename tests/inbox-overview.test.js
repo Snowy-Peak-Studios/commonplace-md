@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { overviewOptions, overviewPath, sourceKey, resolveOverviewSource, overviewSource, overviewBlock, overviewContents, writeOverviewNote, overviewCaptures, overviewRows, overviewEach, overviewOwnerProblem } from '../src/inbox-overview.js';
-import { taskSetup, assignmentTasks, findMentions, mentionKey } from '../src/vault.js';
+import { taskSetup, assignmentTasks, findMentions, mentionKey, addComment } from '../src/vault.js';
 import { noteProps } from '../src/bases.js';
 import { upgradeInboxOverview, migrateInboxOverview } from '../src/store.js';
 
@@ -10,6 +10,15 @@ const options = (sources=[source], extra={}) => ({context:'Personal',show:['revi
 const parse = o => overviewOptions(overviewContents(overviewBlock(o))[0]);
 const note = (path,text,sha='1') => ({path,text,sha,props:noteProps(text)});
 const task = (name,props,body='') => note('Work/'+name+'.md', '---\n'+Object.entries(props).map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join('\n')+'\n---\n'+body);
+
+test('overview recognizes the selected owner’s linked comment answer',()=>{
+ const n=task('Question',{id:'X-1',status:'To Do',requested_by:'Ana Lee',question:'Which one?'},'## Question\n\nWhich one?\n\n**Answer:**\n\n```comments\n```\n');
+ const lines=n.text.split('\n'),start=lines.indexOf('```comments');
+ const saved=addComment(n.text,start,start+1,'@anas-agent The first one.','ana-example');
+ const args={notes:[note(n.path,saved)],setup:taskSetup({fields:[],folder:'Work'}),source,options:{show:['questions']},inboxProps:{owner:'Ana Lee',github:'ana-example',agent_mention:'anas-agent'}};
+ assert.equal(overviewRows(args)[0].status,'Answered, waiting for the agent');
+ assert.equal(overviewRows({...args,inboxProps:{...args.inboxProps,agent_mention:'different-agent'}})[0].status,'Waiting for your answer');
+});
 
 test('overview defaults are explicit and an empty source list reads none',()=>{
  const o=overviewOptions('');assert.deepEqual(o.sources,[]);assert.equal(o.refresh,'manual');assert.equal(o.limit,50);assert(o.defaults.includes('show'));assert.deepEqual(o.reviewStatuses,['Testing']);

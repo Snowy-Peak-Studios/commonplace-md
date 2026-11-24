@@ -2309,7 +2309,10 @@ function loadQuestions(repo, who, login) {
     const load = baseNotes(repo, tree, [...tree.files.keys()].filter(isTaskPath)).then(async (notes) => {
       const tasks = questionTasks(notes, who, login);
       // Only the tasks with a question are read whole, to see whether an answer is written on them yet.
-      const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path)).catch(() => new Map());
+      const inboxes = await loadInboxNotes(repo);
+      const person = vaultPeople(inboxes).find((p) => foldName(p.name) === foldName(who) && (!login || p.login.toLowerCase() === login.toLowerCase()));
+      const agent = vaultAgents(inboxes).find((a) => a.path === person?.path)?.login || "";
+      const answers = await taskAnswers(repo, tree, tasks.map((t) => t.path), { login: person?.login || login, agent }).catch(() => new Map());
       return tasks.map((t) => ({ ...t, answer: answers.get(t.path) ?? "" }));
     });
     questionLoads.set(key, load);
@@ -3743,13 +3746,14 @@ async function taskStates(repo, tree, paths) {
 }
 
 /** The answer written on each task (`taskAnswer`), from its whole text: cached by blob sha, like `taskStates`. */
-async function taskAnswers(repo, tree, paths) {
-  const cache = baseCache("taskAnswer", repo);
+async function taskAnswers(repo, tree, paths, identity) {
+  const cacheName = `taskAnswer2:${identity.login}:${identity.agent}`;
+  const cache = baseCache(cacheName, repo);
   const missing = paths.filter((p) => !Object.hasOwn(cache, tree.files.get(p)));
   if (missing.length) {
-    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskAnswer(text);
+    for (const [p, text] of await readNotes(repo, tree, missing)) cache[tree.files.get(p)] = taskAnswer(text, identity);
     const live = new Set(tree.files.values());
-    keepBaseCache("taskAnswer", repo, (sha) => live.has(sha));
+    keepBaseCache(cacheName, repo, (sha) => live.has(sha));
   }
   return new Map(paths.map((p) => [p, cache[tree.files.get(p)] ?? ""]));
 }

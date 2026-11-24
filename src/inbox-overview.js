@@ -2,7 +2,7 @@
 import { yamlLoad } from "../vendor/vendor.js";
 import { reviewTasks, assignmentTasks, sortAssignments, findMentions, sortMentions, assigneeMatches,
   fieldProp, isSetupTask, isDoneStatus, taskAnswer, foldName, newTasksBlock, splitFrontMatter, toLf,
-  NOTE_SECTIONS, fenceLanguage, taskReview } from "./vault.js";
+  NOTE_SECTIONS, fenceLanguage, taskReview, vaultAgents } from "./vault.js";
 
 export const OVERVIEW_KINDS = ["reviews", "questions", "assignments", "mentions", "new-tasks"];
 const plain = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -169,7 +169,8 @@ export function overviewRows({ notes, setup, source, options, inboxProps = {} })
       return (Array.isArray(v) ? v : [v]).some((x) => assigneeMatches(x, identity));
     });
     const q = text(n.props.question);
-    if (q && matches && !isDoneStatus(n.props[fieldProp(setup, "status")], setup) && !reviewPaths.has(n.path)) add("questions", n.path, title(n), q, { status: taskAnswer(n.text) ? "Answered, waiting for the agent" : "Waiting for your answer" });
+    const agent = vaultAgents([{ path: source.inbox, props: inboxProps }])[0]?.login || "";
+    if (q && matches && !isDoneStatus(n.props[fieldProp(setup, "status")], setup) && !reviewPaths.has(n.path)) add("questions", n.path, title(n), q, { status: taskAnswer(n.text, { login: source.login, agent }) ? "Answered, waiting for the agent" : "Waiting for your answer" });
   }
   if (options.show.includes("assignments")) for (const t of sortAssignments(assignmentTasks(tasks, setup, identity), inboxProps.seen_assignments).open) {
     if (!reviewPaths.has(t.path)) add("assignments", t.path, (t.id ? t.id + " " : "") + t.path.split("/").at(-1).replace(/\.md$/i, ""), "Assigned to you", { identity: t.key });

@@ -145,8 +145,8 @@ A question lives on the task it's about, with its answer next to it. The inbox o
 
      One question per task at a time; several open ones go in the same part as (1), (2).
 2. **In your person's inbox**, under **Needs attention**: a ` ```needs-attention ` block there lists the task by itself (from its `question:`), so write nothing. With no block there, write one line, `- [[<task title>]]: <the question in a few words>`, nothing more.
-3. **The answer** is written under **Answer:** on the task. An answer written under the inbox's line counts the same.
-4. **Acting on it**: do what the answer says, then move it into the task's notes as a record (who, the date, the options in short, their words), take out the *Question* part, empty `question:`, take out the inbox's line if you wrote one, and tick the criterion it settles (and drop `ready: decision`).
+3. **The answer** can go under **Answer:** on the task, or in a fresh dated comment on that task. A comment counts only when its author is the inbox's configured `github` login and its text starts with the configured `agent_mention` (for example, `@your-agent`), and the task has its current *Question* part. The app links the comment to that question; only comments with nonempty text after the agent mention count, and the latest valid matching reply wins. Older comments without that link, other people's comments and comments for an earlier question do not count. If the question or the `question` property changes, old comment replies stop counting. Write **Answer:** or post a fresh reply to the new question. The answer means *Answered, waiting for the agent*; it does not complete the task or bypass review.
+4. **Acting on it**: do what the answer says, then record the author, their words and the decision in the task's notes. Remove the whole *Question* part, including its hidden question marker, empty `question:`, and take the inbox's line out if you wrote one. Tick the criterion it settles (and drop `ready: decision`).
 5. **A question with no task**: make the task first if it's work for this vault; if it isn't, ask it in the inbox as a whole item.
 
 Then move on to another task while it waits.
