@@ -287,7 +287,10 @@ details.fine > summary { cursor: pointer; color: var(--text-2); margin-bottom: 1
 #tree .children { margin-left: 15px; padding-left: 6px; border-left: 1px solid var(--line); }
 #tree .file .icon { margin-left: 19px; }
 .side-empty { padding: 10px; color: var(--muted); font-size: 13px; }
-.search-text { width: 100%; margin: 10px 0 4px; }
+.search-progress { padding: 6px 10px; }
+.search-results .row { min-height: 46px; align-items: flex-start; padding-block: 6px; }
+.search-results .row .name { white-space: normal; }
+.search-results .row small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.35; margin-top: 2px; }
 
 .side-foot {
   display: flex;

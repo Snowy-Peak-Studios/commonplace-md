@@ -269,6 +269,8 @@ const linkEnv = (repo, fromPath, depth = 0) => {
 
 // Goes up whenever a tree's files change, so work done for an older tree (base views) is done again.
 let treeVersion = 0;
+let textSearchRun = 0;
+const SEARCHABLE_TEXT = /\.(md|markdown|txt|csv|tsv|base|json|ya?ml|canvas)$/i;
 
 async function loadTree(repo, force = false, { readOnly = false, current = () => true } = {}) {
   if (!readOnly && !force && app.trees.has(repo.id)) return app.trees.get(repo.id);
@@ -476,13 +478,14 @@ function renderShortcuts() {
 }
 
 function renderTree() {
+  const run = ++textSearchRun;
   const host = $("#tree");
   const repo = app.repo;
   const tree = repo && app.trees.get(repo.id);
   if (!tree) return fill(host);
   const q = $("#filter").value.trim().toLowerCase();
   document.body.classList.toggle("filtering", !!q);
-  if (q) return renderMatches(host, repo, tree, q);
+  if (q) return renderMatches(host, repo, tree, q, run);
 
   const root = { dirs: new Map(), files: [], count: 0 };
   for (const path of tree.files.keys()) {
@@ -517,41 +520,69 @@ function renderTree() {
   markActive();
 }
 
-function renderMatches(host, repo, tree, q) {
+function renderMatches(host, repo, tree, q, run) {
   const score = (p) => {
     const name = baseName(p).toLowerCase();
     return name.startsWith(q) ? 0 : name.includes(q) ? 1 : 2;
   };
-  const matches = [...tree.files.keys()].filter((p) => p.toLowerCase().includes(q))
-    .sort((a, b) => score(a) - score(b) || a.localeCompare(b)).slice(0, 100);
-  const query = $("#filter").value.trim();
-  const results = h("div", {});
-  fill(host, 
+  const nameMatches = [...tree.files.keys()].filter((p) => p.toLowerCase().includes(q))
+    .sort((a, b) => score(a) - score(b) || a.localeCompare(b));
+  const namePaths = new Set(nameMatches);
+  const matches = nameMatches.slice(0, 100);
+  const status = h("p", { class: "side-empty search-progress", role: "status", "aria-live": "polite" }, "Searching page text…");
+  const results = h("div", { class: "search-results" });
+  fill(host,
+    h("div", { class: "side-label" }, "Page names"),
     ...matches.map((path) => fileRow(repo, path, iconFor(path), shownName(path), dirName(path) || null)),
-    matches.length ? null : h("p", { class: "side-empty" }, "No file name matches."),
-    h("button", { class: "btn small search-text", "data-icon": "search", onclick: () => searchText(repo, query, results) },
-      `Search inside notes for “${query}”`),
+    matches.length ? null : h("p", { class: "side-empty" }, "No page names match."),
+    h("div", { class: "side-label" }, "Page text"),
+    status,
     results,
   );
   fillIcons(host);
   markActive();
+  searchText(repo, tree, q, namePaths, status, results, run);
 }
 
-async function searchText(repo, query, host) {
-  fill(host, h("p", { class: "side-empty" }, "Searching…"));
-  try {
-    const data = await gh.searchCode(repo, query);
-    const prefix = repo.folder ? repo.folder.replace(/\/+$/, "") + "/" : "";
-    const paths = data.items.map((i) => i.path).filter((p) => p.startsWith(prefix)).map((p) => p.slice(prefix.length));
-    fill(host, 
-      h("div", { class: "side-label" }, paths.length ? "Found inside" : "Nothing found inside notes"),
-      ...paths.map((path) => fileRow(repo, path, iconFor(path), shownName(path), dirName(path) || null)),
-      isLocal(repo) || mirror.searchesHere(repo) ? null : h("p", { class: "side-empty" }, "GitHub's search can lag a few minutes behind the latest saves."),
-    );
-    markActive();
-  } catch (e) {
-    fill(host, h("p", { class: "side-empty error" }, `Search failed: ${e.message}`));
-  }
+async function searchText(repo, tree, query, namePaths, status, host, run) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const candidates = [...tree.files].filter(([path]) => SEARCHABLE_TEXT.test(path) && !namePaths.has(path));
+  const matches = [];
+  let next = 0;
+  let done = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (run === textSearchRun) {
+      const at = next++;
+      if (at >= candidates.length || matches.length >= 100) return;
+      const [path, sha] = candidates[at];
+      try {
+        // Saved edits waiting on this device are newer than their tree SHA; other blobs are pinned to
+        // the open tree, so searches never fall back to GitHub's default-branch index.
+        const text = tree.changed.has(path)
+          ? (await gh.readText(repo, fullPath(repo, path))).text
+          : await gh.readBlobText(repo, sha);
+        const lower = text.toLowerCase();
+        if (words.every((word) => lower.includes(word))) {
+          const lines = text.split(/\r?\n/);
+          const line = lines.find((value) => words.some((word) => value.toLowerCase().includes(word)));
+          if (line && matches.length < 100) matches.push({ path, line: line.trim().replace(/\s+/g, " ").slice(0, 220) });
+        }
+      } catch { failed++; }
+      done++;
+      if (done % 20 === 0 && run === textSearchRun) {
+        status.textContent = `Searching page text… ${done} of ${candidates.length}`;
+        fill(host, ...matches.map(({ path, line }) => fileRow(repo, path, iconFor(path), shownName(path), line)));
+        markActive();
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, candidates.length) }, worker));
+  if (run !== textSearchRun) return;
+  fill(host, ...matches.map(({ path, line }) => fileRow(repo, path, iconFor(path), shownName(path), line)));
+  markActive();
+  status.textContent = matches.length ? `${matches.length}${matches.length === 100 ? "+" : ""} matching page${matches.length === 1 ? "" : "s"}`
+    : failed ? `No matches found; ${failed} page${failed === 1 ? " could" : "s could"} not be read.` : "No text matches.";
 }
 
 function markActive(path = app.file?.path) {
